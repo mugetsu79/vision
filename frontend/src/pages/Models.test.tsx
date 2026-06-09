@@ -241,6 +241,71 @@ describe("ModelsPage", () => {
     });
   });
 
+  it("shows actual validated edge-built TensorRT artifact instead of stale static engine path", async () => {
+    const user = userEvent.setup();
+    modelPageMocks.catalog = [
+      {
+        ...catalogEntry("yolo26n-coco-onnx", "YOLO26n COCO"),
+        path_hint: "models/yolo26n.onnx",
+      },
+      {
+        ...catalogEntry("yolo26n-coco-tensorrt-engine", "YOLO26n TensorRT"),
+        format: "engine",
+        path_hint: "models/yolo26n.engine",
+        artifact_exists: false,
+        registration_state: "missing_artifact",
+      },
+    ];
+    modelPageMocks.models = [
+      {
+        ...registeredModel("model-1", "YOLO26n COCO"),
+        path: "models/yolo26n.onnx",
+      },
+    ];
+    modelPageMocks.runtimeArtifactsByModelId = {
+      "model-1": [
+        runtimeArtifact({
+          path: "/models/runtime-artifacts/model-1/yolo26n.engine",
+          validation_status: "valid",
+        }),
+      ],
+    };
+
+    render(<ModelsPage />);
+
+    expect(screen.queryByText("models/yolo26n.engine")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /runtime artifacts/i }));
+
+    expect(screen.getByText("Runtime artifact ready")).toBeInTheDocument();
+    expect(
+      screen.getByText("/models/runtime-artifacts/model-1/yolo26n.engine"),
+    ).toBeInTheDocument();
+  });
+
+  it("labels built edge artifacts that are still awaiting validation", async () => {
+    const user = userEvent.setup();
+    modelPageMocks.runtimeArtifactsByModelId = {
+      "model-1": [
+        runtimeArtifact({
+          path: "/models/runtime-artifacts/model-1/yolo26n.engine",
+          validation_status: "unvalidated",
+        }),
+      ],
+    };
+
+    render(<ModelsPage />);
+
+    await user.click(screen.getByRole("button", { name: /runtime artifacts/i }));
+
+    expect(
+      screen.getByText("Built on edge, awaiting validation"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("/models/runtime-artifacts/model-1/yolo26n.engine"),
+    ).toBeInTheDocument();
+  });
+
   it("shows failed import and failed build errors with concrete text", async () => {
     const user = userEvent.setup();
     modelPageMocks.importJobs = [
@@ -331,6 +396,41 @@ function registeredModel(id: string, name: string) {
     sha256: "a".repeat(64),
     size_bytes: 12345678,
     license: "AGPL-3.0",
+    created_at: "2026-06-08T09:00:00Z",
+    updated_at: "2026-06-08T09:00:00Z",
+  };
+}
+
+function runtimeArtifact({
+  path,
+  validation_status,
+}: {
+  path: string;
+  validation_status: string;
+}) {
+  return {
+    id: "artifact-1",
+    model_id: "model-1",
+    camera_id: null,
+    scope: "model",
+    kind: "tensorrt_engine",
+    capability: "fixed_vocab",
+    runtime_backend: "tensorrt_engine",
+    path,
+    target_profile: "linux-aarch64-nvidia-jetson",
+    precision: "fp16",
+    input_shape: { width: 640, height: 640 },
+    classes: ["person"],
+    source_model_sha256: "a".repeat(64),
+    sha256: "b".repeat(64),
+    size_bytes: 8327412,
+    builder: {},
+    runtime_versions: {},
+    validation_status,
+    validation_error: null,
+    build_duration_seconds: 12.5,
+    validation_duration_seconds: null,
+    validated_at: validation_status === "valid" ? "2026-06-08T09:00:00Z" : null,
     created_at: "2026-06-08T09:00:00Z",
     updated_at: "2026-06-08T09:00:00Z",
   };

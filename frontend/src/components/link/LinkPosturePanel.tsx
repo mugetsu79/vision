@@ -30,6 +30,11 @@ export function LinkPosturePanel({
 }: LinkPosturePanelProps) {
   const payload = asRecord(status);
   const activeConnection = asRecord(payload.active_connection);
+  const fallbackActivePath = asRecord(payload.fallback_active_path);
+  const activePath = activeConnectionDisplay(
+    activeConnection,
+    fallbackActivePath,
+  );
   const latestProbe = asRecord(payload.latest_probe);
   const hasLatestProbe = Boolean(payload.latest_probe);
   const queueDepth = asRecord(payload.queue_depth);
@@ -87,8 +92,12 @@ export function LinkPosturePanel({
             </StatusToneBadge>
           </Metric>
           <Metric label="Active connection">
-            {textValue(activeConnection.transport_kind, "unknown")} /{" "}
-            {textValue(activeConnection.status, "unknown")}
+            <span>{activePath.label}</span>
+            {activePath.detail ? (
+              <span className="mt-1 block text-xs font-normal text-[var(--vz-text-muted)]">
+                {activePath.detail}
+              </span>
+            ) : null}
           </Metric>
           <Metric label="Latest probe">
             {hasLatestProbe ? (
@@ -145,6 +154,37 @@ function queuedTransferLabel(queueDepth: Record<string, unknown>) {
       .map(([lane, count]) => `${lane} ${count}`)
       .join(" / ") || "No queued transfers"
   );
+}
+
+function activeConnectionDisplay(
+  activeConnection: Record<string, unknown>,
+  fallbackActivePath: Record<string, unknown>,
+) {
+  const transportKind = meaningfulTextValue(activeConnection.transport_kind);
+  const status = meaningfulTextValue(activeConnection.status);
+  if (transportKind || status) {
+    return {
+      label: `${transportKind || "unknown"} / ${status || "unknown"}`,
+    };
+  }
+
+  const activeLabel = meaningfulTextValue(activeConnection.label);
+  if (activeLabel) {
+    return { label: activeLabel };
+  }
+
+  const fallbackLabel = textValue(fallbackActivePath.label, "");
+  if (fallbackLabel) {
+    const detail = textValue(fallbackActivePath.detail, "");
+    return { detail: detail || undefined, label: fallbackLabel };
+  }
+
+  return { label: "unknown / unknown" };
+}
+
+function meaningfulTextValue(value: unknown) {
+  const text = textValue(value, "");
+  return text.toLowerCase() === "unknown" ? "" : text;
 }
 
 function linkTone(

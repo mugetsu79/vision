@@ -1,12 +1,15 @@
 type FrontendEnvKey =
   | "VITE_API_BASE_URL"
   | "VITE_OIDC_AUTHORITY"
+  | "VITE_PLATFORM_OIDC_AUTHORITY"
   | "VITE_OIDC_CLIENT_ID"
   | "VITE_OIDC_REDIRECT_URI"
   | "VITE_OIDC_POST_LOGOUT_REDIRECT_URI"
   | "VITE_OIDC_DISABLE_PKCE";
 
-type FrontendRuntimeEnv = Readonly<Partial<Record<FrontendEnvKey, string | undefined>>>;
+type FrontendRuntimeEnv = Readonly<
+  Partial<Record<FrontendEnvKey, string | undefined>>
+>;
 
 declare global {
   interface Window {
@@ -23,9 +26,12 @@ interface FrontendLocationLike {
 const buildTimeEnv: FrontendRuntimeEnv = {
   VITE_API_BASE_URL: import.meta.env.VITE_API_BASE_URL,
   VITE_OIDC_AUTHORITY: import.meta.env.VITE_OIDC_AUTHORITY,
+  VITE_PLATFORM_OIDC_AUTHORITY: (import.meta.env as FrontendRuntimeEnv)
+    .VITE_PLATFORM_OIDC_AUTHORITY,
   VITE_OIDC_CLIENT_ID: import.meta.env.VITE_OIDC_CLIENT_ID,
   VITE_OIDC_REDIRECT_URI: import.meta.env.VITE_OIDC_REDIRECT_URI,
-  VITE_OIDC_POST_LOGOUT_REDIRECT_URI: import.meta.env.VITE_OIDC_POST_LOGOUT_REDIRECT_URI,
+  VITE_OIDC_POST_LOGOUT_REDIRECT_URI: import.meta.env
+    .VITE_OIDC_POST_LOGOUT_REDIRECT_URI,
   VITE_OIDC_DISABLE_PKCE: import.meta.env.VITE_OIDC_DISABLE_PKCE,
 };
 
@@ -37,9 +43,15 @@ export function mergeFrontendRuntimeEnv(
   injectedEnv: FrontendRuntimeEnv | undefined,
 ): FrontendRuntimeEnv {
   return {
-    VITE_API_BASE_URL: injectedEnv?.VITE_API_BASE_URL || buildEnv.VITE_API_BASE_URL,
-    VITE_OIDC_AUTHORITY: injectedEnv?.VITE_OIDC_AUTHORITY || buildEnv.VITE_OIDC_AUTHORITY,
-    VITE_OIDC_CLIENT_ID: injectedEnv?.VITE_OIDC_CLIENT_ID || buildEnv.VITE_OIDC_CLIENT_ID,
+    VITE_API_BASE_URL:
+      injectedEnv?.VITE_API_BASE_URL || buildEnv.VITE_API_BASE_URL,
+    VITE_OIDC_AUTHORITY:
+      injectedEnv?.VITE_OIDC_AUTHORITY || buildEnv.VITE_OIDC_AUTHORITY,
+    VITE_PLATFORM_OIDC_AUTHORITY:
+      injectedEnv?.VITE_PLATFORM_OIDC_AUTHORITY ||
+      buildEnv.VITE_PLATFORM_OIDC_AUTHORITY,
+    VITE_OIDC_CLIENT_ID:
+      injectedEnv?.VITE_OIDC_CLIENT_ID || buildEnv.VITE_OIDC_CLIENT_ID,
     VITE_OIDC_REDIRECT_URI:
       injectedEnv?.VITE_OIDC_REDIRECT_URI || buildEnv.VITE_OIDC_REDIRECT_URI,
     VITE_OIDC_POST_LOGOUT_REDIRECT_URI:
@@ -74,6 +86,8 @@ function deriveDevDefault(
       return `${location.protocol}//${location.hostname}:8000`;
     case "VITE_OIDC_AUTHORITY":
       return `${location.protocol}//${location.hostname}:8080/realms/argus-dev`;
+    case "VITE_PLATFORM_OIDC_AUTHORITY":
+      return `${location.protocol}//${location.hostname}:8080/realms/platform-admin`;
     case "VITE_OIDC_CLIENT_ID":
       return "argus-frontend";
     case "VITE_OIDC_REDIRECT_URI":
@@ -89,7 +103,8 @@ function requireEnv(
   location: FrontendLocationLike | undefined,
   isDev: boolean,
 ): string {
-  const value = env[key] ?? (isDev ? deriveDevDefault(key, location) : undefined);
+  const value =
+    env[key] ?? (isDev ? deriveDevDefault(key, location) : undefined);
 
   if (!value) {
     throw new Error(`Missing required frontend env var: ${key}`);
@@ -110,6 +125,12 @@ export function resolveFrontendConfig(
   return {
     apiBaseUrl: requireEnv("VITE_API_BASE_URL", env, location, isDev),
     oidcAuthority: requireEnv("VITE_OIDC_AUTHORITY", env, location, isDev),
+    platformOidcAuthority: requireEnv(
+      "VITE_PLATFORM_OIDC_AUTHORITY",
+      env,
+      location,
+      isDev,
+    ),
     oidcClientId: requireEnv("VITE_OIDC_CLIENT_ID", env, location, isDev),
     oidcRedirectUri: requireEnv("VITE_OIDC_REDIRECT_URI", env, location, isDev),
     oidcPostLogoutRedirectUri: requireEnv(

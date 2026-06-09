@@ -1968,6 +1968,36 @@ class MasterBootstrapCompleteResponse(BaseModel):
     central_node: DeploymentNodeResponse
 
 
+class PlatformBootstrapStatusResponse(BaseModel):
+    available: bool
+    consumed_at: datetime | None = None
+
+
+class PlatformBootstrapComplete(BaseModel):
+    bootstrap_token: str = Field(min_length=8, max_length=256)
+    email: str = Field(min_length=3, max_length=320)
+    first_name: str = Field(min_length=1, max_length=128)
+    last_name: str = Field(min_length=1, max_length=128)
+    password: str = Field(min_length=12, max_length=256)
+
+    @field_validator("email")
+    @classmethod
+    def _normalize_email(cls, value: str) -> str:
+        return value.strip().lower()
+
+    @field_validator("first_name", "last_name")
+    @classmethod
+    def _normalize_name(cls, value: str) -> str:
+        return value.strip()
+
+
+class PlatformBootstrapCompleteResponse(BaseModel):
+    email: str
+    realm: str
+    role: str
+    completed_at: datetime
+
+
 class ManagedTenantResponse(BaseModel):
     id: UUID
     name: str

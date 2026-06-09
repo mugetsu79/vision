@@ -5,6 +5,7 @@ import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppShell } from "@/components/layout/AppShell";
 import { AuthCallbackPage } from "@/pages/AuthCallback";
 import { FirstRunPage } from "@/pages/FirstRun";
+import { PlatformBootstrapPage } from "@/pages/PlatformBootstrap";
 import { SignInPage } from "@/pages/SignIn";
 
 const shellLayoutElement = (
@@ -30,6 +31,14 @@ export const router = createBrowserRouter(
       element: (
         <AppProviders>
           <FirstRunPage />
+        </AppProviders>
+      ),
+    },
+    {
+      path: "/platform-bootstrap",
+      element: (
+        <AppProviders>
+          <PlatformBootstrapPage />
         </AppProviders>
       ),
     },

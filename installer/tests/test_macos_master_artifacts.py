@@ -106,6 +106,18 @@ def test_macos_installer_validates_target_and_dependencies() -> None:
     assert 'old_umask="$(umask)"' in script
 
 
+def test_macos_master_install_creates_link_throughput_payload() -> None:
+    script = _read(INSTALL_SCRIPT)
+
+    assert "VEZOR_LINK_THROUGHPUT_DIR" in script
+    assert "vezor-speed-test-64MiB.bin" in script
+    assert "67108864" in script
+    assert "vezor-link-throughput-v1" in script
+    assert "create_link_throughput_payload" in script
+    assert "sha256sum" in script or "shasum -a 256" in script
+    assert "VEZOR_LINK_THROUGHPUT_PAYLOAD_PUBLIC_URL" in script
+
+
 def test_macos_installer_makes_secrets_readable_by_docker_desktop() -> None:
     script = _read(INSTALL_SCRIPT)
 

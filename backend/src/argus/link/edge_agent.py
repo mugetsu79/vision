@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import os
 import platform
@@ -35,6 +36,14 @@ class PingStatistics:
     jitter_ms: float | None = None
     duration_ms: int | None = None
     measurement_metadata: dict[str, object] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ThroughputMeasurement:
+    bytes_received: int
+    duration_seconds: float
+    throughput_mbps: float
+    sha256: str
 
 
 def parse_ping_output(output: str) -> PingStatistics:
@@ -175,6 +184,54 @@ async def fetch_edge_agent_config(
     finally:
         if owns_client:
             await client.aclose()
+
+
+async def measure_throughput_payload(
+    *,
+    url: str,
+    bearer_token: str,
+    max_bytes: int,
+    expected_sha256: str | None = None,
+    http_client: httpx.AsyncClient | None = None,
+) -> ThroughputMeasurement:
+    client = http_client or httpx.AsyncClient()
+    owns_client = http_client is None
+    digest = hashlib.sha256()
+    bytes_received = 0
+    started = time.monotonic()
+    try:
+        async with client.stream(
+            "GET",
+            url,
+            headers={"Authorization": f"Bearer {bearer_token}"},
+        ) as response:
+            if response.status_code < 200 or response.status_code >= 300:
+                raise RuntimeError(
+                    f"Throughput payload download failed with HTTP {response.status_code}."
+                )
+            async for chunk in response.aiter_bytes():
+                if not chunk:
+                    continue
+                remaining = max_bytes - bytes_received
+                if remaining <= 0:
+                    break
+                if len(chunk) > remaining:
+                    chunk = chunk[:remaining]
+                bytes_received += len(chunk)
+                digest.update(chunk)
+    finally:
+        if owns_client:
+            await client.aclose()
+    duration = max(time.monotonic() - started, 1e-9)
+    observed_sha256 = digest.hexdigest()
+    if expected_sha256 and observed_sha256.lower() != expected_sha256.lower():
+        raise RuntimeError("Throughput payload SHA256 did not match edge-agent config.")
+    return ThroughputMeasurement(
+        bytes_received=bytes_received,
+        duration_seconds=duration,
+        throughput_mbps=(bytes_received * 8) / duration / 1_000_000,
+        sha256=observed_sha256,
+    )
 
 
 def run_ping_probe(
@@ -356,6 +413,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--timeout-seconds", type=float, default=5.0)
     parser.add_argument("--interval-seconds", type=float, default=300.0)
     parser.add_argument("--dscp", type=int)
+    parser.add_argument("--include-throughput", action="store_true")
+    parser.add_argument("--throughput-test-url", default=os.getenv("ARGUS_LINK_THROUGHPUT_TEST_URL"))
+    parser.add_argument(
+        "--throughput-test-max-bytes",
+        type=int,
+        default=int(os.getenv("ARGUS_LINK_THROUGHPUT_TEST_MAX_BYTES", "67108864")),
+    )
+    parser.add_argument(
+        "--throughput-payload-sha256",
+        default=os.getenv("ARGUS_LINK_THROUGHPUT_PAYLOAD_SHA256"),
+    )
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args(argv)
 
@@ -382,6 +450,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--loss-timeout-ms must be positive")
     if args.dscp is not None and (args.dscp < 0 or args.dscp > 63):
         parser.error("--dscp must be between 0 and 63")
+    if args.throughput_test_max_bytes <= 0:
+        parser.error("--throughput-test-max-bytes must be positive")
     if args.method == "udp_sequence" and not args.config_url:
         if not args.reflector:
             parser.error("--reflector or ARGUS_LINK_REFLECTOR is required for udp_sequence")
@@ -433,6 +503,24 @@ async def async_main(argv: list[str] | None = None) -> int:
                 stats=stats,
                 dscp=args.dscp,
             )
+        if args.include_throughput and args.throughput_test_url:
+            measurement = await measure_throughput_payload(
+                url=args.throughput_test_url,
+                bearer_token=args.bearer_token,
+                max_bytes=args.throughput_test_max_bytes,
+                expected_sha256=args.throughput_payload_sha256,
+            )
+            payload["throughput_mbps"] = round(measurement.throughput_mbps, 3)
+            metadata = dict(payload.get("measurement_metadata") or {})
+            metadata.update(
+                {
+                    "throughput_bytes": measurement.bytes_received,
+                    "throughput_duration_seconds": round(measurement.duration_seconds, 6),
+                    "throughput_payload_sha256": measurement.sha256,
+                    "throughput_url_id": "master-installed-payload",
+                }
+            )
+            payload["measurement_metadata"] = metadata
         result = await post_edge_sample(
             api_base_url=args.api_base_url,
             bearer_token=args.bearer_token,
@@ -459,6 +547,16 @@ def _apply_edge_agent_config(args: argparse.Namespace, config: Mapping[str, obje
     args.packet_spacing_ms = _config_int(config, "packet_spacing_ms") or args.packet_spacing_ms
     args.loss_timeout_ms = _config_int(config, "loss_timeout_ms") or args.loss_timeout_ms
     args.dscp = _config_int(config, "dscp") if config.get("dscp") is not None else args.dscp
+    args.throughput_test_url = (
+        args.throughput_test_url or _config_string(config, "throughput_test_url")
+    )
+    args.throughput_test_max_bytes = (
+        _config_int(config, "throughput_test_max_bytes") or args.throughput_test_max_bytes
+    )
+    args.throughput_payload_sha256 = (
+        args.throughput_payload_sha256
+        or _config_string(config, "throughput_payload_sha256")
+    )
 
 
 def _validate_resolved_args(args: argparse.Namespace) -> None:

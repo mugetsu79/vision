@@ -16,8 +16,19 @@ export type LinkReflectorProfile =
 export type LinkReflectorProfileUpdateInput =
   components["schemas"]["LinkReflectorProfileUpdate"];
 
+type LinkEdgeThroughputRunResponse = {
+  request_id: string;
+  site_id: string;
+  status: "queued";
+  target_id: string;
+};
+
 type LinkMutationContext = {
   siteId?: string | null;
+};
+
+type LinkThroughputMutationContext = LinkMutationContext & {
+  origin?: "backend_synthetic" | "edge_agent";
 };
 
 export function useLinkSiteSummaries() {
@@ -385,13 +396,35 @@ export function useRunLinkProbeTarget({ siteId }: LinkMutationContext) {
   });
 }
 
-export function useMeasureLinkProbeTargetThroughput({ siteId }: LinkMutationContext) {
+export function useMeasureLinkProbeTargetThroughput({
+  siteId,
+  origin = "backend_synthetic",
+}: LinkThroughputMutationContext) {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (targetId: string) => {
       if (!siteId) {
         throw new Error("A site is required to measure link throughput.");
+      }
+      if (origin === "edge_agent") {
+        const postEdgeThroughput = apiClient.POST as unknown as (
+          path: "/api/v1/link/sites/{site_id}/probe-targets/{target_id}/measure-edge-throughput",
+          options: {
+            params: { path: { site_id: string; target_id: string } };
+          },
+        ) => Promise<{
+          data?: LinkEdgeThroughputRunResponse | null;
+          error?: unknown;
+        }>;
+        const { data, error } = await postEdgeThroughput(
+          "/api/v1/link/sites/{site_id}/probe-targets/{target_id}/measure-edge-throughput",
+          { params: { path: { site_id: siteId, target_id: targetId } } },
+        );
+        if (error) {
+          throw toApiError(error, "Failed to queue edge throughput measurement.");
+        }
+        return data ?? null;
       }
       const { data, error } = await apiClient.POST(
         "/api/v1/link/sites/{site_id}/probe-targets/{target_id}/measure-throughput",
@@ -405,6 +438,12 @@ export function useMeasureLinkProbeTargetThroughput({ siteId }: LinkMutationCont
     onSuccess: async () =>
       invalidateLinkSiteQueries(queryClient, { siteId }),
   });
+}
+
+export function useMeasureLinkProbeTargetEdgeThroughput({
+  siteId,
+}: LinkMutationContext) {
+  return useMeasureLinkProbeTargetThroughput({ siteId, origin: "edge_agent" });
 }
 
 export function useLinkSiteQueue(siteId?: string | null) {

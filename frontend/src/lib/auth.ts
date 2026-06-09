@@ -3,6 +3,7 @@ import { UserManager, WebStorageStateStore, type User } from "oidc-client-ts";
 import { frontendConfig } from "@/lib/config";
 
 export type ArgusRole = "viewer" | "operator" | "admin" | "superadmin";
+export type AuthRealm = "tenant" | "platform";
 
 export interface SessionUser {
   sub: string;
@@ -15,16 +16,28 @@ export interface SessionUser {
 
 const rolePriority: ArgusRole[] = ["superadmin", "admin", "operator", "viewer"];
 
-export const oidcManager = new UserManager({
-  authority: frontendConfig.oidcAuthority,
-  client_id: frontendConfig.oidcClientId,
-  redirect_uri: frontendConfig.oidcRedirectUri,
-  post_logout_redirect_uri: frontendConfig.oidcPostLogoutRedirectUri,
-  response_type: "code",
-  scope: "openid profile email",
-  disablePKCE: frontendConfig.oidcDisablePkce,
-  userStore: new WebStorageStateStore({ store: window.localStorage }),
-});
+export function createOidcManager(realm: AuthRealm = "tenant") {
+  return new UserManager({
+    authority:
+      realm === "platform"
+        ? frontendConfig.platformOidcAuthority
+        : frontendConfig.oidcAuthority,
+    client_id: frontendConfig.oidcClientId,
+    redirect_uri: frontendConfig.oidcRedirectUri,
+    post_logout_redirect_uri: frontendConfig.oidcPostLogoutRedirectUri,
+    response_type: "code",
+    scope: "openid profile email",
+    disablePKCE: frontendConfig.oidcDisablePkce,
+    userStore: new WebStorageStateStore({ store: window.localStorage }),
+  });
+}
+
+export const oidcManager = createOidcManager("tenant");
+export const platformOidcManager = createOidcManager("platform");
+
+export function getOidcManager(realm: AuthRealm = "tenant") {
+  return realm === "platform" ? platformOidcManager : oidcManager;
+}
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
   const [, payload] = token.split(".");
@@ -35,7 +48,10 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
 
   try {
     const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
-    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "=");
+    const padded = normalized.padEnd(
+      normalized.length + ((4 - (normalized.length % 4)) % 4),
+      "=",
+    );
     return JSON.parse(globalThis.atob(padded)) as Record<string, unknown>;
   } catch {
     return null;
@@ -43,10 +59,14 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
 }
 
 function getRealmRoles(user: User): string[] {
-  const realmAccess = user.profile.realm_access as { roles?: unknown } | undefined;
+  const realmAccess = user.profile.realm_access as
+    | { roles?: unknown }
+    | undefined;
 
   if (Array.isArray(realmAccess?.roles)) {
-    return realmAccess.roles.filter((role): role is string => typeof role === "string");
+    return realmAccess.roles.filter(
+      (role): role is string => typeof role === "string",
+    );
   }
 
   if (!user.access_token) {
@@ -54,10 +74,14 @@ function getRealmRoles(user: User): string[] {
   }
 
   const tokenClaims = decodeJwtPayload(user.access_token);
-  const accessTokenRealmAccess = tokenClaims?.realm_access as { roles?: unknown } | undefined;
+  const accessTokenRealmAccess = tokenClaims?.realm_access as
+    | { roles?: unknown }
+    | undefined;
 
   return Array.isArray(accessTokenRealmAccess?.roles)
-    ? accessTokenRealmAccess.roles.filter((role): role is string => typeof role === "string")
+    ? accessTokenRealmAccess.roles.filter(
+        (role): role is string => typeof role === "string",
+      )
     : [];
 }
 

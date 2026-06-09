@@ -279,6 +279,49 @@ def test_edge_agent_udp_sequence_probe_does_not_degrade_for_unmeasured_throughpu
     assert summaries[0].link_state == "healthy"
 
 
+def test_edge_agent_sample_provides_active_path_fallback_without_connection(
+    link_service: LinkService,
+) -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000001")
+    site_id = UUID("00000000-0000-4000-8000-000000000002")
+
+    link_service.record_probe(
+        tenant_id=tenant_id,
+        site_id=site_id,
+        latency_ms=4,
+        throughput_mbps=128.0,
+        packet_loss_percent=0.0,
+        reachable=True,
+        source="edge_agent:jetson-orin-1",
+        source_type="edge_agent",
+        source_label="jetson-orin-1 Core Link",
+        sample_kind="automated",
+        probe_type="udp",
+        target_id="vezor-master-udp-reflector",
+        target_label="Vezor Master reflector",
+        target_address="master.vezor.local",
+        measurement_metadata={
+            "method": "udp_sequence",
+            "packet_count": 20,
+            "packets_received": 20,
+            "packets_lost": 0,
+        },
+    )
+
+    summaries = link_service.list_site_summaries(
+        tenant_id=tenant_id,
+        sites=[{"id": site_id, "name": "Edge Site", "tz": "UTC"}],
+    )
+    passport = link_service.preview_passport(tenant_id=tenant_id, site_id=site_id)
+
+    assert summaries[0].active_connection is None
+    assert summaries[0].fallback_active_path == {
+        "label": "Vezor Master reflector via jetson-orin-1 Core Link",
+        "detail": "Latest edge-agent sample 4 ms / 128 Mbps / 0% loss",
+    }
+    assert passport.payload["fallback_active_path"] == summaries[0].fallback_active_path
+
+
 def test_bulk_selection_prefers_online_before_unmetered(link_service: LinkService) -> None:
     tenant_id = UUID("00000000-0000-4000-8000-000000000001")
     site_id = UUID("00000000-0000-4000-8000-000000000002")

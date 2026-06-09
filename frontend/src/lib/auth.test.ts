@@ -5,19 +5,36 @@ vi.mock("@/lib/config", () => ({
   frontendConfig: {
     apiBaseUrl: "http://127.0.0.1:8000",
     oidcAuthority: "http://127.0.0.1:8080/realms/argus-dev",
+    platformOidcAuthority: "http://127.0.0.1:8080/realms/platform-admin",
     oidcClientId: "argus-frontend",
     oidcRedirectUri: "http://127.0.0.1:3000/auth/callback",
     oidcPostLogoutRedirectUri: "http://127.0.0.1:3000/signin",
   },
 }));
 
-import { mapOidcUser } from "@/lib/auth";
+import { createOidcManager, mapOidcUser } from "@/lib/auth";
 
 function createUser(profile: Record<string, unknown>): User {
   return { profile } as unknown as User;
 }
 
 describe("mapOidcUser", () => {
+  test("platform sign-in uses the platform authority", () => {
+    const manager = createOidcManager("platform");
+
+    expect(manager.settings.authority).toBe(
+      "http://127.0.0.1:8080/realms/platform-admin",
+    );
+  });
+
+  test("tenant sign-in keeps using the tenant authority", () => {
+    const manager = createOidcManager("tenant");
+
+    expect(manager.settings.authority).toBe(
+      "http://127.0.0.1:8080/realms/argus-dev",
+    );
+  });
+
   test("throws when the token is missing any recognized platform role", () => {
     const user = createUser({
       sub: "user-1",

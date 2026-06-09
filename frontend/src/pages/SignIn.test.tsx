@@ -38,9 +38,21 @@ describe("SignInPage", () => {
     useAuthStore.setState({ signIn });
 
     render(<SignInPage />);
-    await user.click(screen.getByRole("button", { name: /sign in/i }));
+    await user.click(screen.getByRole("button", { name: /^sign in$/i }));
 
     expect(signIn).toHaveBeenCalledTimes(1);
+    expect(signIn).toHaveBeenCalledWith("tenant");
+  });
+
+  test("starts the platform OIDC login flow from the platform command", async () => {
+    const user = userEvent.setup();
+    const signIn = vi.fn().mockResolvedValue(undefined);
+    useAuthStore.setState({ signIn });
+
+    render(<SignInPage />);
+    await user.click(screen.getByRole("button", { name: /platform sign in/i }));
+
+    expect(signIn).toHaveBeenCalledWith("platform");
   });
 
   test("renders the command preview hero and product lockup", () => {

@@ -929,6 +929,10 @@ class LinkService:
                         1 for connection in connections if connection.metered
                     ),
                     latest_probe=latest_probe,
+                    fallback_active_path=_fallback_active_path_from_probe(
+                        latest_probe,
+                        active_connection=active_connection,
+                    ),
                     queue_depth=self.queue_depth_by_lane(queue),
                     queued_bytes=sum(
                         item.byte_size
@@ -987,6 +991,10 @@ class LinkService:
                         1 for connection in connections if connection.metered
                     ),
                     latest_probe=latest_probe,
+                    fallback_active_path=_fallback_active_path_from_probe(
+                        latest_probe,
+                        active_connection=active_connection,
+                    ),
                     queue_depth=self.queue_depth_by_lane(queue),
                     queued_bytes=sum(
                         item.byte_size
@@ -1818,6 +1826,10 @@ class LinkService:
                 if selected_connection is not None
                 else None
             ),
+            "fallback_active_path": _fallback_active_path_from_probe(
+                latest_probe,
+                active_connection=selected_connection,
+            ),
             "connections": [_connection_payload(connection) for connection in connections],
             "budget": _budget_payload(budget),
             "queue_depth": queue_depth,
@@ -1891,6 +1903,10 @@ class LinkService:
                 _connection_payload(selected_connection)
                 if selected_connection is not None
                 else None
+            ),
+            "fallback_active_path": _fallback_active_path_from_probe(
+                latest_probe,
+                active_connection=selected_connection,
             ),
             "connections": [_connection_payload(connection) for connection in connections],
             "budget": _budget_payload(budget),
@@ -2633,6 +2649,33 @@ def _probe_payload(probe: LinkHealthProbeRecord | None) -> JsonObject | None:
     if probe.connection_id is not None:
         payload["connection_id"] = str(probe.connection_id)
     return payload
+
+
+def _fallback_active_path_from_probe(
+    probe: LinkHealthProbeRecord | None,
+    *,
+    active_connection: LinkConnectionRecord | None,
+) -> JsonObject | None:
+    if active_connection is not None or probe is None or probe.source_type != "edge_agent":
+        return None
+    target = probe.target_label or probe.target_address or probe.target_id or "Control path"
+    source = probe.source_label or probe.source.removeprefix("edge_agent:") or "edge agent"
+    return {
+        "label": f"{target} via {source}",
+        "detail": (
+            "Latest edge-agent sample "
+            f"{probe.latency_ms} ms / {_format_mbps(probe.throughput_mbps)} Mbps / "
+            f"{_format_percent(probe.packet_loss_percent)}% loss"
+        ),
+    }
+
+
+def _format_mbps(value: float) -> str:
+    return str(int(value)) if float(value).is_integer() else f"{value:.1f}".rstrip("0").rstrip(".")
+
+
+def _format_percent(value: float) -> str:
+    return str(int(value)) if float(value).is_integer() else f"{value:.2f}".rstrip("0").rstrip(".")
 
 
 def _probe_throughput_measured(probe: LinkHealthProbeRecord) -> bool:

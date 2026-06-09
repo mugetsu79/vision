@@ -173,6 +173,9 @@ services:
       ARGUS_LINK_REFLECTOR_KEY_ID: ${VEZOR_LINK_REFLECTOR_KEY_ID:-master-reflector-default}
       ARGUS_LINK_REFLECTOR_RATE_LIMIT_PPS: ${VEZOR_LINK_REFLECTOR_RATE_LIMIT_PPS:-100}
       ARGUS_LINK_REFLECTOR_ALLOWED_SOURCE_CIDRS: ${VEZOR_LINK_REFLECTOR_ALLOWED_SOURCE_CIDRS:-}
+      ARGUS_LINK_THROUGHPUT_PAYLOAD_PATH: /var/lib/vezor/link-throughput/vezor-speed-test-64MiB.bin
+      ARGUS_LINK_THROUGHPUT_PAYLOAD_MAX_BYTES: ${VEZOR_LINK_THROUGHPUT_PAYLOAD_MAX_BYTES:-67108864}
+      ARGUS_LINK_THROUGHPUT_PAYLOAD_PUBLIC_URL: ${VEZOR_LINK_THROUGHPUT_PAYLOAD_PUBLIC_URL:-}
     ports:
       - "${VEZOR_API_BIND:-0.0.0.0}:8000:8000"
       - "${VEZOR_LINK_REFLECTOR_BIND:-0.0.0.0}:${VEZOR_LINK_REFLECTOR_PORT:-8622}:8622/udp"
@@ -180,6 +183,7 @@ services:
       - ${VEZOR_CONFIG_DIR:-/etc/vezor}/master.json:/etc/vezor/master.json:ro
       - ${VEZOR_DATA_DIR:-/var/lib/vezor}/models:/models:ro
       - ${VEZOR_DATA_DIR:-/var/lib/vezor}/evidence:/var/lib/vezor/evidence
+      - ${VEZOR_LINK_THROUGHPUT_HOST_DIR:-${VEZOR_DATA_DIR:-/var/lib/vezor}/link-throughput}:/var/lib/vezor/link-throughput:ro
       - /var/log/vezor/backend:/var/log/vezor/backend
     secrets:
       - source: backend_db_url
@@ -221,6 +225,7 @@ services:
     environment:
       VITE_API_BASE_URL: ${VEZOR_PUBLIC_API_BASE_URL:-http://localhost:8000}
       VITE_OIDC_AUTHORITY: ${VEZOR_PUBLIC_OIDC_AUTHORITY:-http://localhost:8080/realms/argus-dev}
+      VITE_PLATFORM_OIDC_AUTHORITY: ${VEZOR_PLATFORM_OIDC_AUTHORITY:-http://localhost:8080/realms/platform-admin}
       VITE_OIDC_CLIENT_ID: ${VEZOR_OIDC_CLIENT_ID:-argus-frontend}
       VITE_OIDC_REDIRECT_URI: ${VEZOR_PUBLIC_FRONTEND_URL:-http://localhost:3000}/auth/callback
       VITE_OIDC_POST_LOGOUT_REDIRECT_URI: ${VEZOR_PUBLIC_FRONTEND_URL:-http://localhost:3000}/signin

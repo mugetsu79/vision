@@ -14,6 +14,20 @@ CREDENTIAL_PATH="${VEZOR_EDGE_AGENT_CREDENTIAL_PATH:-/var/lib/vezor/credentials/
 CONFIG_URL="${ARGUS_LINK_EDGE_AGENT_CONFIG_URL:-${API_BASE_URL%/}/api/v1/link/control-targets/master/edge-agent-config}"
 AGENT_ID="${ARGUS_LINK_EDGE_AGENT_ID:-$(hostname)-core-link}"
 INTERVAL_SECONDS="${ARGUS_LINK_EDGE_AGENT_INTERVAL_SECONDS:-300}"
+INCLUDE_THROUGHPUT="${VEZOR_LINK_EDGE_AGENT_INCLUDE_THROUGHPUT:-0}"
+ONCE=0
+
+for arg in "$@"; do
+  case "$arg" in
+    --once)
+      ONCE=1
+      ;;
+    *)
+      echo "Unknown vezor-edge-agent wrapper option: $arg" >&2
+      exit 2
+      ;;
+  esac
+done
 
 if [[ ! -s "$CREDENTIAL_PATH" ]]; then
   echo "Vezor edge-agent credential file is missing or empty: $CREDENTIAL_PATH" >&2
@@ -34,4 +48,6 @@ exec "$CONTAINER_ENGINE" run --rm --network host \
   --bearer-token-file /run/vezor/credentials/supervisor.credential \
   --config-url "$CONFIG_URL" \
   --agent-id "$AGENT_ID" \
-  --interval-seconds "$INTERVAL_SECONDS"
+  --interval-seconds "$INTERVAL_SECONDS" \
+  $([[ "$INCLUDE_THROUGHPUT" == "1" ]] && printf '%s' "--include-throughput") \
+  $([[ "$ONCE" == "1" ]] && printf '%s' "--once")

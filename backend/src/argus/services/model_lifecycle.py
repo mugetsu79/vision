@@ -43,6 +43,7 @@ from argus.models.enums import (
     ModelLifecycleJobStatus,
     ModelTask,
     RuntimeArtifactBuildFormat,
+    RuntimeArtifactValidationStatus,
 )
 from argus.models.tables import (
     Camera,
@@ -831,6 +832,13 @@ class ModelLifecycleService:
 
             try:
                 artifact_payloads = _completion_runtime_artifact_payloads(job, result)
+                artifact_payloads = await _reconcile_runtime_artifact_payloads_with_inventory(
+                    session=session,
+                    tenant_id=tenant_id,
+                    deployment_node_id=job.deployment_node_id,
+                    model_id=job.model_id,
+                    artifact_payloads=artifact_payloads,
+                )
                 _, created_artifacts = await create_runtime_artifacts_for_model_in_session(
                     session,
                     job.model_id,
@@ -1844,6 +1852,72 @@ def _completion_runtime_artifact_payloads(
     for artifact in artifacts:
         _validate_runtime_artifact_matches_build_job(job, artifact)
     return artifacts
+
+
+async def _reconcile_runtime_artifact_payloads_with_inventory(
+    *,
+    session: AsyncSession,
+    tenant_id: UUID,
+    deployment_node_id: UUID,
+    model_id: UUID,
+    artifact_payloads: list[RuntimeArtifactCreate],
+) -> list[RuntimeArtifactCreate]:
+    inventory_rows = await _load_inventory_rows(
+        session=session,
+        tenant_id=tenant_id,
+        deployment_node_id=deployment_node_id,
+    )
+    reconciled: list[RuntimeArtifactCreate] = []
+    for artifact in artifact_payloads:
+        match = _matching_runtime_artifact_inventory(
+            inventory_rows,
+            model_id=model_id,
+            artifact=artifact,
+        )
+        if match is None:
+            reconciled.append(
+                artifact.model_copy(
+                    update={
+                        "validation_status": RuntimeArtifactValidationStatus.UNVALIDATED,
+                        "validation_error": "Runtime artifact not confirmed by edge inventory.",
+                        "validated_at": None,
+                    }
+                )
+            )
+            continue
+        reconciled.append(
+            artifact.model_copy(
+                update={
+                    "validation_status": RuntimeArtifactValidationStatus.VALID,
+                    "validation_error": None,
+                    "validated_at": match.reported_at,
+                }
+            )
+        )
+    return reconciled
+
+
+def _matching_runtime_artifact_inventory(
+    inventory_rows: list[DeploymentModelInventory],
+    *,
+    model_id: UUID,
+    artifact: RuntimeArtifactCreate,
+) -> DeploymentModelInventory | None:
+    for row in inventory_rows:
+        if row.asset_kind != "runtime_artifact":
+            continue
+        if row.asset_id != model_id:
+            continue
+        if row.local_path != artifact.path:
+            continue
+        if row.sha256 != artifact.sha256:
+            continue
+        if row.size_bytes != artifact.size_bytes:
+            continue
+        if row.target_profile != artifact.target_profile:
+            continue
+        return row
+    return None
 
 
 def _validate_runtime_artifact_matches_build_job(

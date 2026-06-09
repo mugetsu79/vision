@@ -1383,6 +1383,18 @@ class MasterBootstrapSession(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin
     consumed_by_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
+class PlatformBootstrapSession(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
+    __tablename__ = "platform_bootstrap_sessions"
+    __table_args__ = (
+        Index("ix_platform_bootstrap_consumed", "consumed_at"),
+        Index("ix_platform_bootstrap_token_hash", "token_hash", unique=True),
+    )
+
+    token_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    consumed_by_subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+
 class SupervisorNodeCredential(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):
     __tablename__ = "supervisor_node_credentials"
     __table_args__ = (

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Mapping
 from datetime import datetime
+from pathlib import Path
 from typing import Annotated, Literal, cast
-from uuid import NAMESPACE_URL, UUID, uuid5
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, model_validator
 
 from argus.api.contracts import SiteResponse, TenantContext
@@ -98,6 +101,7 @@ class LinkEdgeProbeSampleCreate(BaseModel):
     packet_count: int = Field(gt=0, le=10_000)
     packets_received: int = Field(ge=0)
     latency_ms: int = Field(ge=0)
+    throughput_mbps: float = Field(default=0.0, ge=0)
     jitter_ms: float | None = Field(default=None, ge=0)
     duration_ms: int | None = Field(default=None, ge=0)
     dscp: int | None = Field(default=None, ge=0, le=63)
@@ -170,6 +174,17 @@ class LinkMasterReflectorEdgeAgentConfigResponse(BaseModel):
     packet_spacing_ms: int
     loss_timeout_ms: int
     dscp: int | None = None
+    throughput_test_url: str | None = None
+    throughput_test_max_bytes: int | None = None
+    throughput_payload_size_bytes: int | None = None
+    throughput_payload_sha256: str | None = None
+
+
+class LinkEdgeThroughputRunResponse(BaseModel):
+    status: Literal["queued"]
+    site_id: UUID
+    target_id: str
+    request_id: UUID
 
 
 class LinkConnectionCreate(BaseModel):
@@ -216,6 +231,7 @@ class LinkSiteSummaryResponse(BaseModel):
     capabilities: dict[str, bool] = Field(default_factory=dict)
     link_state: str
     active_connection: dict[str, object] | None = None
+    fallback_active_path: dict[str, object] | None = None
     connection_count: int
     metered_connection_count: int
     latest_probe: dict[str, object] | None = None
@@ -224,6 +240,30 @@ class LinkSiteSummaryResponse(BaseModel):
     budget: dict[str, object] | None = None
     last_sync_at: datetime | None = None
     passport_hash: str
+
+
+@router.get("/throughput/payload.bin")
+async def get_link_throughput_payload(
+    tenant_context: SupervisorOrAdminTenantDependency,
+    services: ServicesDependency,
+) -> FileResponse:
+    del tenant_context
+    payload_path = Path(services.link.settings.link_throughput_payload_path)
+    if not payload_path.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Throughput payload is not installed.",
+        )
+    if payload_path.stat().st_size > services.link.settings.link_throughput_payload_max_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Throughput payload exceeds configured maximum size.",
+        )
+    return FileResponse(
+        payload_path,
+        media_type="application/octet-stream",
+        filename="vezor-speed-test.bin",
+    )
 
 
 @router.get("/reflectors/master", response_model=LinkReflectorProfileResponse)
@@ -629,6 +669,7 @@ async def _master_reflector_edge_agent_config(
             detail="Master UDP reflector target not found.",
         )
     secret = decrypt_reflector_secret(profile.encrypted_secret, settings=services.link.settings)
+    throughput_payload = _throughput_payload_metadata(services)
     return LinkMasterReflectorEdgeAgentConfigResponse(
         site_id=site.id,
         target_id="vezor-master-udp-reflector",
@@ -642,6 +683,10 @@ async def _master_reflector_edge_agent_config(
         packet_spacing_ms=_target_positive_int(target, "loss_packet_spacing_ms", default=100),
         loss_timeout_ms=_target_positive_int(target, "loss_timeout_ms", default=1000),
         dscp=_target_optional_dscp(target),
+        throughput_test_url=_throughput_payload_url(request, services),
+        throughput_test_max_bytes=services.link.settings.link_throughput_payload_max_bytes,
+        throughput_payload_size_bytes=throughput_payload["size_bytes"],
+        throughput_payload_sha256=throughput_payload["sha256"],
     )
 
 
@@ -902,7 +947,7 @@ async def post_link_edge_probe_sample(
         tenant_id=tenant_context.tenant_id,
         site_id=site_id,
         latency_ms=payload.latency_ms,
-        throughput_mbps=0.0,
+        throughput_mbps=payload.throughput_mbps,
         packet_loss_percent=packet_loss_percent,
         reachable=payload.packets_received > 0,
         source=f"edge_agent:{payload.agent_id}",
@@ -917,6 +962,39 @@ async def post_link_edge_probe_sample(
         measurement_metadata=_edge_measurement_metadata(payload, packets_lost),
     )
     return _probe_payload(probe)
+
+
+@router.post(
+    "/sites/{site_id}/probe-targets/{target_id}/measure-edge-throughput",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=LinkEdgeThroughputRunResponse,
+)
+async def request_edge_origin_throughput_sample(
+    site_id: UUID,
+    target_id: str,
+    current_user: AdminUser,
+    tenant_context: TenantDependency,
+    services: ServicesDependency,
+) -> LinkEdgeThroughputRunResponse:
+    await _ensure_link_edge_site(
+        services,
+        tenant_context,
+        site_id,
+        detail="Core Link probes can only be recorded for edge sites.",
+    )
+    target = await services.link.atarget_for_connection_metadata(
+        tenant_id=tenant_context.tenant_id,
+        site_id=site_id,
+        target_id=target_id,
+    )
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Probe target not found.")
+    return LinkEdgeThroughputRunResponse(
+        status="queued",
+        site_id=site_id,
+        target_id=target_id,
+        request_id=uuid4(),
+    )
 
 
 @router.delete("/sites/{site_id}/probes/{probe_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -1160,6 +1238,11 @@ def _site_summary_payload(
             _connection_payload(summary.active_connection)
             if summary.active_connection is not None
             and site_role == "edge"
+            else None
+        ),
+        fallback_active_path=(
+            summary.fallback_active_path
+            if site_role == "edge"
             else None
         ),
         connection_count=summary.connection_count,
@@ -1503,6 +1586,36 @@ async def _target_site_status_payload(
     }
     payload["passport_hash"] = services.link.hash_passport_payload(payload)
     return payload
+
+
+def _throughput_payload_url(request: Request, services: AppServices) -> str:
+    configured = services.link.settings.link_throughput_payload_public_url
+    if configured:
+        return configured
+    return f"{str(request.base_url).rstrip('/')}/api/v1/link/throughput/payload.bin"
+
+
+def _throughput_payload_metadata(services: AppServices) -> dict[str, int | str | None]:
+    payload_path = Path(services.link.settings.link_throughput_payload_path)
+    if not payload_path.is_file():
+        return {"size_bytes": None, "sha256": None}
+    return {
+        "size_bytes": payload_path.stat().st_size,
+        "sha256": _throughput_payload_sha256(payload_path),
+    }
+
+
+def _throughput_payload_sha256(payload_path: Path) -> str:
+    sidecar = payload_path.with_name(f"{payload_path.name}.sha256")
+    if sidecar.is_file():
+        first_field = sidecar.read_text(encoding="utf-8").strip().split(maxsplit=1)[0]
+        if len(first_field) == 64:
+            return first_field.lower()
+    digest = hashlib.sha256()
+    with payload_path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _reject_null_required_connection_fields(updates: dict[str, object]) -> None:

@@ -115,6 +115,11 @@ class Settings(BaseSettings):
     link_reflector_secret: SecretStr | None = None
     link_reflector_rate_limit_pps: int = Field(default=100, ge=0)
     link_reflector_allowed_source_cidrs: str = ""
+    link_throughput_payload_path: str = (
+        "/var/lib/vezor/link-throughput/vezor-speed-test-64MiB.bin"
+    )
+    link_throughput_payload_max_bytes: int = Field(default=67_108_864, gt=0)
+    link_throughput_payload_public_url: str | None = None
 
     enable_startup_services: bool = True
     enable_nats: bool = True

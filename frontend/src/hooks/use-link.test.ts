@@ -13,7 +13,10 @@ vi.mock("@/lib/api", () => ({
     new Error(fallbackMessage),
 }));
 
-import { useLinkSiteSummaries } from "@/hooks/use-link";
+import {
+  useLinkSiteSummaries,
+  useMeasureLinkProbeTargetEdgeThroughput,
+} from "@/hooks/use-link";
 import { apiClient } from "@/lib/api";
 import { createTestQueryWrapper } from "@/test/query-test-utils";
 
@@ -25,6 +28,7 @@ describe("link hooks", () => {
       error: undefined,
       response: new Response(null, { status: 200 }),
     } as Awaited<ReturnType<typeof apiClient.GET>>);
+    vi.mocked(apiClient.POST).mockReset();
   });
 
   test("useLinkSiteSummaries reads the core link summary route", async () => {
@@ -56,5 +60,30 @@ describe("link hooks", () => {
 
     await waitFor(() => expect(result.current.data).toHaveLength(1));
     expect(apiClient.GET).toHaveBeenCalledWith("/api/v1/link/sites/summary");
+  });
+
+  test("useMeasureLinkProbeTargetEdgeThroughput queues an edge-origin throughput run", async () => {
+    vi.mocked(apiClient.POST).mockResolvedValueOnce({
+      data: {
+        request_id: "00000000-0000-4000-8000-000000000004",
+        site_id: "site-1",
+        status: "queued",
+        target_id: "target-1",
+      },
+      error: undefined,
+      response: new Response(null, { status: 202 }),
+    } as Awaited<ReturnType<typeof apiClient.POST>>);
+
+    const { result } = renderHook(
+      () => useMeasureLinkProbeTargetEdgeThroughput({ siteId: "site-1" }),
+      { wrapper: createTestQueryWrapper() },
+    );
+
+    await result.current.mutateAsync("target-1");
+
+    expect(apiClient.POST).toHaveBeenCalledWith(
+      "/api/v1/link/sites/{site_id}/probe-targets/{target_id}/measure-edge-throughput",
+      { params: { path: { site_id: "site-1", target_id: "target-1" } } },
+    );
   });
 });

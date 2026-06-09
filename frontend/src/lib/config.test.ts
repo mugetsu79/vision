@@ -9,6 +9,7 @@ describe("resolveFrontendConfig", () => {
         {
           VITE_API_BASE_URL: undefined,
           VITE_OIDC_AUTHORITY: undefined,
+          VITE_PLATFORM_OIDC_AUTHORITY: undefined,
           VITE_OIDC_CLIENT_ID: undefined,
           VITE_OIDC_REDIRECT_URI: undefined,
           VITE_OIDC_POST_LOGOUT_REDIRECT_URI: undefined,
@@ -24,6 +25,7 @@ describe("resolveFrontendConfig", () => {
     ).toEqual({
       apiBaseUrl: "http://127.0.0.1:8000",
       oidcAuthority: "http://127.0.0.1:8080/realms/argus-dev",
+      platformOidcAuthority: "http://127.0.0.1:8080/realms/platform-admin",
       oidcClientId: "argus-frontend",
       oidcRedirectUri: "http://127.0.0.1:3000/auth/callback",
       oidcPostLogoutRedirectUri: "http://127.0.0.1:3000/signin",
@@ -37,6 +39,7 @@ describe("resolveFrontendConfig", () => {
         {
           VITE_API_BASE_URL: undefined,
           VITE_OIDC_AUTHORITY: "http://127.0.0.1:8080/realms/argus-dev",
+          VITE_PLATFORM_OIDC_AUTHORITY: "http://127.0.0.1:8080/realms/platform-admin",
           VITE_OIDC_CLIENT_ID: "argus-frontend",
           VITE_OIDC_REDIRECT_URI: "http://127.0.0.1:3000/auth/callback",
           VITE_OIDC_POST_LOGOUT_REDIRECT_URI: "http://127.0.0.1:3000/signin",
@@ -58,6 +61,7 @@ describe("resolveFrontendConfig", () => {
         {
           VITE_API_BASE_URL: "http://build-time:8000",
           VITE_OIDC_AUTHORITY: undefined,
+          VITE_PLATFORM_OIDC_AUTHORITY: undefined,
           VITE_OIDC_CLIENT_ID: undefined,
           VITE_OIDC_REDIRECT_URI: undefined,
           VITE_OIDC_POST_LOGOUT_REDIRECT_URI: undefined,
@@ -66,6 +70,7 @@ describe("resolveFrontendConfig", () => {
         {
           VITE_API_BASE_URL: "http://runtime:8000",
           VITE_OIDC_AUTHORITY: "http://runtime:8080/realms/argus-dev",
+          VITE_PLATFORM_OIDC_AUTHORITY: "http://runtime:8080/realms/platform-admin",
           VITE_OIDC_CLIENT_ID: "argus-frontend",
           VITE_OIDC_REDIRECT_URI: "http://runtime:3000/auth/callback",
           VITE_OIDC_POST_LOGOUT_REDIRECT_URI: "http://runtime:3000/signin",
@@ -75,6 +80,7 @@ describe("resolveFrontendConfig", () => {
     ).toEqual({
       VITE_API_BASE_URL: "http://runtime:8000",
       VITE_OIDC_AUTHORITY: "http://runtime:8080/realms/argus-dev",
+      VITE_PLATFORM_OIDC_AUTHORITY: "http://runtime:8080/realms/platform-admin",
       VITE_OIDC_CLIENT_ID: "argus-frontend",
       VITE_OIDC_REDIRECT_URI: "http://runtime:3000/auth/callback",
       VITE_OIDC_POST_LOGOUT_REDIRECT_URI: "http://runtime:3000/signin",
@@ -88,6 +94,8 @@ describe("resolveFrontendConfig", () => {
         {
           VITE_API_BASE_URL: "http://192.168.8.199:8000",
           VITE_OIDC_AUTHORITY: "http://192.168.8.199:8080/realms/argus-dev",
+          VITE_PLATFORM_OIDC_AUTHORITY:
+            "http://192.168.8.199:8080/realms/platform-admin",
           VITE_OIDC_CLIENT_ID: "argus-frontend",
           VITE_OIDC_REDIRECT_URI: "http://192.168.8.199:3000/auth/callback",
           VITE_OIDC_POST_LOGOUT_REDIRECT_URI: "http://192.168.8.199:3000/signin",
@@ -103,6 +111,7 @@ describe("resolveFrontendConfig", () => {
     ).toEqual({
       apiBaseUrl: "http://192.168.8.199:8000",
       oidcAuthority: "http://192.168.8.199:8080/realms/argus-dev",
+      platformOidcAuthority: "http://192.168.8.199:8080/realms/platform-admin",
       oidcClientId: "argus-frontend",
       oidcRedirectUri: "http://192.168.8.199:3000/auth/callback",
       oidcPostLogoutRedirectUri: "http://192.168.8.199:3000/signin",

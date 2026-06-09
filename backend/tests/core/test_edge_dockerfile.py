@@ -40,6 +40,17 @@ def test_edge_dockerfile_installs_jetson_onnxruntime_wheel_after_base_deps() -> 
     assert "exit 1" in dockerfile
 
 
+def test_edge_dockerfile_verifies_gpu_ort_wheel_digest_and_probes_providers() -> None:
+    dockerfile = EDGE_DOCKERFILE_PATH.read_text(encoding="utf-8")
+
+    assert 'ARG JETSON_ORT_WHEEL_SHA256=""' in dockerfile
+    assert "sha256sum -c" in dockerfile
+    assert "/tmp/onnxruntime_gpu.whl" in dockerfile
+    assert "import onnxruntime as ort" in dockerfile
+    assert "ort.get_available_providers()" in dockerfile
+    assert "A verified Jetson GPU ONNX Runtime wheel is required" in dockerfile
+
+
 def test_edge_dockerfile_installs_dependencies_before_source_copy() -> None:
     dockerfile = EDGE_DOCKERFILE_PATH.read_text(encoding="utf-8")
 

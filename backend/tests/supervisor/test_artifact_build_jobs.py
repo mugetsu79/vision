@@ -182,6 +182,57 @@ async def test_successful_artifact_build_completion_includes_runtime_versions(
     assert artifact["runtime_versions"]["provider"] == "cuda"
 
 
+@pytest.mark.asyncio
+async def test_tensorrt_artifact_build_reports_actual_validated_runtime_path_and_inventory(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "yolo26n.onnx"
+    source.write_bytes(b"onnx")
+    output_dir = tmp_path / "runtime-artifacts" / "model-1"
+    expected_engine_path = output_dir / "yolo26n.engine"
+    expected_engine_sha256 = hashlib.sha256(b"engine bytes").hexdigest()
+    job = _artifact_job(
+        payload={
+            "job_type": "artifact_build",
+            "schema_version": 1,
+            "model_id": str(uuid4()),
+            "source_model_path": str(source),
+            "source_model_sha256": hashlib.sha256(b"onnx").hexdigest(),
+            "build_format": "tensorrt_engine",
+            "target_profile": "linux-aarch64-nvidia-jetson",
+            "precision": "fp16",
+            "input_shape": {"width": 640, "height": 640},
+            "classes": ["person"],
+            "output_dir": str(output_dir),
+        }
+    )
+    client = _FakeOperationsClient([job])
+    executor = SupervisorModelJobExecutor(
+        operations_client=client,
+        tensorrt_engine_builder=_FakeTensorRTEngineBuilder(expected_engine_path),
+        runtime_versions={"onnxruntime_providers": ["TensorrtExecutionProvider"]},
+    )
+
+    await executor.execute_once()
+
+    artifact = client.completed[0][1].payload["artifact"]
+    assert artifact["path"] == str(expected_engine_path)
+    assert artifact["sha256"] == expected_engine_sha256
+    assert artifact["size_bytes"] == len(b"engine bytes")
+    assert artifact["target_profile"] == "linux-aarch64-nvidia-jetson"
+    assert artifact["source_model_sha256"] == hashlib.sha256(b"onnx").hexdigest()
+    assert artifact["validation_status"] == "valid"
+
+    assert len(client.inventory_reports) == 1
+    inventory_item = client.inventory_reports[0].items[0]
+    assert inventory_item.asset_kind == "runtime_artifact"
+    assert inventory_item.asset_id == job.model_id
+    assert inventory_item.local_path == str(expected_engine_path)
+    assert inventory_item.sha256 == expected_engine_sha256
+    assert inventory_item.size_bytes == len(b"engine bytes")
+    assert inventory_item.target_profile == "linux-aarch64-nvidia-jetson"
+
+
 class _FakeTensorRTEngineBuilder:
     def __init__(self, engine_path: Path) -> None:
         self.engine_path = engine_path

@@ -61,5 +61,15 @@
     "container_engine": "24.0",
     "compose": "2.24",
     "jetpack": "6.0"
-  }
+  },
+  "jetson_ort_wheels": [
+    {
+      "jetpack": "6.2",
+      "l4t": "36.4",
+      "python": "cp310",
+      "arch": "aarch64",
+      "url": "https://pypi.jetson-ai-lab.dev/jp6/cu126/+f/f6e/2baa664069470/onnxruntime_gpu-1.20.2-cp310-cp310-linux_aarch64.whl",
+      "sha256": "f6e2baa664069470c6574219a79aba315e26c76db49d347678a5a273f1c41c9a"
+    }
+  ]
 }

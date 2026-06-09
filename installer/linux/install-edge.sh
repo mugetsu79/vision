@@ -10,6 +10,8 @@ FRONTEND_URL="${VEZOR_MASTER_FRONTEND_URL:-}"
 VERSION=""
 MANIFEST=""
 JETSON_ORT_WHEEL_URL="${JETSON_ORT_WHEEL_URL:-}"
+JETSON_ORT_WHEEL_SHA256="${JETSON_ORT_WHEEL_SHA256:-}"
+JETSON_PREFLIGHT_JSON=""
 ALLOW_CPU_ONNX_RUNTIME="${VEZOR_ALLOW_CPU_ONNX_RUNTIME:-0}"
 PUBLIC_STREAM_HOST="${VEZOR_EDGE_PUBLIC_STREAM_HOST:-}"
 PUBLIC_MEDIAMTX_RTSP_URL="${VEZOR_EDGE_PUBLIC_MEDIAMTX_RTSP_URL:-}"
@@ -284,15 +286,50 @@ print(f"nats://{host}:7422")
 PY
 }
 
+resolve_jetson_ort_from_manifest() {
+  if [[ -n "$JETSON_ORT_WHEEL_URL" || "$ALLOW_CPU_ONNX_RUNTIME" == "1" ]]; then
+    return 0
+  fi
+  # Python resolves the manifest by calling resolve_jetson_ort_wheel.
+  if [[ -z "$MANIFEST" || "$(manifest_release_channel)" != "dev" ]]; then
+    return 0
+  fi
+  if [[ -z "$JETSON_PREFLIGHT_JSON" || ! -s "$JETSON_PREFLIGHT_JSON" ]]; then
+    echo "Jetson preflight JSON is required to resolve the GPU ONNX Runtime wheel." >&2
+    exit 2
+  fi
+
+  local manifest_path
+  manifest_path="$(python3 - "$MANIFEST" <<'PY'
+import sys
+from pathlib import Path
+
+print(Path(sys.argv[1]).expanduser().resolve())
+PY
+)"
+  local exports
+  exports="$(
+    cd "$RELEASE_DIR/installer"
+    python3 -m vezor_installer.jetson_ort "$manifest_path" "$JETSON_PREFLIGHT_JSON"
+  )"
+  eval "$exports"
+  if [[ -z "$JETSON_ORT_WHEEL_URL" || -z "$JETSON_ORT_WHEEL_SHA256" ]]; then
+    echo "Jetson GPU ONNX Runtime wheel resolution did not return URL and SHA256." >&2
+    exit 2
+  fi
+  echo "Resolved Jetson GPU ONNX Runtime wheel from manifest."
+}
+
 build_local_edge_image() {
   if [[ "$(manifest_release_channel)" != "dev" ]]; then
     return 0
   fi
 
   require_command "$CONTAINER_ENGINE"
+  resolve_jetson_ort_from_manifest
   if [[ -z "$JETSON_ORT_WHEEL_URL" && "$ALLOW_CPU_ONNX_RUNTIME" != "1" ]]; then
     echo "Jetson ONNX Runtime GPU wheel is required for dev manifest edge builds." >&2
-    echo "Pass --jetson-ort-wheel-url with the Jetson cp310 linux_aarch64 GPU wheel." >&2
+    echo "Provide a manifest jetson_ort_wheels entry for this Jetson, or use --allow-cpu-onnx-runtime only for diagnostics." >&2
     echo "Use --allow-cpu-onnx-runtime only for CPU-only diagnostics, not product demos." >&2
     exit 2
   fi
@@ -300,6 +337,7 @@ build_local_edge_image() {
   run "$CONTAINER_ENGINE" build \
     -f /opt/vezor/current/backend/Dockerfile.edge \
     --build-arg "JETSON_ORT_WHEEL_URL=$JETSON_ORT_WHEEL_URL" \
+    --build-arg "JETSON_ORT_WHEEL_SHA256=$JETSON_ORT_WHEEL_SHA256" \
     --build-arg "ALLOW_CPU_ONNX_RUNTIME=$ALLOW_CPU_ONNX_RUNTIME" \
     -t "$EDGE_WORKER_IMAGE" \
     /opt/vezor/current/backend
@@ -406,7 +444,26 @@ fi
 stop_existing_edge_appliance
 
 if [[ -x "$RELEASE_DIR/scripts/jetson-preflight.sh" ]]; then
-  (cd "$RELEASE_DIR" && scripts/jetson-preflight.sh --installer --json)
+  JETSON_PREFLIGHT_JSON="$(mktemp)"
+  preflight_output="$(cd "$RELEASE_DIR" && scripts/jetson-preflight.sh --installer --json)"
+  printf '%s\n' "$preflight_output"
+  PREFLIGHT_OUTPUT="$preflight_output" python3 - "$JETSON_PREFLIGHT_JSON" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+target = Path(sys.argv[1])
+for line in reversed(os.environ.get("PREFLIGHT_OUTPUT", "").splitlines()):
+    line = line.strip()
+    if not line.startswith("{"):
+        continue
+    payload = json.loads(line)
+    target.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    break
+else:
+    raise SystemExit("Jetson preflight did not emit JSON.")
+PY
 fi
 
 run install -d -m 0755 \
@@ -483,6 +540,7 @@ ARGUS_LINK_EDGE_AGENT_CONFIG_URL=$(shell_quote "${API_URL%/}/api/v1/link/control
 ARGUS_LINK_EDGE_AGENT_ID=$(shell_quote "$EDGE_NAME-core-link")
 ARGUS_LINK_EDGE_AGENT_LABEL=$(shell_quote "$EDGE_AGENT_LABEL")
 ARGUS_LINK_EDGE_AGENT_INTERVAL_SECONDS=300
+VEZOR_LINK_EDGE_AGENT_INCLUDE_THROUGHPUT=1
 ENV
   chmod 0644 "$EDGE_AGENT_ENV"
 fi
@@ -583,6 +641,13 @@ run systemctl daemon-reload
 run systemctl enable vezor-edge.service
 run systemctl enable vezor-edge-agent.service
 run systemctl start vezor-edge.service
+
+if [[ "$DRY_RUN" -eq 1 ]]; then
+  echo "[dry-run] Initial edge-agent throughput sample: vezor-edge-agent --once"
+else
+  echo "Initial edge-agent throughput sample..."
+  VEZOR_EDGE_AGENT_ENV="$EDGE_AGENT_ENV" /opt/vezor/current/bin/vezor-edge-agent --once || true
+fi
 
 echo "Vezor edge install complete."
 echo "Open Control -> Deployment to confirm service health and credential status."

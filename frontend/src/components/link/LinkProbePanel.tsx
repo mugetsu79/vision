@@ -44,6 +44,10 @@ export function LinkProbePanel({
   const deleteProbe = useDeleteLinkProbe({ siteId });
   const runProbeTarget = useRunLinkProbeTarget({ siteId });
   const measureThroughput = useMeasureLinkProbeTargetThroughput({ siteId });
+  const measureEdgeThroughput = useMeasureLinkProbeTargetThroughput({
+    origin: "edge_agent",
+    siteId,
+  });
   const targets = monitoringTargetOptions(connections);
   const sortedProbes = [...probes].sort((left, right) =>
     textValue(asRecord(right).recorded_at, "").localeCompare(
@@ -68,6 +72,10 @@ export function LinkProbePanel({
 
   async function handleMeasureThroughput(target: ProbeTargetOption) {
     await measureThroughput.mutateAsync(target.id);
+  }
+
+  async function handleMeasureEdgeThroughput(target: ProbeTargetOption) {
+    await measureEdgeThroughput.mutateAsync(target.id);
   }
 
   return (
@@ -121,6 +129,17 @@ export function LinkProbePanel({
                   >
                     <Play className="mr-2 size-4" aria-hidden="true" />
                     Measure throughput
+                  </Button>
+                ) : null}
+                {canMeasureEdgeThroughput(target) ? (
+                  <Button
+                    variant="ghost"
+                    onClick={() => void handleMeasureEdgeThroughput(target)}
+                    disabled={!siteId || measureEdgeThroughput.isPending}
+                    aria-label={`Measure edge throughput ${target.label}`}
+                  >
+                    <Play className="mr-2 size-4" aria-hidden="true" />
+                    Measure edge throughput
                   </Button>
                 ) : null}
               </div>
@@ -268,5 +287,12 @@ function canMeasureThroughput(target: ProbeTargetOption) {
     target.probe_type !== "icmp" &&
     target.probe_type !== "udp" &&
     Boolean(target.throughput_test_url)
+  );
+}
+
+function canMeasureEdgeThroughput(target: ProbeTargetOption) {
+  return (
+    target.monitoring.enabled &&
+    target.monitoring.source_type === "edge_agent"
   );
 }

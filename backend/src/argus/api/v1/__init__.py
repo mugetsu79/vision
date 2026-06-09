@@ -16,6 +16,7 @@ from argus.api.v1 import (
     models,
     operations,
     packs,
+    platform_bootstrap,
     policy_drafts,
     query,
     runtime_artifacts,
@@ -46,6 +47,7 @@ router.include_router(runtime_soak.router)
 router.include_router(model_assets.router)
 router.include_router(model_catalog.router)
 router.include_router(packs.router)
+router.include_router(platform_bootstrap.router)
 router.include_router(edge.router)
 router.include_router(operations.router)
 router.include_router(policy_drafts.router)

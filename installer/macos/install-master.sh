@@ -8,6 +8,7 @@ DATA_DIR="/var/lib/vezor"
 CONFIG_DIR="/etc/vezor"
 DEFAULT_MASTER_CONFIG="/etc/vezor/master.json"
 DRY_RUN=0
+VEZOR_LINK_THROUGHPUT_DIR=""
 PLIST_PATH="/Library/LaunchDaemons/com.vezor.master.plist"
 
 export PATH="/opt/homebrew/bin:/usr/local/bin:/Applications/Docker.app/Contents/Resources/bin:$PATH"
@@ -156,6 +157,41 @@ oidc_disable_pkce_for_public_url() {
       printf 'true\n'
       ;;
   esac
+}
+
+create_link_throughput_payload() {
+  VEZOR_LINK_THROUGHPUT_DIR="$DATA_DIR/link-throughput"
+  local payload="$VEZOR_LINK_THROUGHPUT_DIR/vezor-speed-test-64MiB.bin"
+  local sha_file="$payload.sha256"
+
+  run install -d -m 0755 "$VEZOR_LINK_THROUGHPUT_DIR"
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "[dry-run] create link throughput payload $payload"
+    return 0
+  fi
+  if [[ ! -s "$payload" || "$(stat -f%z "$payload" 2>/dev/null || stat -c%s "$payload")" != "67108864" ]]; then
+    python3 - "$payload" <<'PY'
+from pathlib import Path
+import hashlib
+import sys
+
+path = Path(sys.argv[1])
+block = hashlib.sha256(b"vezor-link-throughput-v1").digest()
+size = 67108864
+with path.open("wb") as handle:
+    full, remainder = divmod(size, len(block))
+    for _ in range(full):
+        handle.write(block)
+    if remainder:
+        handle.write(block[:remainder])
+PY
+  fi
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$payload" > "$sha_file"
+  else
+    shasum -a 256 "$payload" > "$sha_file"
+  fi
+  chmod 0644 "$payload" "$sha_file"
 }
 
 prepare_secret_for_docker_desktop() {
@@ -529,7 +565,8 @@ run install -d -m 0755 \
   "$DATA_DIR/models" \
   "$DATA_DIR/credentials" \
   "$DATA_DIR/evidence" \
-  "$DATA_DIR/bootstrap"
+  "$DATA_DIR/bootstrap" \
+  "$DATA_DIR/link-throughput"
 
 for docker_data_dir in \
   "$DATA_DIR/postgres" \
@@ -540,10 +577,14 @@ for docker_data_dir in \
   "$DATA_DIR/credentials" \
   "$DATA_DIR/evidence" \
   "$DATA_DIR/bootstrap" \
+  "$DATA_DIR/link-throughput" \
   /var/log/vezor/backend
 do
   prepare_data_dir_for_docker_desktop "$docker_data_dir"
 done
+
+create_link_throughput_payload
+prepare_data_dir_for_docker_desktop "$VEZOR_LINK_THROUGHPUT_DIR"
 
 write_secret_if_missing "$CONFIG_DIR/secrets/postgres_password"
 write_backend_db_url_secret
@@ -590,11 +631,14 @@ VEZOR_PUBLIC_FRONTEND_URL=$PUBLIC_URL
 VEZOR_PUBLIC_API_BASE_URL=$PUBLIC_API_BASE_URL
 VEZOR_PUBLIC_KEYCLOAK_URL=$PUBLIC_KEYCLOAK_URL
 VEZOR_PUBLIC_OIDC_AUTHORITY=$PUBLIC_OIDC_AUTHORITY
+VEZOR_PLATFORM_OIDC_AUTHORITY=$PUBLIC_KEYCLOAK_URL/realms/platform-admin
 VEZOR_KEYCLOAK_BIND=$KEYCLOAK_BIND
 VEZOR_KEYCLOAK_HOSTNAME=$PUBLIC_KEYCLOAK_URL
 VEZOR_OIDC_CLIENT_ID=argus-frontend
 VEZOR_OIDC_DISABLE_PKCE=$OIDC_DISABLE_PKCE
 VEZOR_LINK_REFLECTOR_SECRET_FILE=$CONFIG_DIR/secrets/link_reflector_secret
+VEZOR_LINK_THROUGHPUT_HOST_DIR=$VEZOR_LINK_THROUGHPUT_DIR
+VEZOR_LINK_THROUGHPUT_PAYLOAD_PUBLIC_URL=$PUBLIC_API_BASE_URL/api/v1/link/throughput/payload.bin
 ENV
   chmod 0644 "$MASTER_ENV"
 fi

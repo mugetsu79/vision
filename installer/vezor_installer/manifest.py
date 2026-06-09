@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field, model_validator
 
 ReleaseChannel = Literal["dev", "pilot", "stable"]
 PackageTargetName = Literal["linux-master", "macos-master", "jetson-edge"]
@@ -59,6 +59,17 @@ class MinimumVersions(BaseModel):
     jetpack: str | None = None
 
 
+class JetsonOrtWheel(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    jetpack: str = Field(min_length=1)
+    l4t: str = Field(min_length=1)
+    python: str = Field(min_length=1)
+    arch: str = Field(min_length=1)
+    url: AnyUrl
+    sha256: str = Field(pattern=r"^[a-fA-F0-9]{64}$")
+
+
 class Manifest(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -67,6 +78,7 @@ class Manifest(BaseModel):
     images: dict[str, ImageSpec] = Field(min_length=1)
     package_targets: list[PackageTarget] = Field(min_length=1)
     minimum_versions: MinimumVersions
+    jetson_ort_wheels: list[JetsonOrtWheel] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_product_manifest(self) -> Self:

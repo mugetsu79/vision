@@ -221,6 +221,7 @@ from argus.services.model_lifecycle import ModelLifecycleService
 from argus.services.operational_memory import OperationalMemoryService
 from argus.services.operator_configuration import OperatorConfigurationService
 from argus.services.pack_registry import PackRegistry
+from argus.services.platform_bootstrap import PlatformBootstrapService
 from argus.services.policy_drafts import PolicyDraftService
 from argus.services.privacy_manifests import PrivacyManifestService, build_privacy_manifest
 from argus.services.privacy_policy_runtime import validate_privacy_policy_residency
@@ -343,6 +344,7 @@ class AppServices:
     local_first_sync: LocalFirstEvidenceSyncService
     edge: EdgeService
     deployment: DeploymentNodeService
+    platform_bootstrap: PlatformBootstrapService
     operations: OperationsService
     history: HistoryService
     incidents: IncidentService
@@ -4672,6 +4674,11 @@ def build_app_services(
         ),
         edge=edge_service,
         deployment=deployment_nodes,
+        platform_bootstrap=PlatformBootstrapService(
+            session_factory=db.session_factory,
+            identity_provisioner=identity_provisioner,
+            platform_realm=settings.keycloak_platform_realm,
+        ),
         operations=OperationsService(
             db.session_factory,
             settings,

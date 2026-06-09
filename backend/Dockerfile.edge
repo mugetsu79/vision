@@ -1,6 +1,7 @@
 FROM nvcr.io/nvidia/l4t-jetpack:r36.4.0
 
 ARG JETSON_ORT_WHEEL_URL=""
+ARG JETSON_ORT_WHEEL_SHA256=""
 ARG ALLOW_CPU_ONNX_RUNTIME="0"
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -37,11 +38,19 @@ RUN python3 -m pip install --no-cache-dir uv \
     && PATH="$UV_PROJECT_ENVIRONMENT/bin:$PATH" python -c "import sys; assert sys.version_info[:2] == (3, 10), sys.version" \
     && uv pip install --python "$UV_PROJECT_ENVIRONMENT/bin/python" --no-cache -r requirements-edge.txt \
     && if [ -n "$JETSON_ORT_WHEEL_URL" ]; then \
-        "$UV_PROJECT_ENVIRONMENT/bin/pip" install --no-cache-dir "$JETSON_ORT_WHEEL_URL"; \
+        if [ -z "$JETSON_ORT_WHEEL_SHA256" ]; then \
+            echo "A verified Jetson GPU ONNX Runtime wheel is required: JETSON_ORT_WHEEL_SHA256 is missing." >&2; \
+            exit 1; \
+        fi; \
+        curl -fsSL "$JETSON_ORT_WHEEL_URL" -o /tmp/onnxruntime_gpu.whl; \
+        echo "$JETSON_ORT_WHEEL_SHA256  /tmp/onnxruntime_gpu.whl" | sha256sum -c -; \
+        "$UV_PROJECT_ENVIRONMENT/bin/pip" install --no-cache-dir /tmp/onnxruntime_gpu.whl; \
+        rm -f /tmp/onnxruntime_gpu.whl; \
+        "$UV_PROJECT_ENVIRONMENT/bin/python" -c "import onnxruntime as ort; providers=set(ort.get_available_providers()); required={'CUDAExecutionProvider','TensorrtExecutionProvider'}; assert providers.intersection(required), f'Jetson GPU ONNX Runtime providers unavailable: {sorted(providers)}'"; \
     elif [ "$ALLOW_CPU_ONNX_RUNTIME" = "1" ]; then \
         "$UV_PROJECT_ENVIRONMENT/bin/pip" install --no-cache-dir "onnxruntime>=1.20"; \
     else \
-        echo "JETSON_ORT_WHEEL_URL is required for Jetson GPU ONNX Runtime builds. Set ALLOW_CPU_ONNX_RUNTIME=1 only for CPU-only diagnostics." >&2; \
+        echo "A verified Jetson GPU ONNX Runtime wheel is required for Jetson builds. Set ALLOW_CPU_ONNX_RUNTIME=1 only for CPU-only diagnostics." >&2; \
         exit 1; \
     fi \
     && groupadd --system --gid 10001 argus \

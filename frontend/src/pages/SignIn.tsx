@@ -1,4 +1,4 @@
-import { Camera, Cpu, ScanEye } from "lucide-react";
+import { Camera, Cpu, ScanEye, ShieldCheck } from "lucide-react";
 
 import { productBrand } from "@/brand/product";
 import { ProductLockup } from "@/components/layout/ProductLockup";
@@ -79,9 +79,17 @@ export function SignInPage() {
           <Button
             variant="primary"
             className="mt-6 w-full"
-            onClick={() => void signIn()}
+            onClick={() => void signIn("tenant")}
           >
             Sign in
+          </Button>
+          <Button
+            variant="secondary"
+            className="mt-3 w-full"
+            onClick={() => void signIn("platform")}
+          >
+            <ShieldCheck className="mr-2 size-4" aria-hidden="true" />
+            Platform sign in
           </Button>
         </section>
 

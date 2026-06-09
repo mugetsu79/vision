@@ -5,6 +5,15 @@ set -euo pipefail
 failures=0
 installer_mode=0
 json_mode=0
+arch="$(uname -m)"
+jetpack_version=""
+l4t_version=""
+python_abi="$(python3 - <<'PY' 2>/dev/null || true
+import sys
+
+print(f"cp{sys.version_info.major}{sys.version_info.minor}")
+PY
+)"
 
 for arg in "$@"; do
   case "$arg" in
@@ -105,7 +114,7 @@ check_udp_port_available() {
   fi
 }
 
-if [[ "$(uname -m)" == "aarch64" ]]; then
+if [[ "$arch" == "aarch64" ]]; then
   pass "Jetson architecture is arm64"
 else
   fail "Jetson architecture must be aarch64"
@@ -127,9 +136,14 @@ fi
 
 if command -v dpkg-query >/dev/null 2>&1; then
   if dpkg-query -W -f='${Version}' nvidia-jetpack >/dev/null 2>&1; then
+    jetpack_version="$(dpkg-query -W -f='${Version}' nvidia-jetpack 2>/dev/null | sed -E 's/^([0-9]+\\.[0-9]+).*/\\1/' || true)"
     check_command_output "JetPack 6.2.x metapackage is installed" '^6\.2' dpkg-query -W -f='${Version}' nvidia-jetpack
   else
+    l4t_version="$(dpkg-query -W -f='${Version}' nvidia-l4t-core 2>/dev/null | sed -E 's/^([0-9]+\\.[0-9]+).*/\\1/' || true)"
     check_command_output "Jetson Linux 36.4/36.5 base is installed" '^36\.[45]' dpkg-query -W -f='${Version}' nvidia-l4t-core
+  fi
+  if [[ -z "$l4t_version" ]]; then
+    l4t_version="$(dpkg-query -W -f='${Version}' nvidia-l4t-core 2>/dev/null | sed -E 's/^([0-9]+\\.[0-9]+).*/\\1/' || true)"
   fi
   if dpkg-query -W -f='${Version}' libnvinfer10 >/dev/null 2>&1; then
     check_command_output "TensorRT 10.x runtime is installed" '^10\.' dpkg-query -W -f='${Version}' libnvinfer10
@@ -200,15 +214,22 @@ if [[ "$installer_mode" -eq 1 ]]; then
   fi
 fi
 
+if [[ -z "$jetpack_version" && -n "$l4t_version" ]]; then
+  case "$l4t_version" in
+    36.4*) jetpack_version="6.2" ;;
+    36.5*) jetpack_version="6.2" ;;
+  esac
+fi
+
 if [[ "$failures" -gt 0 ]]; then
   if [[ "$json_mode" -eq 1 ]]; then
-    printf '{"status":"failed","installer_mode":%s,"failures":%d}\n' "$installer_mode" "$failures"
+    printf '{"status":"failed","installer_mode":%s,"failures":%d,"arch":"%s","jetpack":"%s","l4t":"%s","python_abi":"%s"}\n' "$installer_mode" "$failures" "$arch" "$jetpack_version" "$l4t_version" "$python_abi"
   fi
   printf '\nJetson preflight failed with %d issue(s).\n' "$failures" >&2
   exit 1
 fi
 
 if [[ "$json_mode" -eq 1 ]]; then
-  printf '{"status":"passed","installer_mode":%s,"failures":0}\n' "$installer_mode"
+  printf '{"status":"passed","installer_mode":%s,"failures":0,"arch":"%s","jetpack":"%s","l4t":"%s","python_abi":"%s"}\n' "$installer_mode" "$arch" "$jetpack_version" "$l4t_version" "$python_abi"
 fi
 printf '\nJetson preflight passed.\n'

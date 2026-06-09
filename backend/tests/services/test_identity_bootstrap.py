@@ -13,6 +13,136 @@ from argus.services.identity_bootstrap import KeycloakBootstrapProvisioner
 
 
 @pytest.mark.asyncio
+async def test_keycloak_bootstrap_provisioner_creates_platform_realm_clients_role_and_user() -> None:
+    calls: list[tuple[str, str, dict[str, object] | str | None]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        body: dict[str, object] | str | None
+        if request.headers.get("content-type", "").startswith("application/json"):
+            body = json.loads(request.content.decode("utf-8"))
+        else:
+            body = request.content.decode("utf-8") if request.content else None
+        calls.append((request.method, request.url.path, body))
+
+        if request.url.path == "/realms/master/protocol/openid-connect/token":
+            return httpx.Response(200, json={"access_token": "admin-token"})
+        if request.method == "GET" and request.url.path == "/admin/realms/platform-admin":
+            return httpx.Response(404)
+        if request.method == "POST" and request.url.path == "/admin/realms":
+            return httpx.Response(201)
+        if request.method == "GET" and request.url.path == "/admin/realms/platform-admin/roles/superadmin":
+            role_created = any(
+                method == "POST"
+                and path == "/admin/realms/platform-admin/roles"
+                for method, path, _body in calls
+            )
+            if not role_created:
+                return httpx.Response(404)
+            return httpx.Response(200, json={"id": "role-superadmin", "name": "superadmin"})
+        if request.method == "POST" and request.url.path == "/admin/realms/platform-admin/roles":
+            return httpx.Response(201)
+        if request.method == "GET" and request.url.path == "/admin/realms/platform-admin/clients":
+            client_id = request.url.params.get("clientId")
+            posted_client = next(
+                (
+                    body
+                    for method, path, body in calls
+                    if method == "POST"
+                    and path == "/admin/realms/platform-admin/clients"
+                    and isinstance(body, dict)
+                    and body.get("clientId") == client_id
+                ),
+                None,
+            )
+            if posted_client is None:
+                return httpx.Response(200, json=[])
+            return httpx.Response(
+                200,
+                json=[{"id": f"{client_id}-uuid", "clientId": client_id}],
+            )
+        if request.method == "POST" and request.url.path == "/admin/realms/platform-admin/clients":
+            return httpx.Response(201)
+        if request.method == "PUT" and request.url.path.startswith(
+            "/admin/realms/platform-admin/clients/"
+        ):
+            return httpx.Response(204)
+        if request.method == "GET" and request.url.path == "/admin/realms/platform-admin/users":
+            return httpx.Response(200, json=[])
+        if request.method == "POST" and request.url.path == "/admin/realms/platform-admin/users":
+            return httpx.Response(
+                201,
+                headers={
+                    "Location": "http://keycloak/admin/realms/platform-admin/users/platform-user-id"
+                },
+            )
+        if request.method == "PUT" and request.url.path.endswith("/reset-password"):
+            return httpx.Response(204)
+        if request.method == "GET" and request.url.path.endswith("/role-mappings/realm"):
+            return httpx.Response(200, json=[])
+        if request.method == "POST" and request.url.path.endswith("/role-mappings/realm"):
+            return httpx.Response(204)
+        return httpx.Response(500, json={"unexpected": request.url.path})
+
+    settings = Settings(
+        _env_file=None,
+        keycloak_server_url="http://keycloak:8080",
+        keycloak_issuer="http://127.0.0.1:8080/realms/vezor",
+        keycloak_admin_username="admin",
+        keycloak_admin_password=SecretStr("admin-password"),
+        keycloak_frontend_client_id="argus-frontend",
+        keycloak_cli_client_id="argus-cli",
+        keycloak_frontend_url="http://127.0.0.1:3000",
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        base_url="http://keycloak:8080",
+    ) as http_client:
+        provisioner = KeycloakBootstrapProvisioner(settings, http_client=http_client)
+
+        subject = await provisioner.provision_platform_superadmin(
+            email="owner@example.com",
+            temporary_password="change-me-123456",
+            first_name="Owner",
+            last_name="One",
+            platform_realm="platform-admin",
+        )
+
+    assert subject == "platform-user-id"
+    assert any(method == "POST" and path == "/admin/realms" for method, path, _body in calls)
+    assert any(
+        method == "POST" and path == "/admin/realms/platform-admin/roles"
+        for method, path, _body in calls
+    )
+    assert {
+        body.get("clientId")
+        for method, path, body in calls
+        if method == "POST"
+        and path == "/admin/realms/platform-admin/clients"
+        and isinstance(body, dict)
+    } == {"argus-frontend", "argus-cli"}
+    user_create_body = next(
+        body
+        for method, path, body in calls
+        if method == "POST" and path == "/admin/realms/platform-admin/users"
+    )
+    assert user_create_body == {
+        "username": "owner@example.com",
+        "email": "owner@example.com",
+        "firstName": "Owner",
+        "lastName": "One",
+        "enabled": True,
+        "emailVerified": True,
+        "requiredActions": [],
+    }
+    role_mapping_payload = next(
+        body
+        for method, path, body in calls
+        if method == "POST" and path.endswith("/role-mappings/realm")
+    )
+    assert role_mapping_payload == [{"id": "role-superadmin", "name": "superadmin"}]
+
+
+@pytest.mark.asyncio
 async def test_keycloak_bootstrap_provisioner_creates_realm_client_and_admin_user() -> None:
     calls: list[tuple[str, str, dict[str, object] | str | None]] = []
 

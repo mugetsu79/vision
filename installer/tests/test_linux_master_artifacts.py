@@ -108,6 +108,19 @@ def test_linux_master_compose_profile_contains_required_product_services() -> No
     assert "ARGUS_LINK_REFLECTOR_ALLOWED_SOURCE_CIDRS" in compose
 
 
+def test_linux_master_compose_mounts_link_throughput_payload_read_only() -> None:
+    compose = _read(MASTER_COMPOSE)
+    backend = _service_block(compose, "backend")
+
+    assert "ARGUS_LINK_THROUGHPUT_PAYLOAD_PATH" in backend
+    assert "ARGUS_LINK_THROUGHPUT_PAYLOAD_MAX_BYTES" in backend
+    assert "ARGUS_LINK_THROUGHPUT_PAYLOAD_PUBLIC_URL" in backend
+    assert (
+        "${VEZOR_LINK_THROUGHPUT_HOST_DIR:-${VEZOR_DATA_DIR:-/var/lib/vezor}"
+        "/link-throughput}:/var/lib/vezor/link-throughput:ro"
+    ) in backend
+
+
 def test_linux_master_compose_disables_unconfigured_tracing_by_default() -> None:
     compose = _read(MASTER_COMPOSE)
     backend = _service_block(compose, "backend")
@@ -259,6 +272,18 @@ def test_linux_master_install_script_exposes_safe_install_options() -> None:
     assert 'old_umask="$(umask)"' in script
     assert "manifest_image_ref backend" in script
     assert "timescale/timescaledb:latest-pg16" in script
+
+
+def test_linux_master_install_creates_link_throughput_payload() -> None:
+    script = _read(INSTALL_SCRIPT)
+
+    assert "VEZOR_LINK_THROUGHPUT_DIR" in script
+    assert "vezor-speed-test-64MiB.bin" in script
+    assert "67108864" in script
+    assert "vezor-link-throughput-v1" in script
+    assert "create_link_throughput_payload" in script
+    assert "sha256sum" in script or "shasum -a 256" in script
+    assert "VEZOR_LINK_THROUGHPUT_PAYLOAD_PUBLIC_URL" in script
 
 
 def test_linux_master_installs_bundled_yolo26_models() -> None:

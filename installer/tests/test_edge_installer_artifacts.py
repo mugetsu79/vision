@@ -49,6 +49,16 @@ def test_edge_agent_systemd_service_uses_node_credential_file_not_bearer_token()
     assert "ARGUS_API_BEARER_TOKEN" not in wrapper
 
 
+def test_edge_installer_runs_initial_edge_throughput_sample() -> None:
+    script = _read(INSTALL_SCRIPT)
+    wrapper = _read(EDGE_AGENT_WRAPPER)
+
+    assert "VEZOR_LINK_EDGE_AGENT_INCLUDE_THROUGHPUT=1" in script
+    assert "vezor-edge-agent --once" in script
+    assert "Initial edge-agent throughput sample" in script
+    assert "--include-throughput" in wrapper
+
+
 def test_edge_install_script_accepts_pairing_unpaired_and_manifest_modes() -> None:
     script = _read(INSTALL_SCRIPT)
 
@@ -119,6 +129,18 @@ def test_edge_install_script_accepts_pairing_unpaired_and_manifest_modes() -> No
     assert "install/systemd/vezor-edge-agent.service" in script
     assert "systemctl enable vezor-edge-agent.service" in script
     assert "systemctl start vezor-edge-agent.service" not in script
+
+
+def test_edge_install_script_resolves_manifest_jetson_ort_wheel_before_build() -> None:
+    script = _read(INSTALL_SCRIPT)
+
+    assert "JETSON_ORT_WHEEL_SHA256" in script
+    assert "resolve_jetson_ort_wheel" in script
+    assert "resolve_jetson_ort_from_manifest" in script
+    assert "JETSON_PREFLIGHT_JSON" in script
+    assert "--build-arg \"JETSON_ORT_WHEEL_SHA256=$JETSON_ORT_WHEEL_SHA256\"" in script
+    assert "Resolved Jetson GPU ONNX Runtime wheel from manifest." in script
+    assert "Pass --jetson-ort-wheel-url" not in script
 
 
 def test_edge_install_script_derives_network_reachable_mediamtx_inputs() -> None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import socket
 from collections.abc import AsyncIterator
 from datetime import datetime
@@ -341,6 +342,49 @@ async def test_link_site_summary_route_lists_edge_and_control_plane_target_sites
 
 
 @pytest.mark.asyncio
+async def test_admin_can_download_link_throughput_payload(tmp_path) -> None:
+    payload_path = tmp_path / "vezor-speed-test-64MiB.bin"
+    payload_path.write_bytes(b"x" * 1024)
+    app = _create_app(_user(RoleEnum.ADMIN))
+    app.state.services.link.settings.link_throughput_payload_path = str(payload_path)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        headers={"Authorization": "Bearer admin-token"},
+    ) as http_client:
+        response = await http_client.get("/api/v1/link/throughput/payload.bin")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/octet-stream"
+    assert response.content == b"x" * 1024
+
+
+@pytest.mark.asyncio
+async def test_supervisor_credential_can_download_link_throughput_payload(tmp_path) -> None:
+    payload_path = tmp_path / "vezor-speed-test-64MiB.bin"
+    payload_path.write_bytes(b"edge-payload")
+    app = _create_app(
+        _supervisor_user(SUPERVISOR_DEPLOYMENT_NODE_ID),
+        include_deployment=True,
+        invalid_bearer_tokens={"node-credential"},
+        supervisor_node_edge_id=KNOWN_EDGE_NODE_ID,
+    )
+    app.state.services.link.settings.link_throughput_payload_path = str(payload_path)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        headers={"Authorization": "Bearer node-credential"},
+    ) as http_client:
+        response = await http_client.get("/api/v1/link/throughput/payload.bin")
+
+    assert response.status_code == 200
+    assert response.content == b"edge-payload"
+    assert app.state.services.deployment.credential_material == "node-credential"
+
+
+@pytest.mark.asyncio
 async def test_link_budget_update_requires_admin(viewer_client: AsyncClient) -> None:
     response = await viewer_client.put(
         "/api/v1/link/sites/00000000-0000-4000-8000-000000000002/budget",
@@ -510,6 +554,51 @@ async def test_run_link_probe_target_records_backend_synthetic_sample(client: As
 
 
 @pytest.mark.asyncio
+async def test_admin_can_request_edge_origin_throughput_sample(client: AsyncClient) -> None:
+    created = await client.post(
+        f"/api/v1/link/sites/{KNOWN_SITE_ID}/connections",
+        json={
+            "label": "Control path",
+            "transport_kind": "ethernet",
+            "status": "online",
+            "priority_rank": 5,
+            "availability_scope": "always",
+            "metered": False,
+            "metadata": {
+                "monitoring_targets": [
+                    {
+                        "id": "vezor-master-udp-reflector",
+                        "label": "Vezor Master reflector",
+                        "address": "master.vezor.local",
+                        "target_site_id": str(MASTER_SITE_ID),
+                        "probe_type": "udp",
+                        "purpose": "vezor_control",
+                        "monitoring": {
+                            "enabled": True,
+                            "source_type": "edge_agent",
+                            "interval_seconds": 300,
+                        },
+                    }
+                ]
+            },
+        },
+    )
+
+    response = await client.post(
+        f"/api/v1/link/sites/{KNOWN_SITE_ID}/probe-targets/"
+        "vezor-master-udp-reflector/measure-edge-throughput",
+    )
+
+    assert created.status_code == 201
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload["status"] == "queued"
+    assert payload["site_id"] == str(KNOWN_SITE_ID)
+    assert payload["target_id"] == "vezor-master-udp-reflector"
+    assert payload["request_id"]
+
+
+@pytest.mark.asyncio
 async def test_edge_agent_sample_computes_loss_from_packet_counts(client: AsyncClient) -> None:
     created = await client.post(
         f"/api/v1/link/sites/{KNOWN_SITE_ID}/connections",
@@ -570,6 +659,69 @@ async def test_edge_agent_sample_computes_loss_from_packet_counts(client: AsyncC
     assert payload["measurement_metadata"]["packet_count"] == 20
     assert payload["measurement_metadata"]["packets_received"] == 19
     assert payload["measurement_metadata"]["packets_lost"] == 1
+
+
+@pytest.mark.asyncio
+async def test_edge_agent_sample_records_throughput_measurement_fields(
+    client: AsyncClient,
+) -> None:
+    created = await client.post(
+        f"/api/v1/link/sites/{KNOWN_SITE_ID}/connections",
+        json={
+            "label": "Home",
+            "transport_kind": "ethernet",
+            "status": "online",
+            "priority_rank": 5,
+            "availability_scope": "always",
+            "metered": False,
+            "metadata": {
+                "monitoring_targets": [
+                    {
+                        "id": "vezor-master-udp-reflector",
+                        "label": "Vezor Master reflector",
+                        "address": "master.vezor.local",
+                        "target_site_id": str(MASTER_SITE_ID),
+                        "probe_type": "udp",
+                        "purpose": "vezor_control",
+                        "monitoring": {
+                            "enabled": True,
+                            "source_type": "edge_agent",
+                            "interval_seconds": 300,
+                        },
+                    }
+                ]
+            },
+        },
+    )
+
+    response = await client.post(
+        f"/api/v1/link/sites/{KNOWN_SITE_ID}/probe-targets/"
+        "vezor-master-udp-reflector/edge-samples",
+        json={
+            "agent_id": "jetson-orin-1",
+            "agent_label": "jetson-orin-1 Core Link",
+            "method": "udp_sequence",
+            "packet_count": 20,
+            "packets_received": 20,
+            "latency_ms": 4,
+            "throughput_mbps": 128.5,
+            "measurement_metadata": {
+                "throughput_bytes": 1048576,
+                "throughput_duration_seconds": 0.065,
+                "throughput_payload_sha256": "a" * 64,
+                "throughput_url_id": "master-installed-payload",
+            },
+        },
+    )
+
+    assert created.status_code == 201
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["throughput_mbps"] == 128.5
+    assert payload["measurement_metadata"]["throughput_bytes"] == 1048576
+    assert payload["measurement_metadata"]["throughput_duration_seconds"] == 0.065
+    assert payload["measurement_metadata"]["throughput_payload_sha256"] == "a" * 64
+    assert payload["measurement_metadata"]["throughput_url_id"] == "master-installed-payload"
 
 
 @pytest.mark.asyncio
@@ -1199,6 +1351,69 @@ async def test_supervisor_can_fetch_master_reflector_edge_agent_config() -> None
     assert payload["packet_count"] == 20
     assert payload["packet_spacing_ms"] == 100
     assert payload["loss_timeout_ms"] == 1000
+
+
+@pytest.mark.asyncio
+async def test_edge_agent_config_includes_throughput_payload_metadata(tmp_path) -> None:
+    payload_path = tmp_path / "vezor-speed-test-64MiB.bin"
+    payload_bytes = b"payload" * 128
+    payload_sha256 = hashlib.sha256(payload_bytes).hexdigest()
+    payload_path.write_bytes(payload_bytes)
+    payload_path.with_name(f"{payload_path.name}.sha256").write_text(
+        f"{payload_sha256}  {payload_path}\n",
+        encoding="utf-8",
+    )
+    app = _create_app(
+        _supervisor_user(SUPERVISOR_DEPLOYMENT_NODE_ID),
+        include_deployment=True,
+        invalid_bearer_tokens={"node-credential"},
+        supervisor_node_edge_id=KNOWN_EDGE_NODE_ID,
+    )
+    app.state.services.link.settings.link_throughput_payload_path = str(payload_path)
+    app.state.services.link.settings.link_throughput_payload_max_bytes = len(payload_bytes)
+    await app.state.services.link.aenable_master_reflector_profile(
+        tenant_id=TENANT_ID,
+        site_id=MASTER_SITE_ID,
+        public_address="192.168.1.166",
+        udp_port=8622,
+    )
+    app.state.services.link.upsert_connection(
+        tenant_id=TENANT_ID,
+        site_id=KNOWN_SITE_ID,
+        label="Office edge",
+        transport_kind="ethernet",
+        status="online",
+        metadata={
+            "monitoring_targets": [
+                {
+                    "id": "vezor-master-udp-reflector",
+                    "label": "Vezor Master reflector",
+                    "address": "192.168.1.166",
+                    "target_site_id": str(MASTER_SITE_ID),
+                    "probe_type": "udp",
+                    "loss_method": "udp_sequence",
+                }
+            ]
+        },
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        headers={"Authorization": "Bearer node-credential"},
+    ) as http_client:
+        config = await http_client.get(
+            f"/api/v1/link/sites/{KNOWN_SITE_ID}"
+            "/control-targets/master/edge-agent-config"
+        )
+
+    assert config.status_code == 200
+    payload = config.json()
+    assert payload["throughput_test_url"].endswith("/api/v1/link/throughput/payload.bin")
+    assert payload["throughput_test_max_bytes"] == len(payload_bytes)
+    assert payload["throughput_payload_size_bytes"] == len(payload_bytes)
+    assert payload["throughput_payload_sha256"] == payload_sha256
+    assert "reflector_secret" in payload
 
 
 @pytest.mark.asyncio

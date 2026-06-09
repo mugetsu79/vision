@@ -201,6 +201,7 @@ class SupervisorModelJobExecutor:
                 source_path,
                 runtime_vocabulary,
             )
+            artifact_payloads = _mark_artifact_payloads_valid(artifact_payloads)
             completion_payload: dict[str, Any] = {"artifacts": artifact_payloads}
         else:
             artifact_payload = await anyio.to_thread.run_sync(
@@ -208,6 +209,7 @@ class SupervisorModelJobExecutor:
                 job,
                 source_path,
             )
+            artifact_payload = _mark_artifact_payloads_valid([artifact_payload])[0]
             completion_payload = {"artifact": artifact_payload}
 
         await self._record_event(
@@ -215,6 +217,12 @@ class SupervisorModelJobExecutor:
             ModelLifecycleJobStatus.SUCCEEDED,
             "Runtime artifact built.",
             payload=completion_payload,
+        )
+        await self._record_runtime_artifact_inventory(
+            job=job,
+            artifact_payloads=artifact_payloads
+            if runtime_vocabulary
+            else [artifact_payload],
         )
         await self.operations_client.complete_model_job(
             job.id,
@@ -318,6 +326,32 @@ class SupervisorModelJobExecutor:
                 DeploymentModelInventoryReport(items=items)
             )
 
+    async def _record_runtime_artifact_inventory(
+        self,
+        *,
+        job: DeploymentModelSyncJobResponse,
+        artifact_payloads: list[dict[str, object]],
+    ) -> None:
+        scanner = InventoryScanner(reported_at=self.reported_at)
+        assets: list[dict[str, object]] = []
+        for payload in artifact_payloads:
+            path = payload.get("path")
+            if not isinstance(path, str) or not path:
+                continue
+            assets.append(
+                {
+                    "asset_id": job.model_id,
+                    "local_path": path,
+                    "target_profile": payload.get("target_profile"),
+                    "runtime_versions": payload.get("runtime_versions"),
+                }
+            )
+        items = scanner.scan_assets(assets, asset_kind="runtime_artifact")
+        if items:
+            await self.operations_client.record_model_inventory(
+                DeploymentModelInventoryReport(items=items)
+            )
+
     async def _stage_model_file(
         self,
         *,
@@ -389,6 +423,19 @@ def _hash_existing_file(path: Path) -> tuple[str, int]:
 
 def _is_regular_file(path: Path) -> bool:
     return path.exists() and path.is_file()
+
+
+def _mark_artifact_payloads_valid(
+    payloads: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    return [
+        {
+            **payload,
+            "validation_status": "valid",
+            "validation_error": None,
+        }
+        for payload in payloads
+    ]
 
 
 def _verify_model_file(

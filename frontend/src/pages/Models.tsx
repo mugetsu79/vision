@@ -390,7 +390,7 @@ function CatalogTab({
                   )}
                 </TD>
                 <TD className="min-w-[14rem] text-xs text-[var(--vz-text-muted)]">
-                  {entry.path_hint}
+                  {catalogPathLabel(entry)}
                 </TD>
                 <TD>
                   <div className="flex justify-end gap-2">
@@ -658,11 +658,35 @@ function RuntimeArtifactsTab({
               {selectedModel?.name ?? "selected model"}
             </StatusToneBadge>
           ) : (
-            <div className="flex flex-wrap gap-2">
+            <div className="space-y-3">
               {artifacts.map((artifact) => (
-                <StatusToneBadge key={artifact.id} tone="healthy">
-                  {artifact.kind} · {artifact.target_profile}
-                </StatusToneBadge>
+                <div
+                  key={artifact.id}
+                  className="rounded-[var(--vz-r-md)] border border-[color:var(--vz-hair)] bg-white/[0.035] px-4 py-3"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-[var(--vz-text-primary)]">
+                        {artifact.kind} · {artifact.target_profile}
+                      </p>
+                      <p className="mt-2 break-all font-mono text-xs text-[var(--vz-text-muted)]">
+                        {artifact.path}
+                      </p>
+                    </div>
+                    <StatusToneBadge
+                      tone={runtimeArtifactValidationTone(
+                        artifact.validation_status,
+                      )}
+                    >
+                      {runtimeArtifactValidationLabel(artifact)}
+                    </StatusToneBadge>
+                  </div>
+                  {artifact.validation_error ? (
+                    <p className="mt-3 break-words text-xs text-[var(--vz-state-risk)]">
+                      {artifact.validation_error}
+                    </p>
+                  ) : null}
+                </div>
               ))}
             </div>
           )}
@@ -1005,6 +1029,16 @@ function catalogLabel(entry: ModelCatalogEntry) {
   return "Unregistered";
 }
 
+function catalogPathLabel(entry: ModelCatalogEntry) {
+  if (
+    entry.format === "engine" &&
+    (!entry.artifact_exists || entry.registration_state === "missing_artifact")
+  ) {
+    return "Managed by runtime artifacts";
+  }
+  return entry.path_hint;
+}
+
 function jobTone(status: string) {
   if (status === "succeeded") {
     return "healthy" as const;
@@ -1013,6 +1047,40 @@ function jobTone(status: string) {
     return "danger" as const;
   }
   if (status === "running" || status === "accepted") {
+    return "accent" as const;
+  }
+  return "attention" as const;
+}
+
+function runtimeArtifactValidationLabel(artifact: RuntimeArtifact) {
+  switch (artifact.validation_status) {
+    case "valid":
+      return "Runtime artifact ready";
+    case "unvalidated":
+      return "Built on edge, awaiting validation";
+    case "invalid":
+      return "Runtime artifact invalid";
+    case "stale":
+      return "Runtime artifact stale";
+    case "missing_artifact":
+      return "Runtime artifact missing";
+    case "target_mismatch":
+      return "Target mismatch";
+    default:
+      return "Runtime artifact status unknown";
+  }
+}
+
+function runtimeArtifactValidationTone(
+  status: RuntimeArtifact["validation_status"],
+) {
+  if (status === "valid") {
+    return "healthy" as const;
+  }
+  if (status === "invalid" || status === "missing_artifact") {
+    return "danger" as const;
+  }
+  if (status === "target_mismatch") {
     return "accent" as const;
   }
   return "attention" as const;

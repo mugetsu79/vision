@@ -165,6 +165,7 @@ class LinkSiteSummaryRecord:
     connection_count: int
     metered_connection_count: int
     latest_probe: LinkHealthProbeRecord | None
+    fallback_active_path: JsonObject | None
     queue_depth: dict[LinkPriorityLane, int]
     queued_bytes: int
     budget: LinkBudgetSnapshot | None

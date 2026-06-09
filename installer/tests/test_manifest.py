@@ -113,6 +113,45 @@ def test_dev_manifest_may_use_non_digest_references() -> None:
     assert manifest.images["backend"].reference == "ghcr.io/vezor/backend:dev"
 
 
+def test_manifest_parses_jetson_ort_wheels() -> None:
+    payload = _manifest_payload()
+    payload["jetson_ort_wheels"] = [
+        {
+            "jetpack": "6.2",
+            "l4t": "36.4",
+            "python": "cp310",
+            "arch": "aarch64",
+            "url": "https://example.invalid/onnxruntime_gpu.whl",
+            "sha256": "a" * 64,
+        }
+    ]
+
+    manifest = Manifest.model_validate(payload)
+
+    assert manifest.jetson_ort_wheels[0].python == "cp310"
+    assert str(manifest.jetson_ort_wheels[0].url) == (
+        "https://example.invalid/onnxruntime_gpu.whl"
+    )
+    assert manifest.jetson_ort_wheels[0].sha256 == "a" * 64
+
+
+def test_manifest_rejects_invalid_jetson_ort_wheel_sha256() -> None:
+    payload = _manifest_payload()
+    payload["jetson_ort_wheels"] = [
+        {
+            "jetpack": "6.2",
+            "l4t": "36.4",
+            "python": "cp310",
+            "arch": "aarch64",
+            "url": "https://example.invalid/onnxruntime_gpu.whl",
+            "sha256": "not-a-digest",
+        }
+    ]
+
+    with pytest.raises(ValidationError, match="sha256"):
+        Manifest.model_validate(payload)
+
+
 def test_manifest_rejects_duplicate_ports_inside_target() -> None:
     payload = _manifest_payload()
     targets = payload["package_targets"]

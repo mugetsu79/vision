@@ -25,11 +25,13 @@ from argus.models.enums import (
     RuntimeArtifactKind,
     RuntimeArtifactPrecision,
     RuntimeArtifactScope,
+    RuntimeArtifactValidationStatus,
     RuntimeVocabularySource,
     TrackerType,
 )
 from argus.models.tables import (
     Camera,
+    DeploymentModelInventory,
     DeploymentNode,
     Model,
     ModelRuntimeArtifact,
@@ -165,6 +167,116 @@ async def test_complete_runtime_artifact_build_job_creates_artifact() -> None:
     assert artifact_rows[0].kind is RuntimeArtifactKind.TENSORRT_ENGINE
     completion_statement = _for_update_statement(session_factory, RuntimeArtifactBuildJob)
     assert completion_statement._for_update_arg.skip_locked is False
+
+
+@pytest.mark.asyncio
+async def test_artifact_completion_does_not_mark_valid_when_inventory_path_is_stale() -> None:
+    tenant, model, node = _tenant_model_and_node()
+    node.host_profile = "linux-aarch64-nvidia-jetson"
+    static_inventory = _runtime_artifact_inventory(
+        tenant=tenant,
+        node=node,
+        model=model,
+        local_path="/models/yolo26n.engine",
+        sha256="c" * 64,
+        size_bytes=8_327_412,
+    )
+    session_factory = _MemorySessionFactory([tenant, model, node, static_inventory])
+    service = ModelLifecycleService(session_factory=session_factory)
+    await service.assign_model_to_node(
+        tenant_id=tenant.id,
+        deployment_node_id=node.id,
+        payload=DeploymentModelAssignmentCreate(model_id=model.id),
+        actor_subject="admin@example.test",
+    )
+    job = await service.create_runtime_artifact_build_job(
+        tenant_id=tenant.id,
+        model_id=model.id,
+        payload=_build_job_payload(node.id),
+        actor_subject="admin@example.test",
+    )
+    artifact_payload = _artifact_payload(model)
+    artifact_payload.update(
+        {
+            "path": f"/models/runtime-artifacts/{model.id}/yolo26n.engine",
+            "sha256": "c" * 64,
+            "size_bytes": 8_327_412,
+            "validation_status": RuntimeArtifactValidationStatus.VALID.value,
+        }
+    )
+
+    completed = await service.complete_runtime_artifact_build_job(
+        tenant_id=tenant.id,
+        authenticated_node_id=node.id,
+        job_id=job.id,
+        result=SupervisorModelJobComplete(
+            status=ModelLifecycleJobStatus.SUCCEEDED,
+            payload={"artifact": artifact_payload},
+        ),
+    )
+
+    artifact_rows = _rows(session_factory, ModelRuntimeArtifact)
+    assert completed.status is ModelLifecycleJobStatus.SUCCEEDED
+    assert len(artifact_rows) == 1
+    assert artifact_rows[0].path == f"/models/runtime-artifacts/{model.id}/yolo26n.engine"
+    assert artifact_rows[0].validation_status is RuntimeArtifactValidationStatus.UNVALIDATED
+    assert artifact_rows[0].validation_error == "Runtime artifact not confirmed by edge inventory."
+
+
+@pytest.mark.asyncio
+async def test_artifact_completion_marks_valid_when_actual_edge_inventory_matches() -> None:
+    tenant, model, node = _tenant_model_and_node()
+    node.host_profile = "linux-aarch64-nvidia-jetson"
+    runtime_path = f"/models/runtime-artifacts/{model.id}/yolo26n.engine"
+    matching_inventory = _runtime_artifact_inventory(
+        tenant=tenant,
+        node=node,
+        model=model,
+        local_path=runtime_path,
+        sha256="d" * 64,
+        size_bytes=9_001_001,
+    )
+    session_factory = _MemorySessionFactory([tenant, model, node, matching_inventory])
+    service = ModelLifecycleService(session_factory=session_factory)
+    await service.assign_model_to_node(
+        tenant_id=tenant.id,
+        deployment_node_id=node.id,
+        payload=DeploymentModelAssignmentCreate(model_id=model.id),
+        actor_subject="admin@example.test",
+    )
+    job = await service.create_runtime_artifact_build_job(
+        tenant_id=tenant.id,
+        model_id=model.id,
+        payload=_build_job_payload(node.id),
+        actor_subject="admin@example.test",
+    )
+    artifact_payload = _artifact_payload(model)
+    artifact_payload.update(
+        {
+            "path": runtime_path,
+            "sha256": "d" * 64,
+            "size_bytes": 9_001_001,
+            "validation_status": RuntimeArtifactValidationStatus.VALID.value,
+        }
+    )
+
+    completed = await service.complete_runtime_artifact_build_job(
+        tenant_id=tenant.id,
+        authenticated_node_id=node.id,
+        job_id=job.id,
+        result=SupervisorModelJobComplete(
+            status=ModelLifecycleJobStatus.SUCCEEDED,
+            payload={"artifact": artifact_payload},
+        ),
+    )
+
+    artifact_rows = _rows(session_factory, ModelRuntimeArtifact)
+    assert completed.status is ModelLifecycleJobStatus.SUCCEEDED
+    assert len(artifact_rows) == 1
+    assert artifact_rows[0].path == runtime_path
+    assert artifact_rows[0].validation_status is RuntimeArtifactValidationStatus.VALID
+    assert artifact_rows[0].validation_error is None
+    assert artifact_rows[0].validated_at == matching_inventory.reported_at
 
 
 @pytest.mark.asyncio
@@ -576,6 +688,30 @@ def _artifact_payload(model: Model) -> dict[str, object]:
         "sha256": "b" * 64,
         "size_bytes": 4567,
     }
+
+
+def _runtime_artifact_inventory(
+    *,
+    tenant: Tenant,
+    node: DeploymentNode,
+    model: Model,
+    local_path: str,
+    sha256: str,
+    size_bytes: int,
+) -> DeploymentModelInventory:
+    return DeploymentModelInventory(
+        id=uuid4(),
+        tenant_id=tenant.id,
+        deployment_node_id=node.id,
+        asset_kind="runtime_artifact",
+        asset_id=model.id,
+        local_path=local_path,
+        sha256=sha256,
+        size_bytes=size_bytes,
+        target_profile="linux-aarch64-nvidia-jetson",
+        runtime_versions={},
+        reported_at=datetime(2026, 6, 8, 9, 30, tzinfo=UTC),
+    )
 
 
 def _rows(session_factory: _MemorySessionFactory, entity: type[object]) -> list:
