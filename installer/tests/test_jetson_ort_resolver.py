@@ -8,6 +8,10 @@ from pathlib import Path
 import pytest
 
 from vezor_installer.jetson_ort import resolve_jetson_ort_wheel
+from vezor_installer.manifest import Manifest
+
+
+REPO_ROOT = Path(__file__).parents[2]
 
 
 def test_resolves_matching_jetson_ort_wheel_without_manual_url() -> None:
@@ -133,3 +137,29 @@ def test_resolver_cli_emits_url_and_sha256_exports(tmp_path: Path) -> None:
 
     assert 'JETSON_ORT_WHEEL_URL="https://example.invalid/ort-gpu.whl"' in result.stdout
     assert f'JETSON_ORT_WHEEL_SHA256="{"c" * 64}"' in result.stdout
+
+
+def test_dev_manifest_resolves_jetpack_62_l4t_365_gpu_ort_wheel() -> None:
+    manifest = Manifest.model_validate_json(
+        (REPO_ROOT / "installer" / "manifests" / "dev-example.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    resolved = resolve_jetson_ort_wheel(
+        {
+            "arch": "aarch64",
+            "jetpack": "6.2",
+            "l4t": "36.5.0-20260115194252",
+            "python_abi": "cp310",
+        },
+        manifest.jetson_ort_wheels,
+    )
+
+    assert resolved.url == (
+        "https://pypi.jetson-ai-lab.io/jp6/cu126/+f/d98/0b934b9a29c1a/"
+        "onnxruntime_gpu-1.24.0-cp310-cp310-linux_aarch64.whl"
+    )
+    assert resolved.sha256 == (
+        "d980b934b9a29c1a9d6f39751edd7662b69fadd75556a10ff363773a58ce0950"
+    )
