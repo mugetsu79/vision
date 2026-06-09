@@ -37,8 +37,9 @@ describe("App", () => {
     render(<App />);
 
     expect(
-      await screen.findByRole("button", { name: /sign in/i }),
+      await screen.findByRole("button", { name: /^sign in$/i }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /platform sign in/i })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: /Vezor product lockup/i })).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: /omnisight for every live environment/i }),
