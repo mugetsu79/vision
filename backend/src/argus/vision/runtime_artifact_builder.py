@@ -43,6 +43,7 @@ def build_fixed_vocab_artifact_payload(
     classes: list[str],
     input_shape: dict[str, int],
     target_profile: str,
+    camera_id: str | None = None,
     precision: str = "fp16",
     build_duration_seconds: float | None = None,
     runtime_versions: dict[str, object] | None = None,
@@ -52,7 +53,7 @@ def build_fixed_vocab_artifact_payload(
         raise FileNotFoundError(f"Source model does not exist: {source_model_path}")
     if not prebuilt_engine_path.exists():
         raise FileNotFoundError(f"Prebuilt engine does not exist: {prebuilt_engine_path}")
-    return {
+    payload: dict[str, object] = {
         "scope": "model",
         "kind": "tensorrt_engine",
         "capability": "fixed_vocab",
@@ -69,6 +70,9 @@ def build_fixed_vocab_artifact_payload(
         "runtime_versions": runtime_versions or {},
         "build_duration_seconds": build_duration_seconds,
     }
+    if camera_id is not None:
+        payload["camera_id"] = camera_id
+    return payload
 
 
 def build_open_vocab_scene_artifact_payloads(

@@ -262,6 +262,7 @@ class SupervisorModelJobExecutor:
             classes=_string_list(job.payload.get("classes")),
             input_shape=input_shape,
             target_profile=_required_string_field(job.payload, "target_profile"),
+            camera_id=_optional_string(job.payload.get("camera_id")),
             precision=precision,
             build_duration_seconds=time.perf_counter() - started_at,
             runtime_versions=dict(self.runtime_versions),
