@@ -6,11 +6,19 @@ import { workspaceNavGroups } from "@/components/layout/workspace-nav";
 import { DeploymentPage } from "@/pages/Deployment";
 
 const deploymentMocks = vi.hoisted(() => ({
+  assignModel: vi.fn(),
+  buildArtifact: vi.fn(),
   createPairing: vi.fn(),
   createBootstrap: vi.fn(),
+  edgeConfiguration: null as unknown,
+  inventory: { items: [] } as unknown,
+  modelAssignments: [] as unknown[],
+  models: [] as unknown[],
   rotateCredential: vi.fn(),
   revokeCredential: vi.fn(),
   refetchNodes: vi.fn(),
+  startSyncJob: vi.fn(),
+  updateEdgeConfiguration: vi.fn(),
   nodes: [] as unknown[],
   sites: [] as unknown[],
 }));
@@ -99,16 +107,39 @@ const supportBundle = {
 };
 
 vi.mock("@/hooks/use-deployment", () => ({
+  useAssignDeploymentModel: () => ({
+    mutateAsync: deploymentMocks.assignModel,
+    isPending: false,
+  }),
+  useCreateModelSyncJob: () => ({
+    mutateAsync: deploymentMocks.startSyncJob,
+    isPending: false,
+  }),
   useDeploymentNodes: () => ({
     data: deploymentMocks.nodes,
     isLoading: false,
     isError: false,
     refetch: deploymentMocks.refetchNodes,
   }),
+  useDeploymentModelAssignments: () => ({
+    data: deploymentMocks.modelAssignments,
+    isLoading: false,
+    isError: false,
+  }),
+  useDeploymentModelInventory: () => ({
+    data: deploymentMocks.inventory,
+    isLoading: false,
+    isError: false,
+  }),
   useDeploymentSupportBundle: (nodeId: string | null) => ({
     data: nodeId ? supportBundle : null,
     isLoading: false,
     isFetching: false,
+  }),
+  useEdgeConfiguration: () => ({
+    data: deploymentMocks.edgeConfiguration,
+    isLoading: false,
+    isError: false,
   }),
   useCreatePairingSession: () => ({
     mutateAsync: deploymentMocks.createPairing,
@@ -121,6 +152,25 @@ vi.mock("@/hooks/use-deployment", () => ({
   useRevokeNodeCredential: () => ({
     mutateAsync: deploymentMocks.revokeCredential,
     isPending: false,
+  }),
+  useUpdateEdgeConfiguration: () => ({
+    mutateAsync: deploymentMocks.updateEdgeConfiguration,
+    isPending: false,
+  }),
+}));
+
+vi.mock("@/hooks/use-model-lifecycle", () => ({
+  useCreateRuntimeArtifactBuildJob: () => ({
+    mutateAsync: deploymentMocks.buildArtifact,
+    isPending: false,
+  }),
+}));
+
+vi.mock("@/hooks/use-models", () => ({
+  useModels: () => ({
+    data: deploymentMocks.models,
+    isLoading: false,
+    isError: false,
   }),
 }));
 
@@ -156,9 +206,74 @@ describe("DeploymentPage", () => {
     ];
     deploymentMocks.createPairing.mockReset();
     deploymentMocks.createBootstrap.mockReset();
+    deploymentMocks.assignModel.mockReset();
+    deploymentMocks.buildArtifact.mockReset();
     deploymentMocks.rotateCredential.mockReset();
     deploymentMocks.revokeCredential.mockReset();
     deploymentMocks.refetchNodes.mockReset();
+    deploymentMocks.startSyncJob.mockReset();
+    deploymentMocks.updateEdgeConfiguration.mockReset();
+    deploymentMocks.models = [
+      {
+        id: "model-1",
+        name: "YOLO26n COCO",
+        version: "2026.1",
+        task: "detect",
+        path: "/var/lib/vezor/models/yolo26n.onnx",
+        format: "onnx",
+        capability: "fixed_vocab",
+        capability_config: {},
+        classes: ["person"],
+        input_shape: { width: 640, height: 640 },
+        sha256: "a".repeat(64),
+        size_bytes: 1024,
+        license: "AGPL-3.0",
+      },
+    ];
+    deploymentMocks.modelAssignments = [
+      {
+        id: "assignment-1",
+        tenant_id: "00000000-0000-0000-0000-000000000001",
+        deployment_node_id: "00000000-0000-0000-0000-000000000102",
+        model_id: "model-1",
+        status: "synced",
+        desired_path: "/var/lib/vezor/models/yolo26n.onnx",
+        last_sync_job_id: "sync-job-1",
+        error: null,
+        created_at: "2026-06-08T09:00:00Z",
+        updated_at: "2026-06-08T09:00:00Z",
+      },
+    ];
+    deploymentMocks.inventory = {
+      items: [
+        {
+          asset_kind: "model",
+          asset_id: "model-1",
+          local_path: "/var/lib/vezor/models/yolo26n.onnx",
+          sha256: "a".repeat(64),
+          size_bytes: 1024,
+          target_profile: null,
+          runtime_versions: {},
+          reported_at: "2026-06-08T09:01:00Z",
+        },
+      ],
+    };
+    deploymentMocks.edgeConfiguration = {
+      id: "edge-config-1",
+      tenant_id: "00000000-0000-0000-0000-000000000001",
+      deployment_node_id: "00000000-0000-0000-0000-000000000102",
+      revision: 4,
+      desired_config: {
+        model_store_path: "/var/lib/vezor/models",
+        artifact_store_path: "/var/lib/vezor/artifacts",
+      },
+      apply_status: "applied",
+      applied_revision: 4,
+      error: null,
+      last_applied_at: "2026-06-08T09:02:00Z",
+      created_at: "2026-06-08T09:00:00Z",
+      updated_at: "2026-06-08T09:02:00Z",
+    };
     deploymentMocks.createPairing.mockResolvedValue({
       id: "00000000-0000-0000-0000-000000000401",
       tenant_id: "00000000-0000-0000-0000-000000000001",
@@ -228,7 +343,9 @@ describe("DeploymentPage", () => {
       }),
     ).toBeInTheDocument();
     expect(within(workspace).getByText("central-imac")).toBeInTheDocument();
-    expect(within(workspace).getByText("orin-nano-01")).toBeInTheDocument();
+    expect(
+      within(workspace).getAllByText("orin-nano-01").length,
+    ).toBeGreaterThan(0);
     expect(within(workspace).getAllByText(/launchd/i).length).toBeGreaterThan(
       0,
     );
@@ -455,5 +572,54 @@ describe("DeploymentPage", () => {
     );
     expect(within(panel).queryByText(/raw-token/i)).not.toBeInTheDocument();
     expect(within(panel).queryByText(/vzcred_/i)).not.toBeInTheDocument();
+  });
+
+  test("shows model inventory and assignment controls for an edge node", () => {
+    render(<DeploymentPage />);
+
+    const panel = screen.getByTestId("deployment-model-lifecycle-panel");
+    expect(
+      within(panel).getByRole("heading", { name: /edge model lifecycle/i }),
+    ).toBeInTheDocument();
+    expect(within(panel).getAllByText(/YOLO26n COCO/i).length).toBeGreaterThan(
+      0,
+    );
+    expect(
+      within(panel).getAllByText("/var/lib/vezor/models/yolo26n.onnx").length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(panel).getByRole("button", { name: /assign model/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).getByRole("button", { name: /build TensorRT artifact/i }),
+    ).toBeInTheDocument();
+  });
+
+  test("shows edge configuration revision and apply status", () => {
+    render(<DeploymentPage />);
+
+    const panel = screen.getByTestId("deployment-model-lifecycle-panel");
+    expect(within(panel).getByText(/revision 4/i)).toBeInTheDocument();
+    expect(within(panel).getAllByText(/applied/i).length).toBeGreaterThan(0);
+    expect(
+      within(panel).getByDisplayValue("/var/lib/vezor/models"),
+    ).toBeInTheDocument();
+    expect(
+      within(panel).getByDisplayValue("/var/lib/vezor/artifacts"),
+    ).toBeInTheDocument();
+  });
+
+  test("starts model sync from the node detail panel", async () => {
+    const user = userEvent.setup();
+    render(<DeploymentPage />);
+
+    await user.click(
+      within(screen.getByTestId("deployment-model-lifecycle-panel")).getByRole(
+        "button",
+        { name: /start model sync/i },
+      ),
+    );
+
+    expect(deploymentMocks.startSyncJob).toHaveBeenCalledTimes(1);
   });
 });

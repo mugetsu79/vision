@@ -127,7 +127,26 @@ describe("model lifecycle hooks", () => {
     const { invalidateQueries, result } = renderModelLifecycleHook(() =>
       useUpdateEdgeConfiguration("node-1"),
     );
-    vi.mocked(apiClient.PUT).mockResolvedValueOnce(okResponse({ id: "edge-config-1" }));
+    vi.mocked(apiClient.PUT).mockResolvedValueOnce({
+      data: {
+        id: "edge-config-1",
+        tenant_id: "tenant-1",
+        deployment_node_id: "node-1",
+        revision: 1,
+        desired_config: {
+          model_store_path: "/var/lib/vezor/models",
+          artifact_store_path: "/var/lib/vezor/artifacts",
+        },
+        apply_status: "pending",
+        applied_revision: null,
+        error: null,
+        last_applied_at: null,
+        created_at: "2026-06-08T09:00:00Z",
+        updated_at: "2026-06-08T09:00:00Z",
+      },
+      error: undefined,
+      response: new Response(null, { status: 200 }),
+    });
 
     await act(async () => {
       await result.current.mutateAsync({
@@ -179,10 +198,16 @@ function renderModelLifecycleHook<Result>(hook: () => Result) {
   };
 }
 
-function okResponse(data: unknown) {
+type MockApiResponse = {
+  data: unknown;
+  error: undefined;
+  response: Response;
+};
+
+function okResponse(data: unknown): MockApiResponse {
   return {
     data,
     error: undefined,
     response: new Response(null, { status: 200 }),
-  } as Awaited<ReturnType<typeof apiClient.POST>>;
+  };
 }

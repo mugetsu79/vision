@@ -39,13 +39,20 @@ import {
   useModels,
   useRuntimeArtifactsByModelId,
   type Model,
+  type RuntimeArtifact,
 } from "@/hooks/use-models";
+import {
+  useCreateRuntimeArtifactBuildJob,
+  useDeploymentModelInventory,
+} from "@/hooks/use-model-lifecycle";
 import { useFleetOverview } from "@/hooks/use-operations";
 import { useSites } from "@/hooks/use-sites";
 import {
   deriveSceneReadinessRows,
   healthToTone,
 } from "@/lib/operational-health";
+
+const jetsonTargetProfile = "linux-aarch64-nvidia-jetson";
 
 export function CamerasPage() {
   return (
@@ -144,6 +151,22 @@ function CamerasContent() {
   const sceneHealthRows = useMemo(
     () => deriveSceneReadinessRows({ cameras, fleet: fleet.data }),
     [cameras, fleet.data],
+  );
+  const modelById = useMemo(
+    () => new Map(models.map((model) => [model.id, model])),
+    [models],
+  );
+  const assignedDeploymentNodeByCamera = useMemo(
+    () =>
+      new Map(
+        (fleet.data?.delivery_diagnostics ?? [])
+          .filter((diagnostic) => diagnostic.assigned_node_id)
+          .map((diagnostic) => [
+            diagnostic.camera_id,
+            diagnostic.assigned_node_id as string,
+          ]),
+      ),
+    [fleet.data],
   );
   const edgeNodeOptions = useMemo(
     () =>
@@ -397,6 +420,17 @@ function CamerasContent() {
                 paginatedInventoryCameras.items.map((camera) => {
                   const sceneHealth = sceneHealthByCamera.get(camera.id);
                   const visionSummary = getCameraVisionSummary(camera);
+                  const primaryModel = modelById.get(camera.primary_model_id);
+                  const deploymentNodeId =
+                    assignedDeploymentNodeByCamera.get(camera.id) ??
+                    camera.edge_node_id ??
+                    null;
+                  const runtimeArtifacts =
+                    camera.primary_model_id
+                      ? (modelRuntimeArtifacts.data?.[
+                          camera.primary_model_id
+                        ] ?? [])
+                      : [];
 
                   return (
                     <TR key={camera.id}>
@@ -439,17 +473,13 @@ function CamerasContent() {
                       </TD>
                       <TD>{camera.tracker_type}</TD>
                       <TD>
-                        {sceneHealth ? (
-                          <StatusToneBadge
-                            tone={healthToTone(sceneHealth.readiness.health)}
-                          >
-                            {sceneHealth.readiness.label}
-                          </StatusToneBadge>
-                        ) : (
-                          <StatusToneBadge tone="muted">
-                            Readiness pending
-                          </StatusToneBadge>
-                        )}
+                        <SceneReadinessCell
+                          camera={camera}
+                          deploymentNodeId={deploymentNodeId}
+                          model={primaryModel ?? null}
+                          runtimeArtifacts={runtimeArtifacts}
+                          sceneHealth={sceneHealth}
+                        />
                       </TD>
                       <TD>
                         <div className="flex gap-2">
@@ -563,6 +593,272 @@ function CamerasContent() {
       ) : null}
     </div>
   );
+}
+
+function SceneReadinessCell({
+  camera,
+  deploymentNodeId,
+  model,
+  runtimeArtifacts,
+  sceneHealth,
+}: {
+  camera: Camera;
+  deploymentNodeId: string | null;
+  model: Model | null;
+  runtimeArtifacts: RuntimeArtifact[];
+  sceneHealth: ReturnType<typeof deriveSceneReadinessRows>[number] | undefined;
+}) {
+  const isEdgeRuntime =
+    camera.processing_mode === "edge" || camera.processing_mode === "hybrid";
+  const inventory = useDeploymentModelInventory(
+    isEdgeRuntime ? deploymentNodeId : null,
+  );
+  const createArtifactBuildJob = useCreateRuntimeArtifactBuildJob(
+    camera.primary_model_id ?? "",
+  );
+  const runtimeReadiness = deriveRuntimeReadiness({
+    camera,
+    deploymentNodeId,
+    inventoryItems: inventory.data?.items ?? [],
+    inventoryLoading: inventory.isLoading,
+    isEdgeRuntime,
+    model,
+    runtimeArtifacts,
+  });
+  const canBuildArtifact = Boolean(
+    runtimeReadiness.canBuildArtifact && model && deploymentNodeId,
+  );
+
+  return (
+    <div className="min-w-[13rem] space-y-2">
+      {sceneHealth ? (
+        <StatusToneBadge tone={healthToTone(sceneHealth.readiness.health)}>
+          {sceneHealth.readiness.label}
+        </StatusToneBadge>
+      ) : (
+        <StatusToneBadge tone="muted">Readiness pending</StatusToneBadge>
+      )}
+      <div className="space-y-1">
+        <StatusToneBadge tone={runtimeReadiness.tone}>
+          {runtimeReadiness.label}
+        </StatusToneBadge>
+        {runtimeReadiness.detail ? (
+          <p className="text-xs leading-5 text-[#93a7c5]">
+            {runtimeReadiness.detail}
+          </p>
+        ) : null}
+      </div>
+      {canBuildArtifact ? (
+        <button
+          aria-label={`Build artifact for ${camera.name}`}
+          className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-[#d8e2f2] transition hover:bg-white/[0.08]"
+          disabled={createArtifactBuildJob.isPending}
+          type="button"
+          onClick={() => {
+            if (!model || !deploymentNodeId) {
+              return;
+            }
+            void createArtifactBuildJob.mutateAsync({
+              camera_id: camera.id,
+              deployment_node_id: deploymentNodeId,
+              build_format: "tensorrt_engine",
+              target_profile: jetsonTargetProfile,
+              precision: "fp16",
+              input_shape: model.input_shape,
+              builder_options:
+                model.capability === "open_vocab"
+                  ? {
+                      vocabulary_terms: camera.runtime_vocabulary?.terms ?? [],
+                      vocabulary_version:
+                        camera.runtime_vocabulary?.version ?? null,
+                    }
+                  : undefined,
+            });
+          }}
+        >
+          Build artifact
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+type RuntimeReadiness = {
+  canBuildArtifact: boolean;
+  detail?: string;
+  label: string;
+  tone: "healthy" | "attention" | "danger" | "muted";
+};
+
+function deriveRuntimeReadiness({
+  camera,
+  deploymentNodeId,
+  inventoryItems,
+  inventoryLoading,
+  isEdgeRuntime,
+  model,
+  runtimeArtifacts,
+}: {
+  camera: Camera;
+  deploymentNodeId: string | null;
+  inventoryItems: NonNullable<
+    ReturnType<typeof useDeploymentModelInventory>["data"]
+  >["items"];
+  inventoryLoading: boolean;
+  isEdgeRuntime: boolean;
+  model: Model | null;
+  runtimeArtifacts: RuntimeArtifact[];
+}): RuntimeReadiness {
+  if (!camera.primary_model_id) {
+    return {
+      canBuildArtifact: false,
+      label: "Model not selected",
+      tone: "attention",
+    };
+  }
+
+  if (!model) {
+    return {
+      canBuildArtifact: false,
+      label: "Model not registered",
+      tone: "danger",
+    };
+  }
+
+  if (!isEdgeRuntime) {
+    return {
+      canBuildArtifact: false,
+      label: "Model registered",
+      tone: "healthy",
+    };
+  }
+
+  if (!deploymentNodeId) {
+    return {
+      canBuildArtifact: false,
+      label: "No edge node assigned",
+      tone: "attention",
+    };
+  }
+
+  if (inventoryLoading) {
+    return {
+      canBuildArtifact: false,
+      label: "Checking edge inventory",
+      tone: "muted",
+    };
+  }
+
+  if (!hasSyncedModelInventory(model, inventoryItems ?? [])) {
+    return {
+      canBuildArtifact: false,
+      label: "Model not synced to edge node",
+      tone: "attention",
+    };
+  }
+
+  const artifact = findTargetRuntimeArtifact({
+    camera,
+    model,
+    runtimeArtifacts,
+  });
+
+  if (!artifact) {
+    return {
+      canBuildArtifact: true,
+      label: `No TensorRT artifact for ${jetsonTargetProfile}`,
+      tone: "attention",
+    };
+  }
+
+  if (model.capability === "open_vocab" && isVocabularyStale(camera, artifact)) {
+    return {
+      canBuildArtifact: true,
+      detail: `Artifact vocabulary v${artifact.vocabulary_version ?? "unknown"} does not match scene vocabulary v${camera.runtime_vocabulary?.version ?? "unknown"}.`,
+      label: "Open-vocab artifact stale: vocabulary changed",
+      tone: "attention",
+    };
+  }
+
+  if (artifact.validation_status !== "valid") {
+    return {
+      canBuildArtifact: true,
+      label: `Runtime artifact ${artifact.validation_status}`,
+      tone:
+        artifact.validation_status === "invalid" ||
+        artifact.validation_status === "missing_artifact"
+          ? "danger"
+          : "attention",
+    };
+  }
+
+  return {
+    canBuildArtifact: false,
+    detail: artifact.path,
+    label: "Runtime artifact ready",
+    tone: "healthy",
+  };
+}
+
+function hasSyncedModelInventory(
+  model: Model,
+  inventoryItems: NonNullable<
+    ReturnType<typeof useDeploymentModelInventory>["data"]
+  >["items"],
+) {
+  return (inventoryItems ?? []).some(
+    (item) =>
+      item.asset_kind === "model" &&
+      item.asset_id === model.id &&
+      (!model.sha256 || item.sha256 === model.sha256),
+  );
+}
+
+function findTargetRuntimeArtifact({
+  camera,
+  model,
+  runtimeArtifacts,
+}: {
+  camera: Camera;
+  model: Model;
+  runtimeArtifacts: RuntimeArtifact[];
+}) {
+  const requiredKind =
+    model.capability === "open_vocab"
+      ? "compiled_open_vocab"
+      : "tensorrt_engine";
+  const candidates = runtimeArtifacts.filter(
+    (artifact) =>
+      artifact.kind === requiredKind &&
+      artifact.target_profile === jetsonTargetProfile,
+  );
+
+  if (model.capability === "open_vocab") {
+    return (
+      candidates.find(
+        (artifact) =>
+          artifact.scope === "scene" && artifact.camera_id === camera.id,
+      ) ?? candidates[0]
+    );
+  }
+
+  return (
+    candidates.find((artifact) => artifact.validation_status === "valid") ??
+    candidates[0] ??
+    null
+  );
+}
+
+function isVocabularyStale(camera: Camera, artifact: RuntimeArtifact) {
+  const sceneVocabularyVersion = camera.runtime_vocabulary?.version;
+  if (
+    typeof sceneVocabularyVersion === "number" &&
+    typeof artifact.vocabulary_version === "number"
+  ) {
+    return artifact.vocabulary_version !== sceneVocabularyVersion;
+  }
+
+  return artifact.validation_status === "stale";
 }
 
 function toWizardModelOptions(

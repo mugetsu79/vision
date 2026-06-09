@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   AlertTriangle,
@@ -29,16 +29,24 @@ import {
 } from "@/components/ui/pagination";
 import {
   useCreatePairingSession,
+  useAssignDeploymentModel,
+  useCreateModelSyncJob,
   useDeploymentNodes,
+  useDeploymentModelAssignments,
+  useDeploymentModelInventory,
   useDeploymentSupportBundle,
+  useEdgeConfiguration,
   useRevokeNodeCredential,
   useRotateNodeCredential,
+  useUpdateEdgeConfiguration,
   type DeploymentNode,
   type DeploymentSupportBundle,
   type NodeCredentialRevokeResponse,
   type NodeCredentialRotateResponse,
   type NodePairingSessionResponse,
 } from "@/hooks/use-deployment";
+import { useCreateRuntimeArtifactBuildJob } from "@/hooks/use-model-lifecycle";
+import { useModels, type Model } from "@/hooks/use-models";
 import { useCreateBootstrapMaterial } from "@/hooks/use-operations";
 import { useSites, type Site } from "@/hooks/use-sites";
 
@@ -72,6 +80,7 @@ const emptyDeploymentNodes: DeploymentNode[] = [];
 export function DeploymentPage() {
   const nodes = useDeploymentNodes();
   const sites = useSites();
+  const models = useModels();
   const createEdgeNode = useCreateBootstrapMaterial();
   const createPairing = useCreatePairingSession();
   const rotateCredential = useRotateNodeCredential();
@@ -89,11 +98,25 @@ export function DeploymentPage() {
   const [revocation, setRevocation] =
     useState<NodeCredentialRevokeResponse | null>(null);
   const [bundleNodeId, setBundleNodeId] = useState<string | null>(null);
+  const [modelLifecycleNodeId, setModelLifecycleNodeId] = useState("");
   const [nodePageSize, setNodePageSize] = useState<PaginationPageSize>(10);
   const [nodePageIndex, setNodePageIndex] = useState(0);
   const supportBundle = useDeploymentSupportBundle(bundleNodeId);
   const availableSites = sites.data ?? [];
   const deploymentNodes = nodes.data ?? emptyDeploymentNodes;
+  const edgeDeploymentNodes = useMemo(
+    () => deploymentNodes.filter((node) => node.node_kind === "edge"),
+    [deploymentNodes],
+  );
+  const modelLifecycleNodes = useMemo(
+    () =>
+      edgeDeploymentNodes.length > 0 ? edgeDeploymentNodes : deploymentNodes,
+    [deploymentNodes, edgeDeploymentNodes],
+  );
+  const modelLifecycleNode =
+    modelLifecycleNodes.find((node) => node.id === modelLifecycleNodeId) ??
+    modelLifecycleNodes[0] ??
+    null;
   const selectedEdgeSiteId = edgeSiteId || availableSites[0]?.id || "";
   const paginatedNodes = paginateItems(
     deploymentNodes,
@@ -104,6 +127,12 @@ export function DeploymentPage() {
   useEffect(() => {
     setNodePageIndex(0);
   }, [deploymentNodes.length, nodePageSize]);
+
+  useEffect(() => {
+    if (!modelLifecycleNodeId && modelLifecycleNodes[0]) {
+      setModelLifecycleNodeId(modelLifecycleNodes[0].id);
+    }
+  }, [modelLifecycleNodeId, modelLifecycleNodes]);
 
   async function handlePairNode(node?: DeploymentNode) {
     const result = await createPairing.mutateAsync({
@@ -340,8 +369,281 @@ export function DeploymentPage() {
         />
       </section>
 
+      {modelLifecycleNode ? (
+        <DeploymentModelLifecyclePanel
+          models={models.data ?? []}
+          nodes={modelLifecycleNodes}
+          selectedNode={modelLifecycleNode}
+          selectedNodeId={modelLifecycleNode.id}
+          onSelectNode={setModelLifecycleNodeId}
+        />
+      ) : null}
+
       <InstallerTargets />
     </div>
+  );
+}
+
+function DeploymentModelLifecyclePanel({
+  models,
+  nodes,
+  onSelectNode,
+  selectedNode,
+  selectedNodeId,
+}: {
+  models: Model[];
+  nodes: DeploymentNode[];
+  onSelectNode: (nodeId: string) => void;
+  selectedNode: DeploymentNode;
+  selectedNodeId: string;
+}) {
+  const [selectedModelId, setSelectedModelId] = useState(
+    () => models[0]?.id ?? "",
+  );
+  const assignments = useDeploymentModelAssignments(selectedNodeId);
+  const inventory = useDeploymentModelInventory(selectedNodeId);
+  const edgeConfiguration = useEdgeConfiguration(selectedNodeId);
+  const assignModel = useAssignDeploymentModel(selectedNodeId);
+  const startSyncJob = useCreateModelSyncJob(selectedNodeId);
+  const updateEdgeConfiguration = useUpdateEdgeConfiguration(selectedNodeId);
+  const createArtifactBuildJob = useCreateRuntimeArtifactBuildJob(selectedModelId);
+  const [modelStorePath, setModelStorePath] = useState("");
+  const [artifactStorePath, setArtifactStorePath] = useState("");
+  const selectedModel =
+    models.find((model) => model.id === selectedModelId) ?? models[0] ?? null;
+
+  useEffect(() => {
+    if (!selectedModelId && models[0]) {
+      setSelectedModelId(models[0].id);
+    }
+  }, [models, selectedModelId]);
+
+  useEffect(() => {
+    const desired = edgeConfiguration.data?.desired_config ?? {};
+    if (typeof desired.model_store_path === "string") {
+      setModelStorePath(desired.model_store_path);
+    }
+    if (typeof desired.artifact_store_path === "string") {
+      setArtifactStorePath(desired.artifact_store_path);
+    }
+  }, [edgeConfiguration.data]);
+
+  const targetProfile =
+    selectedNode.host_profile ?? selectedNode.os_name ?? "linux-aarch64-nvidia-jetson";
+
+  return (
+    <WorkspaceSurface
+      data-testid="deployment-model-lifecycle-panel"
+      className="overflow-hidden"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 px-4 py-4">
+        <div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-[#f4f8ff]">
+            <Cpu className="size-4 text-[#79d6ff]" />
+            <h2>Edge model lifecycle</h2>
+          </div>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-[#93a7c5]">
+            Configure model stores, assign source models, start edge sync jobs,
+            and request target-local runtime artifacts for {selectedNode.hostname}.
+          </p>
+        </div>
+        <label className="min-w-[16rem] text-sm font-medium text-[#d8e2f2]">
+          Node
+          <select
+            className="mt-1 min-h-11 w-full rounded-[0.75rem] border border-white/10 bg-black/35 px-3 text-sm text-[#f4f8ff] outline-none transition focus:border-[#79d6ff]"
+            value={selectedNodeId}
+            onChange={(event) => onSelectNode(event.target.value)}
+          >
+            {nodes.map((node) => (
+              <option key={node.id} value={node.id}>
+                {node.hostname}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,28rem)]">
+        <div className="space-y-4 px-4 py-4">
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto]">
+            <label className="text-sm font-medium text-[#d8e2f2]">
+              Model
+              <select
+                className="mt-1 min-h-11 w-full rounded-[0.75rem] border border-white/10 bg-black/35 px-3 text-sm text-[#f4f8ff] outline-none transition focus:border-[#79d6ff]"
+                value={selectedModelId}
+                onChange={(event) => setSelectedModelId(event.target.value)}
+              >
+                {models.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="flex items-end">
+              <Button
+                type="button"
+                disabled={!selectedModelId}
+                onClick={() =>
+                  void assignModel.mutateAsync({
+                    model_id: selectedModelId,
+                    desired_path: null,
+                  })
+                }
+              >
+                <PackageCheck className="mr-2 size-4" />
+                Assign model
+              </Button>
+            </div>
+            <div className="flex items-end">
+              <Button
+                type="button"
+                disabled={!selectedModelId}
+                onClick={() => void startSyncJob.mutateAsync()}
+              >
+                <RefreshCw className="mr-2 size-4" />
+                Start model sync
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <LifecycleList
+              title="Assignments"
+              emptyLabel="No model assignments yet."
+              rows={(assignments.data ?? []).map((assignment) => ({
+                key: assignment.id,
+                label: modelName(models, assignment.model_id),
+                detail: assignment.desired_path ?? assignment.status,
+                tone: statusTone(assignment.status),
+              }))}
+            />
+            <LifecycleList
+              title="Inventory"
+              emptyLabel="No model inventory reported yet."
+              rows={(inventory.data?.items ?? []).map((item) => ({
+                key: `${item.asset_id}-${item.sha256}`,
+                label: item.local_path,
+                detail: `${item.asset_kind} - ${shortHash(item.sha256)}`,
+                tone: "healthy",
+              }))}
+            />
+          </div>
+        </div>
+
+        <div className="border-t border-white/10 px-4 py-4 lg:border-l lg:border-t-0">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#7894bd]">
+                Edge configuration
+              </p>
+              <p className="mt-1 text-sm text-[#d8e2f2]">
+                Revision {edgeConfiguration.data?.revision ?? "not assigned"} -{" "}
+                {edgeConfiguration.data?.apply_status ?? "pending"}
+              </p>
+            </div>
+            <StatusToneBadge
+              tone={statusTone(edgeConfiguration.data?.apply_status ?? "pending")}
+            >
+              {edgeConfiguration.data?.apply_status ?? "pending"}
+            </StatusToneBadge>
+          </div>
+          <div className="mt-4 space-y-3">
+            <label className="block text-sm font-medium text-[#d8e2f2]">
+              Model store path
+              <Input
+                className="mt-1"
+                value={modelStorePath}
+                onChange={(event) => setModelStorePath(event.target.value)}
+              />
+            </label>
+            <label className="block text-sm font-medium text-[#d8e2f2]">
+              Artifact store path
+              <Input
+                className="mt-1"
+                value={artifactStorePath}
+                onChange={(event) => setArtifactStorePath(event.target.value)}
+              />
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                onClick={() =>
+                  void updateEdgeConfiguration.mutateAsync({
+                    desired_config: {
+                      model_store_path: modelStorePath,
+                      artifact_store_path: artifactStorePath,
+                    },
+                  })
+                }
+              >
+                Save edge config
+              </Button>
+              <Button
+                type="button"
+                disabled={!selectedModel}
+                onClick={() =>
+                  selectedModel
+                    ? void createArtifactBuildJob.mutateAsync({
+                        deployment_node_id: selectedNodeId,
+                        build_format: "tensorrt_engine",
+                        target_profile: targetProfile,
+                        precision: "fp16",
+                        input_shape: selectedModel.input_shape,
+                      })
+                    : undefined
+                }
+              >
+                <Cpu className="mr-2 size-4" />
+                Build TensorRT artifact
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </WorkspaceSurface>
+  );
+}
+
+function LifecycleList({
+  emptyLabel,
+  rows,
+  title,
+}: {
+  emptyLabel: string;
+  rows: {
+    key: string;
+    label: string;
+    detail: string;
+    tone: "healthy" | "attention" | "danger" | "muted" | "accent";
+  }[];
+  title: string;
+}) {
+  return (
+    <section className="rounded-[0.75rem] border border-white/10 bg-white/[0.025] p-3">
+      <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#7894bd]">
+        {title}
+      </h3>
+      {rows.length === 0 ? (
+        <p className="mt-3 text-sm text-[#93a7c5]">{emptyLabel}</p>
+      ) : (
+        <div className="mt-3 space-y-2">
+          {rows.map((row) => (
+            <div
+              key={row.key}
+              className="rounded-[0.6rem] border border-white/10 bg-black/20 px-3 py-2"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="min-w-0 break-words text-sm font-medium text-[#f4f8ff]">
+                  {row.label}
+                </p>
+                <StatusToneBadge tone={row.tone}>{row.detail}</StatusToneBadge>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -721,6 +1023,17 @@ function formatSummary(summary: Record<string, unknown>) {
 
 function formatCount(count: number, label: string) {
   return `${count} ${label}${count === 1 ? "" : "s"}`;
+}
+
+function shortHash(value: string | null | undefined) {
+  if (!value) {
+    return "unknown";
+  }
+  return `${value.slice(0, 10)}...${value.slice(-6)}`;
+}
+
+function modelName(models: Model[], modelId: string) {
+  return models.find((model) => model.id === modelId)?.name ?? modelId;
 }
 
 function statusTone(

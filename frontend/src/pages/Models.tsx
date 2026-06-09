@@ -18,9 +18,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
-import { useCameras } from "@/hooks/use-cameras";
-import { useDeploymentNodes } from "@/hooks/use-deployment";
-import { useModelCatalog, type ModelCatalogEntry } from "@/hooks/use-model-catalog";
+import { useCameras, type Camera } from "@/hooks/use-cameras";
+import { useDeploymentNodes, type DeploymentNode } from "@/hooks/use-deployment";
+import {
+  useModelCatalog,
+  type ModelCatalogEntry,
+} from "@/hooks/use-model-catalog";
 import {
   useModels,
   useRuntimeArtifactsByModelId,
@@ -57,15 +60,22 @@ const tabs = [
 ] as const satisfies readonly { id: TabId; label: string }[];
 
 const defaultTargetProfile = "linux-aarch64-nvidia-jetson";
+const emptyModels: Model[] = [];
+const emptyDeploymentNodes: DeploymentNode[] = [];
+const emptyCameras: Camera[] = [];
 
 export function ModelsPage() {
   const catalog = useModelCatalog();
   const modelsQuery = useModels();
   const deploymentNodes = useDeploymentNodes();
   const cameras = useCameras();
-  const models = modelsQuery.data ?? [];
-  const nodes = deploymentNodes.data ?? [];
-  const edgeNodes = nodes.filter((node) => node.node_kind !== "central");
+  const models = modelsQuery.data ?? emptyModels;
+  const nodes = deploymentNodes.data ?? emptyDeploymentNodes;
+  const cameraList = cameras.data ?? emptyCameras;
+  const edgeNodes = useMemo(
+    () => nodes.filter((node) => node.node_kind !== "central"),
+    [nodes],
+  );
   const modelIds = useMemo(() => models.map((model) => model.id), [models]);
   const runtimeArtifacts = useRuntimeArtifactsByModelId(modelIds);
   const [activeTab, setActiveTab] = useState<TabId>("catalog");
@@ -98,16 +108,18 @@ export function ModelsPage() {
   }, [edgeNodes, nodes, selectedNodeId]);
 
   useEffect(() => {
-    if (!selectedCameraId && cameras.data?.[0]) {
-      setSelectedCameraId(cameras.data[0].id);
+    if (!selectedCameraId && cameraList[0]) {
+      setSelectedCameraId(cameraList[0].id);
     }
-  }, [cameras.data, selectedCameraId]);
+  }, [cameraList, selectedCameraId]);
 
-  const selectedModel = models.find((model) => model.id === selectedModelId) ?? null;
+  const selectedModel =
+    models.find((model) => model.id === selectedModelId) ?? null;
   const selectedNode =
-    nodes.find((node) => node.id === selectedNodeId) ?? edgeNodes[0] ?? nodes[0] ?? null;
-  const selectedCamera =
-    cameras.data?.find((camera) => camera.id === selectedCameraId) ?? null;
+    nodes.find((node) => node.id === selectedNodeId) ??
+    edgeNodes[0] ??
+    nodes[0] ??
+    null;
   const artifactMap = runtimeArtifacts.data ?? {};
   const selectedModelArtifacts = selectedModelId
     ? (artifactMap[selectedModelId] ?? [])
@@ -135,9 +147,9 @@ export function ModelsPage() {
     }
   }
 
-  async function submitImport(event: FormEvent<HTMLFormElement>) {
+  function submitImport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    await runAction("Model import job queued.", () =>
+    void runAction("Model import job queued.", () =>
       importModel.mutateAsync({
         source: "url",
         source_uri: importUrl,
@@ -154,7 +166,10 @@ export function ModelsPage() {
     );
   }
 
-  const buildInputShape = selectedModel?.input_shape ?? { width: 640, height: 640 };
+  const buildInputShape = selectedModel?.input_shape ?? {
+    width: 640,
+    height: 640,
+  };
   const targetProfile = selectedNode?.host_profile || defaultTargetProfile;
 
   return (
@@ -209,16 +224,16 @@ export function ModelsPage() {
         <CatalogTab
           entries={catalog.data ?? []}
           isLoading={catalog.isLoading}
-          onDownload={(entry) =>
-            runAction(`Download queued for ${entry.name}.`, () =>
+          onDownload={(entry) => {
+            void runAction(`Download queued for ${entry.name}.`, () =>
               downloadCatalog.mutateAsync(entry.id),
-            )
-          }
-          onRegister={(entry) =>
-            runAction(`${entry.name} registered.`, () =>
+            );
+          }}
+          onRegister={(entry) => {
+            void runAction(`${entry.name} registered.`, () =>
               registerCatalog.mutateAsync(entry.id),
-            )
-          }
+            );
+          }}
         />
       ) : null}
 
@@ -249,7 +264,7 @@ export function ModelsPage() {
         <RuntimeArtifactsTab
           artifacts={selectedModelArtifacts}
           buildJobs={buildJobs.data ?? []}
-          cameras={cameras.data ?? []}
+          cameras={cameraList}
           models={models}
           nodes={edgeNodes.length > 0 ? edgeNodes : nodes}
           selectedCameraId={selectedCameraId}
@@ -257,8 +272,8 @@ export function ModelsPage() {
           selectedModelId={selectedModelId}
           selectedNodeId={selectedNodeId}
           targetProfile={targetProfile}
-          onBuildOpenVocabulary={() =>
-            runAction("Open-vocabulary artifact build job queued.", () =>
+          onBuildOpenVocabulary={() => {
+            void runAction("Open-vocabulary artifact build job queued.", () =>
               createBuildJob.mutateAsync({
                 deployment_node_id: selectedNodeId,
                 camera_id: selectedCameraId || null,
@@ -267,10 +282,10 @@ export function ModelsPage() {
                 precision: "fp16",
                 input_shape: buildInputShape,
               }),
-            )
-          }
-          onBuildTensorRt={() =>
-            runAction("TensorRT artifact build job queued.", () =>
+            );
+          }}
+          onBuildTensorRt={() => {
+            void runAction("TensorRT artifact build job queued.", () =>
               createBuildJob.mutateAsync({
                 deployment_node_id: selectedNodeId,
                 build_format: "tensorrt_engine",
@@ -278,8 +293,8 @@ export function ModelsPage() {
                 precision: "fp16",
                 input_shape: buildInputShape,
               }),
-            )
-          }
+            );
+          }}
           onSelectCamera={setSelectedCameraId}
           onSelectModel={setSelectedModelId}
           onSelectNode={setSelectedNodeId}
@@ -295,19 +310,21 @@ export function ModelsPage() {
           nodes={edgeNodes.length > 0 ? edgeNodes : nodes}
           selectedModelId={selectedModelId}
           selectedNodeId={selectedNodeId}
-          onAssign={() =>
-            runAction("Model assignment created.", () =>
+          onAssign={() => {
+            void runAction("Model assignment created.", () =>
               assignModel.mutateAsync({
                 model_id: selectedModelId,
                 desired_path: null,
               }),
-            )
-          }
+            );
+          }}
           onSelectModel={setSelectedModelId}
           onSelectNode={setSelectedNodeId}
-          onSync={() =>
-            runAction("Model sync job started.", () => startSyncJob.mutateAsync())
-          }
+          onSync={() => {
+            void runAction("Model sync job started.", () =>
+              startSyncJob.mutateAsync(),
+            );
+          }}
         />
       ) : null}
     </div>

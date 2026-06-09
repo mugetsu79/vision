@@ -89,6 +89,242 @@ function emptyModelCatalogResponse() {
   });
 }
 
+function jsonResponse(payload: unknown, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+function cameraFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "camera-1",
+    site_id: "site-1",
+    edge_node_id: "node-1",
+    name: "Dock Camera",
+    rtsp_url_masked: "rtsp://***",
+    processing_mode: "edge",
+    primary_model_id: "model-1",
+    secondary_model_id: null,
+    tracker_type: "bytetrack",
+    active_classes: ["person"],
+    attribute_rules: [],
+    zones: [],
+    vision_profile: {
+      compute_tier: "edge_advanced_jetson",
+      accuracy_mode: "balanced",
+      scene_difficulty: "cluttered",
+      object_domain: "mixed",
+      motion_metrics: { speed_enabled: false },
+    },
+    privacy: {
+      blur_faces: true,
+      blur_plates: true,
+      method: "gaussian",
+      strength: 7,
+    },
+    browser_delivery: {
+      default_profile: "720p10",
+      allow_native_on_demand: true,
+      profiles: [],
+      unsupported_profiles: [],
+      native_status: { available: true, reason: null },
+    },
+    source_capability: {
+      width: 1280,
+      height: 720,
+      fps: 20,
+      codec: "h264",
+      aspect_ratio: "16:9",
+    },
+    homography: {
+      src: [
+        [0, 0],
+        [100, 0],
+        [100, 100],
+        [0, 100],
+      ],
+      dst: [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+        [0, 10],
+      ],
+      ref_distance_m: 12.5,
+    },
+    frame_skip: 1,
+    fps_cap: 25,
+    created_at: "2026-06-08T09:00:00Z",
+    updated_at: "2026-06-08T09:00:00Z",
+    ...overrides,
+  };
+}
+
+function modelFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "model-1",
+    name: "YOLO26n COCO",
+    version: "2026.1",
+    task: "detect",
+    path: "/models/yolo26n.onnx",
+    format: "onnx",
+    capability: "fixed_vocab",
+    capability_config: {},
+    classes: ["person"],
+    input_shape: { width: 640, height: 640 },
+    sha256: "a".repeat(64),
+    size_bytes: 1024,
+    license: "AGPL-3.0",
+    ...overrides,
+  };
+}
+
+function runtimeArtifactFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "artifact-1",
+    model_id: "model-1",
+    camera_id: null,
+    capability: "fixed_vocab",
+    kind: "tensorrt_engine",
+    runtime_backend: "tensorrt_engine",
+    scope: "model",
+    path: "/var/lib/vezor/artifacts/yolo26n.jetson.fp16.engine",
+    precision: "fp16",
+    target_profile: "linux-aarch64-nvidia-jetson",
+    classes: ["person"],
+    input_shape: { width: 640, height: 640 },
+    sha256: "b".repeat(64),
+    size_bytes: 2048,
+    source_model_sha256: "a".repeat(64),
+    runtime_versions: {},
+    validation_status: "valid",
+    validation_error: null,
+    vocabulary_hash: null,
+    vocabulary_version: null,
+    validated_at: "2026-06-08T09:10:00Z",
+    created_at: "2026-06-08T09:10:00Z",
+    updated_at: "2026-06-08T09:10:00Z",
+    ...overrides,
+  };
+}
+
+function inventoryFixture(items?: unknown[]) {
+  return {
+    items: items ?? [
+      {
+        asset_kind: "model",
+        asset_id: "model-1",
+        local_path: "/var/lib/vezor/models/yolo26n.onnx",
+        sha256: "a".repeat(64),
+        size_bytes: 1024,
+        target_profile: null,
+        runtime_versions: {},
+        reported_at: "2026-06-08T09:05:00Z",
+      },
+    ],
+  };
+}
+
+type RuntimeBuildRequestBody = {
+  build_format: string;
+  camera_id?: string | null;
+  deployment_node_id: string;
+  input_shape?: Record<string, number>;
+  precision: string;
+  target_profile: string;
+};
+
+function mockSceneLifecycleFetch({
+  artifactsByModel = {},
+  buildRequests,
+  cameras,
+  inventoriesByNode = {},
+  models,
+}: {
+  artifactsByModel?: Record<string, unknown[]>;
+  buildRequests?: unknown[];
+  cameras: unknown[];
+  inventoriesByNode?: Record<string, unknown>;
+  models: unknown[];
+}) {
+  vi.spyOn(global, "fetch").mockImplementation(async (input, init) => {
+    await Promise.resolve();
+    const request = input instanceof Request ? input : new Request(input, init);
+    const url = new URL(request.url);
+
+    if (url.pathname === "/api/v1/cameras" && request.method === "GET") {
+      return jsonResponse(cameras);
+    }
+
+    if (url.pathname === "/api/v1/sites" && request.method === "GET") {
+      return jsonResponse([
+        {
+          id: "site-1",
+          tenant_id: "tenant-1",
+          name: "HQ",
+          description: null,
+          tz: "Europe/Zurich",
+          geo_point: null,
+          created_at: "2026-04-20T10:00:00Z",
+        },
+      ]);
+    }
+
+    if (url.pathname === "/api/v1/models" && request.method === "GET") {
+      return jsonResponse(models);
+    }
+
+    const runtimeArtifactsMatch = url.pathname.match(
+      /^\/api\/v1\/models\/([^/]+)\/runtime-artifacts$/,
+    );
+    if (runtimeArtifactsMatch && request.method === "GET") {
+      return jsonResponse(artifactsByModel[runtimeArtifactsMatch[1]] ?? []);
+    }
+
+    const inventoryMatch = url.pathname.match(
+      /^\/api\/v1\/deployment\/nodes\/([^/]+)\/model-inventory$/,
+    );
+    if (inventoryMatch && request.method === "GET") {
+      return jsonResponse(
+        inventoriesByNode[inventoryMatch[1]] ?? inventoryFixture([]),
+      );
+    }
+
+    const buildJobMatch = url.pathname.match(
+      /^\/api\/v1\/models\/([^/]+)\/runtime-artifact-build-jobs$/,
+    );
+    if (buildJobMatch && request.method === "POST") {
+      const body = (await request.json()) as RuntimeBuildRequestBody;
+      buildRequests?.push({ modelId: buildJobMatch[1], body });
+      return jsonResponse(
+        {
+          id: "build-job-1",
+          tenant_id: "tenant-1",
+          deployment_node_id: body.deployment_node_id,
+          model_id: buildJobMatch[1],
+          camera_id: body.camera_id,
+          artifact_id: null,
+          status: "queued",
+          build_format: body.build_format,
+          target_profile: body.target_profile,
+          precision: body.precision,
+          payload: {},
+          error: null,
+          created_at: "2026-06-08T09:20:00Z",
+          updated_at: "2026-06-08T09:20:00Z",
+        },
+        201,
+      );
+    }
+
+    if (url.pathname === "/api/v1/model-catalog") {
+      return emptyModelCatalogResponse();
+    }
+
+    throw new Error(`Unexpected request to ${url.pathname}`);
+  });
+}
+
 describe("CamerasPage", () => {
   beforeEach(() => {
     act(() => {
@@ -1437,6 +1673,128 @@ describe("CamerasPage", () => {
     expect(
       within(gateRow as HTMLElement).getByText("Speed on"),
     ).toBeInTheDocument();
+  });
+
+  test("distinguishes a missing registered model from a missing runtime artifact", async () => {
+    const user = userEvent.setup();
+    mockSceneLifecycleFetch({
+      cameras: [
+        cameraFixture({
+          id: "camera-missing-model",
+          name: "Missing Model Scene",
+          primary_model_id: "missing-model",
+        }),
+        cameraFixture({
+          id: "camera-missing-artifact",
+          name: "Missing Artifact Scene",
+        }),
+      ],
+      inventoriesByNode: {
+        "node-1": inventoryFixture(),
+      },
+      models: [modelFixture()],
+    });
+
+    renderPage();
+    await user.type(screen.getByLabelText(/search scene inventory/i), "Scene");
+    await screen.findByText("2 matching");
+
+    const inventory = screen.getByTestId("scene-inventory-table");
+    const missingModelRow = within(inventory)
+      .getByText("Missing Model Scene")
+      .closest("tr");
+    const missingArtifactRow = within(inventory)
+      .getByText("Missing Artifact Scene")
+      .closest("tr");
+
+    expect(missingModelRow).not.toBeNull();
+    expect(missingArtifactRow).not.toBeNull();
+    expect(
+      within(missingModelRow as HTMLElement).getByText(/model not registered/i),
+    ).toBeInTheDocument();
+    expect(
+      within(missingArtifactRow as HTMLElement).getByText(
+        /no tensorrt artifact for linux-aarch64-nvidia-jetson/i,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  test("shows stale open-vocabulary artifacts when the scene vocabulary changes", async () => {
+    const user = userEvent.setup();
+    mockSceneLifecycleFetch({
+      artifactsByModel: {
+        "model-1": [
+          runtimeArtifactFixture({
+            capability: "open_vocab",
+            camera_id: "camera-1",
+            kind: "compiled_open_vocab",
+            runtime_backend: "ultralytics_yoloe",
+            scope: "scene",
+            vocabulary_version: 1,
+          }),
+        ],
+      },
+      cameras: [
+        cameraFixture({
+          runtime_vocabulary: {
+            terms: ["desk", "monitor"],
+            source: "manual",
+            version: 2,
+            updated_at: "2026-06-08T09:15:00Z",
+          },
+        }),
+      ],
+      inventoriesByNode: {
+        "node-1": inventoryFixture(),
+      },
+      models: [
+        modelFixture({
+          capability: "open_vocab",
+          capability_config: { runtime_backend: "ultralytics_yoloe" },
+        }),
+      ],
+    });
+
+    renderPage();
+    await user.type(screen.getByLabelText(/search scene inventory/i), "Dock");
+
+    expect(
+      await screen.findByText(/open-vocab artifact stale: vocabulary changed/i),
+    ).toBeInTheDocument();
+  });
+
+  test("offers a runtime artifact build action for a selected edge scene", async () => {
+    const user = userEvent.setup();
+    const buildRequests: unknown[] = [];
+    mockSceneLifecycleFetch({
+      buildRequests,
+      cameras: [cameraFixture()],
+      inventoriesByNode: {
+        "node-1": inventoryFixture(),
+      },
+      models: [modelFixture()],
+    });
+
+    renderPage();
+    await user.type(screen.getByLabelText(/search scene inventory/i), "Dock");
+    await user.click(
+      await screen.findByRole("button", {
+        name: /build artifact for dock camera/i,
+      }),
+    );
+
+    await waitFor(() => expect(buildRequests).toHaveLength(1));
+    expect(buildRequests[0]).toMatchObject({
+      modelId: "model-1",
+      body: {
+        camera_id: "camera-1",
+        deployment_node_id: "node-1",
+        build_format: "tensorrt_engine",
+        target_profile: "linux-aarch64-nvidia-jetson",
+        precision: "fp16",
+        input_shape: { width: 640, height: 640 },
+      },
+    });
   });
 
   test("opens camera-scoped incident rules from a scene row without editing the camera", async () => {
