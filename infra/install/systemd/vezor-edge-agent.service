@@ -1,0 +1,21 @@
+[Unit]
+Description=Vezor Core Link Edge Agent
+Documentation=file:/opt/vezor/current/docs/core-link-performance-guide.md
+After=network-online.target docker.service vezor-edge.service
+Wants=network-online.target
+Requires=vezor-edge.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/vezor/current
+EnvironmentFile=/etc/vezor/edge-agent.env
+ExecStart=/opt/vezor/current/bin/vezor-edge-agent
+Restart=on-failure
+RestartSec=30s
+TimeoutStartSec=60
+StateDirectory=vezor
+LogsDirectory=vezor
+RuntimeDirectory=vezor
+
+[Install]
+WantedBy=multi-user.target

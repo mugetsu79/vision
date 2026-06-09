@@ -141,6 +141,19 @@ class _FakeOperationsService:
                 detail="Supervisor credential is not authorized for this edge site.",
             )
 
+    async def supervisor_edge_site_id(self, tenant_context: TenantContext) -> UUID:
+        if tenant_context.user.claims.get("auth_type") != "supervisor_node_credential":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Supervisor credential is required.",
+            )
+        if self.supervisor_node_edge_id != KNOWN_EDGE_NODE_ID:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Supervisor credential is not authorized for an edge site.",
+            )
+        return KNOWN_SITE_ID
+
 
 class _FakeSiteService:
     def __init__(
@@ -1186,6 +1199,112 @@ async def test_supervisor_can_fetch_master_reflector_edge_agent_config() -> None
     assert payload["packet_count"] == 20
     assert payload["packet_spacing_ms"] == 100
     assert payload["loss_timeout_ms"] == 1000
+
+
+@pytest.mark.asyncio
+async def test_supervisor_can_fetch_derived_master_reflector_edge_agent_config() -> None:
+    app = _create_app(
+        _supervisor_user(SUPERVISOR_DEPLOYMENT_NODE_ID),
+        invalid_bearer_tokens={"node-credential"},
+        include_deployment=True,
+        supervisor_node_edge_id=KNOWN_EDGE_NODE_ID,
+    )
+    await app.state.services.link.aenable_master_reflector_profile(
+        tenant_id=TENANT_ID,
+        site_id=MASTER_SITE_ID,
+        public_address="192.168.1.166",
+        udp_port=8622,
+    )
+    app.state.services.link.upsert_connection(
+        tenant_id=TENANT_ID,
+        site_id=KNOWN_SITE_ID,
+        label="Office edge",
+        transport_kind="ethernet",
+        status="online",
+        metadata={
+            "monitoring_targets": [
+                {
+                    "id": "vezor-master-udp-reflector",
+                    "label": "Vezor Master reflector",
+                    "address": "192.168.1.166",
+                    "target_site_id": str(MASTER_SITE_ID),
+                    "probe_type": "udp",
+                    "loss_method": "udp_sequence",
+                }
+            ]
+        },
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        headers={"Authorization": "Bearer node-credential"},
+    ) as http_client:
+        config = await http_client.get("/api/v1/link/control-targets/master/edge-agent-config")
+
+    assert config.status_code == 200
+    payload = config.json()
+    assert payload["site_id"] == str(KNOWN_SITE_ID)
+    assert payload["target_id"] == "vezor-master-udp-reflector"
+    assert payload["reflector_secret"].startswith("vzref_")
+
+
+@pytest.mark.asyncio
+async def test_edge_agent_config_reconciles_missing_reflector_runtime() -> None:
+    app = _create_app(
+        _supervisor_user(SUPERVISOR_DEPLOYMENT_NODE_ID),
+        invalid_bearer_tokens={"node-credential"},
+        include_deployment=True,
+        supervisor_node_edge_id=KNOWN_EDGE_NODE_ID,
+    )
+    app.state.link_reflector_runtime = None
+    udp_port = _free_udp_port()
+    await app.state.services.link.aenable_master_reflector_profile(
+        tenant_id=TENANT_ID,
+        site_id=MASTER_SITE_ID,
+        public_address="127.0.0.1",
+        bind_address="127.0.0.1",
+        udp_port=udp_port,
+    )
+    app.state.services.link.upsert_connection(
+        tenant_id=TENANT_ID,
+        site_id=KNOWN_SITE_ID,
+        label="Office edge",
+        transport_kind="ethernet",
+        status="online",
+        metadata={
+            "monitoring_targets": [
+                {
+                    "id": "vezor-master-udp-reflector",
+                    "label": "Vezor Master reflector",
+                    "address": "127.0.0.1",
+                    "target_site_id": str(MASTER_SITE_ID),
+                    "probe_type": "udp",
+                    "loss_method": "udp_sequence",
+                }
+            ]
+        },
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        headers={"Authorization": "Bearer node-credential"},
+    ) as http_client:
+        try:
+            config = await http_client.get(
+                f"/api/v1/link/sites/{KNOWN_SITE_ID}"
+                "/control-targets/master/edge-agent-config"
+            )
+            runtime = app.state.link_reflector_runtime
+        finally:
+            stop_reflector(app.state.link_reflector_runtime)
+            app.state.link_reflector_runtime = None
+
+    assert config.status_code == 200
+    assert runtime is not None
+    assert runtime.port == udp_port
+    assert runtime.key_id == config.json()["reflector_key_id"]
 
 
 @pytest.mark.asyncio

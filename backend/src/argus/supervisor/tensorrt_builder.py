@@ -25,10 +25,8 @@ class TrtExecTensorRTEngineBuilder:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         command = [
             self.executable,
-            "--onnx",
-            str(source_path),
-            "--saveEngine",
-            str(output_path),
+            f"--onnx={source_path}",
+            f"--saveEngine={output_path}",
             f"--memPoolSize=workspace:{self.workspace_mib}",
         ]
         if precision.lower() == "fp16":

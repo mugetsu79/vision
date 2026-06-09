@@ -138,6 +138,26 @@ def test_parse_args_accepts_config_url_without_probe_details() -> None:
     assert args.target_id is None
 
 
+def test_parse_args_reads_bearer_token_from_owner_only_file(tmp_path) -> None:
+    token_path = tmp_path / "supervisor.credential"
+    token_path.write_text("node-credential\n", encoding="utf-8")
+
+    args = parse_args(
+        [
+            "--api-base-url",
+            "http://api.local",
+            "--bearer-token-file",
+            str(token_path),
+            "--config-url",
+            "http://api.local/api/v1/link/control-targets/master/edge-agent-config",
+            "--once",
+        ]
+    )
+
+    assert args.bearer_token == "node-credential"
+    assert args.bearer_token_file == token_path
+
+
 @pytest.mark.asyncio
 async def test_fetch_edge_agent_config_sends_bearer_token() -> None:
     seen: list[httpx.Request] = []

@@ -409,6 +409,7 @@ run install -d -m 0755 \
   /var/log/vezor \
   /run/vezor
 run install -d -m 0755 "$MODEL_DIR" "$DATA_DIR/edge" "$DATA_DIR/mediamtx" "$DATA_DIR/nats" "$DATA_DIR/credentials"
+run chown 10001:10001 "$MODEL_DIR"
 
 NATS_CONFIG="$CONFIG_DIR/nats/leaf.conf"
 if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -448,8 +449,10 @@ else
 fi
 
 EDGE_ENV="$CONFIG_DIR/edge.env"
+EDGE_AGENT_ENV="$CONFIG_DIR/edge-agent.env"
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "[dry-run] write $EDGE_ENV"
+  echo "[dry-run] write $EDGE_AGENT_ENV"
 else
   cat > "$EDGE_ENV" <<ENV
 VEZOR_MEDIAMTX_IMAGE=$MEDIAMTX_IMAGE
@@ -461,6 +464,17 @@ ARGUS_NATS_URL=nats://nats-leaf:4222
 VEZOR_NATS_LEAF_REMOTE_URL=$MASTER_NATS_LEAF_URL
 ENV
   chmod 0644 "$EDGE_ENV"
+  cat > "$EDGE_AGENT_ENV" <<ENV
+VEZOR_CONTAINER_ENGINE=$CONTAINER_ENGINE
+VEZOR_SUPERVISOR_IMAGE=$EDGE_WORKER_IMAGE
+VEZOR_EDGE_AGENT_CREDENTIAL_PATH=$DATA_DIR/credentials/supervisor.credential
+ARGUS_API_BASE_URL=$API_URL
+ARGUS_LINK_EDGE_AGENT_CONFIG_URL=${API_URL%/}/api/v1/link/control-targets/master/edge-agent-config
+ARGUS_LINK_EDGE_AGENT_ID=$EDGE_NAME-core-link
+ARGUS_LINK_EDGE_AGENT_LABEL=$EDGE_NAME Core Link
+ARGUS_LINK_EDGE_AGENT_INTERVAL_SECONDS=300
+ENV
+  chmod 0644 "$EDGE_AGENT_ENV"
 fi
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -551,9 +565,13 @@ build_local_edge_image
 run install -m 0644 \
   /opt/vezor/current/infra/install/systemd/vezor-edge.service \
   /etc/systemd/system/vezor-edge.service
+run install -m 0644 \
+  /opt/vezor/current/infra/install/systemd/vezor-edge-agent.service \
+  /etc/systemd/system/vezor-edge-agent.service
 
 run systemctl daemon-reload
 run systemctl enable vezor-edge.service
+run systemctl enable vezor-edge-agent.service
 run systemctl start vezor-edge.service
 
 echo "Vezor edge install complete."

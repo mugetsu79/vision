@@ -2262,16 +2262,29 @@ class OperationsService:
         site_id: UUID,
     ) -> None:
         async with self.session_factory() as session:
-            edge_node_id = await _edge_node_id_for_site(
-                session,
-                tenant_id=tenant_context.tenant_id,
-                site_id=site_id,
-            )
-            await _assert_supervisor_edge_node_scope(
+            await _assert_supervisor_edge_site_scope(
                 session,
                 tenant_context=tenant_context,
-                edge_node_id=edge_node_id,
+                site_id=site_id,
             )
+
+    async def supervisor_edge_site_id(self, tenant_context: TenantContext) -> UUID:
+        if tenant_context.user.claims.get("auth_type") != "supervisor_node_credential":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Supervisor credential is required.",
+            )
+        async with self.session_factory() as session:
+            edge_site_id = await _supervisor_allowed_edge_site_id(
+                session,
+                tenant_context=tenant_context,
+            )
+            if edge_site_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Supervisor credential is not authorized for an edge site.",
+                )
+            return edge_site_id
 
     async def record_worker_runtime_report(
         self,
@@ -5485,6 +5498,51 @@ async def _assert_supervisor_edge_node_scope(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Supervisor credential is not authorized for this edge node.",
+        )
+
+
+async def _supervisor_allowed_edge_site_id(
+    session: AsyncSession,
+    *,
+    tenant_context: TenantContext,
+) -> UUID | None:
+    edge_node_id = await _supervisor_allowed_edge_node_id(
+        session,
+        tenant_context=tenant_context,
+    )
+    if edge_node_id is None:
+        return None
+    edge_node = await session.get(EdgeNode, edge_node_id)
+    if not isinstance(edge_node, EdgeNode):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Supervisor credential is not authorized for an edge site.",
+        )
+    site = await session.get(Site, edge_node.site_id)
+    if not isinstance(site, Site) or site.tenant_id != tenant_context.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Supervisor credential is not authorized for this tenant.",
+        )
+    return edge_node.site_id
+
+
+async def _assert_supervisor_edge_site_scope(
+    session: AsyncSession,
+    *,
+    tenant_context: TenantContext,
+    site_id: UUID,
+) -> None:
+    if _supervisor_deployment_node_id(tenant_context) is None:
+        return
+    edge_site_id = await _supervisor_allowed_edge_site_id(
+        session,
+        tenant_context=tenant_context,
+    )
+    if edge_site_id != site_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Supervisor credential is not authorized for this edge site.",
         )
 
 

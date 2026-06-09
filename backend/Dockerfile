@@ -12,11 +12,12 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY backend/pyproject.toml backend/uv.lock backend/alembic.ini backend/README.md ./
-COPY backend/src ./src
-COPY packs ./packs
 
 RUN pip install --no-cache-dir uv \
-    && uv sync --locked --no-dev --group runtime --group llm --group vision
+    && uv sync --locked --no-dev --no-install-project --group runtime --group llm --group vision
+
+COPY backend/src ./src
+COPY packs ./packs
 
 FROM python:${PYTHON_VERSION}-slim-bookworm AS central-runtime
 

@@ -40,6 +40,20 @@ def test_edge_dockerfile_installs_jetson_onnxruntime_wheel_after_base_deps() -> 
     assert "exit 1" in dockerfile
 
 
+def test_edge_dockerfile_installs_dependencies_before_source_copy() -> None:
+    dockerfile = EDGE_DOCKERFILE_PATH.read_text(encoding="utf-8")
+
+    dependency_copy = "COPY pyproject.toml uv.lock alembic.ini README.md requirements-edge.txt ./"
+    dependency_install = (
+        'uv pip install --python "$UV_PROJECT_ENVIRONMENT/bin/python" '
+        "--no-cache -r requirements-edge.txt"
+    )
+    source_copy = "COPY src ./src"
+
+    assert dockerfile.index(dependency_copy) < dockerfile.index(dependency_install)
+    assert dockerfile.index(dependency_install) < dockerfile.index(source_copy)
+
+
 def test_edge_dockerfile_installs_gstreamer_rtsp_sink_plugin() -> None:
     dockerfile = EDGE_DOCKERFILE_PATH.read_text(encoding="utf-8")
 

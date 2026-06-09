@@ -9,6 +9,7 @@ import pytest
 from argus.api.contracts import EvidenceRecordingPolicy
 from argus.billing.service import BillingService
 from argus.compat import UTC
+from argus.core.config import Settings
 from argus.scripts.seed_whole_product_smoke_fixture import (
     SmokeFixtureRequest,
     parse_args,
@@ -41,7 +42,7 @@ def test_parse_args_defaults_evidence_root_to_backend_storage_root() -> None:
         ]
     )
 
-    assert args.evidence_root == Path("/var/lib/vezor/evidence")
+    assert args.evidence_root == Path(Settings().incident_local_storage_root)
 
 
 class _SmokeFixtureSessionFactory:

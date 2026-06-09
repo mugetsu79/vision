@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
@@ -89,12 +90,96 @@ def build_real_rtsp_check(
             evidence=[f"Missing {env_name}; set it locally to enable the real RTSP lane"],
         )
 
+    return probe_real_rtsp_source(value)
+
+
+def probe_real_rtsp_source(value: str, timeout_seconds: int = 20) -> SmokeCheck:
+    redacted_url = redact_rtsp_url(value)
+    command = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-rtsp_transport",
+        "tcp",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=width,height,codec_name,avg_frame_rate",
+        "-of",
+        "json",
+        value,
+    ]
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout_seconds,
+        )
+    except FileNotFoundError:
+        return SmokeCheck(
+            name="Real RTSP source",
+            status=SmokeStatus.BLOCKED,
+            evidence=["ffprobe is not installed on the host running the smoke harness."],
+        )
+    except subprocess.TimeoutExpired:
+        return SmokeCheck(
+            name="Real RTSP source",
+            status=SmokeStatus.FAIL,
+            evidence=[f"ffprobe timed out after {timeout_seconds}s for {redacted_url}"],
+        )
+
+    if completed.returncode != 0:
+        stderr = redact_rtsp_url((completed.stderr or "").strip())
+        return SmokeCheck(
+            name="Real RTSP source",
+            status=SmokeStatus.FAIL,
+            evidence=[
+                f"ffprobe failed for {redacted_url}",
+                f"stderr={stderr[:500] if stderr else 'empty'}",
+            ],
+        )
+
+    try:
+        payload = json.loads(completed.stdout or "{}")
+    except json.JSONDecodeError:
+        return SmokeCheck(
+            name="Real RTSP source",
+            status=SmokeStatus.FAIL,
+            evidence=[f"ffprobe returned non-JSON stream metadata for {redacted_url}"],
+        )
+    streams = payload.get("streams")
+    if not isinstance(streams, list) or not streams:
+        return SmokeCheck(
+            name="Real RTSP source",
+            status=SmokeStatus.FAIL,
+            evidence=[f"ffprobe found no video stream for {redacted_url}"],
+        )
+
+    stream = streams[0]
+    if not isinstance(stream, dict):
+        return SmokeCheck(
+            name="Real RTSP source",
+            status=SmokeStatus.FAIL,
+            evidence=[f"ffprobe returned malformed stream metadata for {redacted_url}"],
+        )
+    width = stream.get("width")
+    height = stream.get("height")
+    codec = stream.get("codec_name") or "unknown"
+    frame_rate = stream.get("avg_frame_rate") or "unknown"
+    if not isinstance(width, int) or not isinstance(height, int):
+        return SmokeCheck(
+            name="Real RTSP source",
+            status=SmokeStatus.FAIL,
+            evidence=[f"ffprobe stream metadata was missing width/height for {redacted_url}"],
+        )
     return SmokeCheck(
         name="Real RTSP source",
-        status=SmokeStatus.BLOCKED,
+        status=SmokeStatus.PASS,
         evidence=[
-            "Real RTSP probe not implemented in skeleton; "
-            f"URL redacted as {redact_rtsp_url(value)}"
+            f"ffprobe video stream width={width} height={height} codec={codec} avg_frame_rate={frame_rate}",
+            f"source={redacted_url}",
         ],
     )
 

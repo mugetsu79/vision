@@ -4,9 +4,11 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).parents[2]
 EDGE_SERVICE = REPO_ROOT / "infra" / "install" / "systemd" / "vezor-edge.service"
+EDGE_AGENT_SERVICE = REPO_ROOT / "infra" / "install" / "systemd" / "vezor-edge-agent.service"
 INSTALL_SCRIPT = REPO_ROOT / "installer" / "linux" / "install-edge.sh"
 PREFLIGHT = REPO_ROOT / "scripts" / "jetson-preflight.sh"
 SUPERVISOR_COMPOSE = REPO_ROOT / "infra" / "install" / "compose" / "compose.supervisor.yml"
+EDGE_AGENT_WRAPPER = REPO_ROOT / "bin" / "vezor-edge-agent"
 MEDIAMTX_CONFIG = REPO_ROOT / "infra" / "mediamtx" / "mediamtx.yml"
 
 FORBIDDEN_PRODUCT_STRINGS = (
@@ -32,6 +34,19 @@ def test_edge_systemd_service_is_restartable_appliance_wrapper() -> None:
     assert "--config /etc/vezor/edge.json" in service
     assert "StateDirectory=vezor" in service
     assert "LogsDirectory=vezor" in service
+
+
+def test_edge_agent_systemd_service_uses_node_credential_file_not_bearer_token() -> None:
+    service = _read(EDGE_AGENT_SERVICE)
+    wrapper = _read(EDGE_AGENT_WRAPPER)
+
+    assert "Description=Vezor Core Link Edge Agent" in service
+    assert "After=network-online.target docker.service vezor-edge.service" in service
+    assert "EnvironmentFile=/etc/vezor/edge-agent.env" in service
+    assert "ExecStart=/opt/vezor/current/bin/vezor-edge-agent" in service
+    assert "--bearer-token-file" in wrapper
+    assert "ARGUS_API_BEARER_TOKEN" not in service
+    assert "ARGUS_API_BEARER_TOKEN" not in wrapper
 
 
 def test_edge_install_script_accepts_pairing_unpaired_and_manifest_modes() -> None:
@@ -93,11 +108,17 @@ def test_edge_install_script_accepts_pairing_unpaired_and_manifest_modes() -> No
     assert 'chmod 0644 "$EDGE_ENV"' in script
     assert 'chmod 0644 "$EDGE_CONFIG" "$SUPERVISOR_CONFIG"' in script
     assert 'chown 10001:10001 "$DATA_DIR/credentials/supervisor.credential"' in script
+    assert 'chown 10001:10001 "$MODEL_DIR"' in script
     assert 'old_umask="$(umask)"' in script
     assert "--supervisor-id" in script
     assert '--credential-path "$DATA_DIR/credentials/supervisor.credential"' in script
     assert "systemctl enable vezor-edge.service" in script
     assert "systemctl start vezor-edge.service" in script
+    assert "$CONFIG_DIR/edge-agent.env" in script
+    assert "ARGUS_LINK_EDGE_AGENT_CONFIG_URL" in script
+    assert "install/systemd/vezor-edge-agent.service" in script
+    assert "systemctl enable vezor-edge-agent.service" in script
+    assert "systemctl start vezor-edge-agent.service" not in script
 
 
 def test_edge_install_script_derives_network_reachable_mediamtx_inputs() -> None:
@@ -139,7 +160,15 @@ def test_edge_install_script_stops_existing_appliance_before_preflight_ports() -
 
 def test_edge_artifacts_do_not_embed_dev_credentials_or_bearer_tokens() -> None:
     combined = "\n".join(
-        _read(path) for path in (EDGE_SERVICE, INSTALL_SCRIPT, PREFLIGHT, SUPERVISOR_COMPOSE)
+        _read(path)
+        for path in (
+            EDGE_SERVICE,
+            EDGE_AGENT_SERVICE,
+            EDGE_AGENT_WRAPPER,
+            INSTALL_SCRIPT,
+            PREFLIGHT,
+            SUPERVISOR_COMPOSE,
+        )
     )
 
     for forbidden in FORBIDDEN_PRODUCT_STRINGS:
@@ -181,7 +210,8 @@ def test_supervisor_compose_profile_contains_edge_services_and_secret_mounts() -
         "${VEZOR_CREDENTIALS_HOST_DIR:-/var/lib/vezor/credentials}"
         ":/run/vezor/credentials:ro"
     ) in compose
-    assert "${VEZOR_MODEL_HOST_DIR:-/var/lib/vezor/models}:/models:ro" in compose
+    assert "${VEZOR_MODEL_HOST_DIR:-/var/lib/vezor/models}:/models" in compose
+    assert "${VEZOR_MODEL_HOST_DIR:-/var/lib/vezor/models}:/models:ro" not in compose
     assert "      - nats-leaf" in compose
 
 

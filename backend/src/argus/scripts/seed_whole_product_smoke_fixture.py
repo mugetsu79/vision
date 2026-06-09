@@ -167,7 +167,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--evidence-root",
         type=Path,
-        default=Path("/var/lib/vezor/evidence"),
+        default=Path(Settings().incident_local_storage_root),
     )
     return parser.parse_args(argv)
 

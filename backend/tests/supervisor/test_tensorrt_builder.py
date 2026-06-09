@@ -39,8 +39,10 @@ def test_trtexec_builder_writes_engine_with_fp16(
 
     assert result == output
     assert output.read_bytes() == b"engine"
-    assert "--onnx" in calls[0]
-    assert "--saveEngine" in calls[0]
+    assert f"--onnx={source}" in calls[0]
+    assert f"--saveEngine={output}" in calls[0]
+    assert str(source) not in calls[0]
+    assert str(output) not in calls[0]
     assert "--fp16" in calls[0]
 
 

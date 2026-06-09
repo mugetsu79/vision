@@ -43,6 +43,24 @@ def test_central_runtime_image_packages_pack_manifests() -> None:
     assert central_build_context in makefile
 
 
+def test_central_dockerfile_installs_dependencies_before_source_copy() -> None:
+    dockerfile = DOCKERFILE.read_text(encoding="utf-8")
+
+    dependency_copy = (
+        "COPY backend/pyproject.toml backend/uv.lock backend/alembic.ini "
+        "backend/README.md ./"
+    )
+    sync_command = (
+        "uv sync --locked --no-dev --no-install-project --group runtime --group llm --group vision"
+    )
+    source_copy = "COPY backend/src ./src"
+    pack_copy = "COPY packs ./packs"
+
+    assert dockerfile.index(dependency_copy) < dockerfile.index(sync_command)
+    assert dockerfile.index(sync_command) < dockerfile.index(source_copy)
+    assert dockerfile.index(sync_command) < dockerfile.index(pack_copy)
+
+
 def test_central_repo_build_context_is_constrained() -> None:
     dockerignore = DOCKERIGNORE.read_text(encoding="utf-8").splitlines()
 

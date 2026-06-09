@@ -55,7 +55,7 @@ async def import_model_url(
 ) -> ModelImportJobResponse:
     if payload.source is not ModelImportSource.URL:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="source must be url for this endpoint.",
         )
     return await services.model_lifecycle.import_model_from_request(

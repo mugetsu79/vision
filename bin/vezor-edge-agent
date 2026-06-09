@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+EDGE_AGENT_ENV="${VEZOR_EDGE_AGENT_ENV:-/etc/vezor/edge-agent.env}"
+if [[ -f "$EDGE_AGENT_ENV" ]]; then
+  # shellcheck disable=SC1090
+  source "$EDGE_AGENT_ENV"
+fi
+
+CONTAINER_ENGINE="${VEZOR_CONTAINER_ENGINE:-docker}"
+EDGE_AGENT_IMAGE="${VEZOR_SUPERVISOR_IMAGE:?set VEZOR_SUPERVISOR_IMAGE}"
+API_BASE_URL="${ARGUS_API_BASE_URL:?set ARGUS_API_BASE_URL}"
+CREDENTIAL_PATH="${VEZOR_EDGE_AGENT_CREDENTIAL_PATH:-/var/lib/vezor/credentials/supervisor.credential}"
+CONFIG_URL="${ARGUS_LINK_EDGE_AGENT_CONFIG_URL:-${API_BASE_URL%/}/api/v1/link/control-targets/master/edge-agent-config}"
+AGENT_ID="${ARGUS_LINK_EDGE_AGENT_ID:-$(hostname)-core-link}"
+INTERVAL_SECONDS="${ARGUS_LINK_EDGE_AGENT_INTERVAL_SECONDS:-300}"
+
+if [[ ! -s "$CREDENTIAL_PATH" ]]; then
+  echo "Vezor edge-agent credential file is missing or empty: $CREDENTIAL_PATH" >&2
+  exit 1
+fi
+
+exec "$CONTAINER_ENGINE" run --rm --network host \
+  --name vezor-edge-agent \
+  -v "$CREDENTIAL_PATH:/run/vezor/credentials/supervisor.credential:ro" \
+  -e "ARGUS_API_BASE_URL=$API_BASE_URL" \
+  -e "ARGUS_LINK_EDGE_AGENT_CONFIG_URL=$CONFIG_URL" \
+  -e "ARGUS_LINK_EDGE_AGENT_ID=$AGENT_ID" \
+  -e "ARGUS_LINK_EDGE_AGENT_LABEL=${ARGUS_LINK_EDGE_AGENT_LABEL:-Vezor edge Core Link}" \
+  --entrypoint /app/.venv/bin/python \
+  "$EDGE_AGENT_IMAGE" \
+  -m argus.link.edge_agent \
+  --api-base-url "$API_BASE_URL" \
+  --bearer-token-file /run/vezor/credentials/supervisor.credential \
+  --config-url "$CONFIG_URL" \
+  --agent-id "$AGENT_ID" \
+  --interval-seconds "$INTERVAL_SECONDS"

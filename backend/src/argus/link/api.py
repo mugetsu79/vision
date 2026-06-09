@@ -563,8 +563,42 @@ async def post_master_control_target(
 )
 async def get_master_reflector_edge_agent_config(
     site_id: UUID,
+    request: Request,
     tenant_context: SupervisorOrAdminTenantDependency,
     services: ServicesDependency,
+) -> LinkMasterReflectorEdgeAgentConfigResponse:
+    return await _master_reflector_edge_agent_config(
+        site_id=site_id,
+        request=request,
+        tenant_context=tenant_context,
+        services=services,
+    )
+
+
+@router.get(
+    "/control-targets/master/edge-agent-config",
+    response_model=LinkMasterReflectorEdgeAgentConfigResponse,
+)
+async def get_my_master_reflector_edge_agent_config(
+    request: Request,
+    tenant_context: SupervisorOrAdminTenantDependency,
+    services: ServicesDependency,
+) -> LinkMasterReflectorEdgeAgentConfigResponse:
+    site_id = await services.operations.supervisor_edge_site_id(tenant_context)
+    return await _master_reflector_edge_agent_config(
+        site_id=site_id,
+        request=request,
+        tenant_context=tenant_context,
+        services=services,
+    )
+
+
+async def _master_reflector_edge_agent_config(
+    *,
+    site_id: UUID,
+    request: Request,
+    tenant_context: TenantContext,
+    services: AppServices,
 ) -> LinkMasterReflectorEdgeAgentConfigResponse:
     site = await _ensure_link_edge_site(services, tenant_context, site_id)
     await services.operations.assert_supervisor_edge_site_scope(tenant_context, site_id)
@@ -578,6 +612,12 @@ async def get_master_reflector_edge_agent_config(
             status_code=status.HTTP_409_CONFLICT,
             detail="Master reflector secret is not ready.",
         )
+    profile = await _ensure_master_reflector_runtime_for_edge_agent_config(
+        request=request,
+        services=services,
+        tenant_context=tenant_context,
+        profile=profile,
+    )
     target = await services.link.atarget_for_connection_metadata(
         tenant_id=tenant_context.tenant_id,
         site_id=site.id,
@@ -603,6 +643,54 @@ async def get_master_reflector_edge_agent_config(
         loss_timeout_ms=_target_positive_int(target, "loss_timeout_ms", default=1000),
         dscp=_target_optional_dscp(target),
     )
+
+
+async def _ensure_master_reflector_runtime_for_edge_agent_config(
+    *,
+    request: Request,
+    services: AppServices,
+    tenant_context: TenantContext,
+    profile: LinkReflectorProfileRecord,
+) -> LinkReflectorProfileRecord:
+    if not hasattr(request.app.state, "link_reflector_runtime"):
+        return profile
+    runtime = request.app.state.link_reflector_runtime
+    if _reflector_runtime_matches_profile(runtime, profile):
+        return profile
+
+    reconciled = await _reconcile_master_reflector_runtime(
+        request,
+        services,
+        tenant_context,
+        profile,
+    )
+    if not _reflector_runtime_matches_profile(request.app.state.link_reflector_runtime, reconciled):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=reconciled.last_error or "Master UDP reflector is not listening.",
+        )
+    return reconciled
+
+
+def _reflector_runtime_matches_profile(
+    runtime: object | None,
+    profile: LinkReflectorProfileRecord,
+) -> bool:
+    if runtime is None:
+        return False
+    if getattr(runtime, "bind_host", None) != profile.bind_address:
+        return False
+    if getattr(runtime, "port", None) != profile.udp_port:
+        return False
+    if getattr(runtime, "key_id", None) != profile.key_id:
+        return False
+    protocol = getattr(runtime, "protocol", None)
+    if getattr(protocol, "rate_limit_pps", None) != profile.rate_limit_pps_per_source:
+        return False
+    allowed_networks = tuple(
+        str(network) for network in getattr(protocol, "allowed_source_networks", ())
+    )
+    return allowed_networks == tuple(profile.allowed_source_cidrs)
 
 
 @router.get("/sites/{site_id}/connections/selection")

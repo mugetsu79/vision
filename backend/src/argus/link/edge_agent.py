@@ -13,6 +13,7 @@ import sys
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -322,6 +323,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run Vezor Core Link edge-agent probes.")
     parser.add_argument("--api-base-url", default=os.getenv("ARGUS_API_BASE_URL"))
     parser.add_argument("--bearer-token", default=os.getenv("ARGUS_API_BEARER_TOKEN"))
+    parser.add_argument(
+        "--bearer-token-file",
+        default=os.getenv("ARGUS_API_BEARER_TOKEN_FILE"),
+        type=Path,
+    )
     parser.add_argument("--config-url", default=os.getenv("ARGUS_LINK_EDGE_AGENT_CONFIG_URL"))
     parser.add_argument("--site-id", default=os.getenv("ARGUS_LINK_SITE_ID"))
     parser.add_argument("--target-id", default=os.getenv("ARGUS_LINK_TARGET_ID"))
@@ -353,10 +359,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args(argv)
 
+    if not args.bearer_token and args.bearer_token_file is not None:
+        args.bearer_token = _read_bearer_token_file(args.bearer_token_file)
     if not args.api_base_url:
         parser.error("--api-base-url or ARGUS_API_BASE_URL is required")
     if not args.bearer_token:
-        parser.error("--bearer-token or ARGUS_API_BEARER_TOKEN is required")
+        parser.error(
+            "--bearer-token, --bearer-token-file, ARGUS_API_BEARER_TOKEN, "
+            "or ARGUS_API_BEARER_TOKEN_FILE is required"
+        )
     if not args.site_id and not args.config_url:
         parser.error("--site-id or ARGUS_LINK_SITE_ID is required")
     if not args.target_id and not args.config_url:
@@ -486,6 +497,13 @@ def _config_int(config: Mapping[str, object], key: str) -> int | None:
     if value is None:
         return None
     return int(value)
+
+
+def _read_bearer_token_file(path: Path) -> str:
+    token = path.read_text(encoding="utf-8").strip()
+    if not token:
+        raise RuntimeError("Bearer token file is empty.")
+    return token
 
 
 def main() -> None:

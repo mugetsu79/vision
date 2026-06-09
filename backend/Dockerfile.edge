@@ -31,7 +31,6 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml uv.lock alembic.ini README.md requirements-edge.txt ./
-COPY src ./src
 
 RUN python3 -m pip install --no-cache-dir uv \
     && python3 -m venv "$UV_PROJECT_ENVIRONMENT" \
@@ -48,6 +47,9 @@ RUN python3 -m pip install --no-cache-dir uv \
     && groupadd --system --gid 10001 argus \
     && useradd --system --uid 10001 --gid 10001 --create-home argus \
     && chown -R argus:argus /app "$UV_PROJECT_ENVIRONMENT"
+
+COPY src ./src
+RUN chown -R argus:argus /app/src
 
 USER argus
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 from pathlib import Path
 from types import ModuleType
 from typing import Any, cast
@@ -162,9 +163,34 @@ def test_real_rtsp_missing_env_reports_blocked_with_env_name_only() -> None:
         assert "rtsp://" not in evidence.lower()
 
 
-def test_real_rtsp_present_env_reports_blocked_without_raw_credentials() -> None:
+def test_real_rtsp_present_env_runs_ffprobe_without_raw_credentials(
+    monkeypatch: MonkeyPatch,
+) -> None:
     module = _load_module()
     raw_url = "rtsp://alice:s3cr3t@camera.local/ch1"
+    calls: list[list[str]] = []
+
+    def fake_run(command, capture_output, text, check, timeout):  # noqa: ANN001
+        calls.append(list(command))
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps(
+                {
+                    "streams": [
+                        {
+                            "width": 1280,
+                            "height": 720,
+                            "codec_name": "h264",
+                            "avg_frame_rate": "25/1",
+                        }
+                    ]
+                }
+            ),
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
 
     check = module.build_real_rtsp_check(
         "720p",
@@ -172,8 +198,19 @@ def test_real_rtsp_present_env_reports_blocked_without_raw_credentials() -> None
     )
     evidence = " ".join(check.evidence)
 
-    assert check.status.value == "BLOCKED"
-    assert "Real RTSP probe not implemented in skeleton" in evidence
+    assert check.status.value == "PASS"
+    assert calls[0][:9] == [
+        "ffprobe",
+        "-v",
+        "error",
+        "-rtsp_transport",
+        "tcp",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=width,height,codec_name,avg_frame_rate",
+    ]
+    assert "width=1280 height=720 codec=h264" in evidence
     assert "rtsp://***@camera.local/ch1" in evidence
     assert raw_url not in evidence
     assert "alice" not in evidence

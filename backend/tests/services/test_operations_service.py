@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
+from fastapi import HTTPException
 
 from argus.api.contracts import (
     DeploymentNodeResponse,
@@ -30,6 +31,7 @@ from argus.models.enums import (
 )
 from argus.models.tables import (
     Camera,
+    DeploymentNode,
     DetectionRule,
     EdgeNode,
     EdgeNodeHardwareReport,
@@ -51,10 +53,18 @@ class _FakeResult:
     def scalars(self) -> _FakeResult:
         return self
 
+    def scalar_one_or_none(self) -> object | None:
+        return self._rows[0] if self._rows else None
+
 
 class _FakeSession:
-    def __init__(self, result_sets: list[list[object]]) -> None:
+    def __init__(
+        self,
+        result_sets: list[list[object]],
+        get_map: dict[tuple[type[object], UUID], object],
+    ) -> None:
         self._result_sets = result_sets
+        self._get_map = get_map
 
     async def __aenter__(self) -> _FakeSession:
         return self
@@ -65,13 +75,21 @@ class _FakeSession:
     async def execute(self, statement) -> _FakeResult:  # noqa: ANN001
         return _FakeResult(self._result_sets.pop(0))
 
+    async def get(self, model, ident):  # noqa: ANN001
+        return self._get_map.get((model, ident))
+
 
 class _FakeSessionFactory:
-    def __init__(self, *result_sets: list[object]) -> None:
+    def __init__(
+        self,
+        *result_sets: list[object],
+        get_map: dict[tuple[type[object], UUID], object] | None = None,
+    ) -> None:
         self.result_sets = [list(result_set) for result_set in result_sets]
+        self.get_map = get_map or {}
 
     def __call__(self) -> _FakeSession:
-        return _FakeSession(self.result_sets)
+        return _FakeSession(self.result_sets, self.get_map)
 
 
 class _FakeDeploymentNodes:
@@ -95,6 +113,26 @@ def _tenant_context(tenant_id) -> TenantContext:  # noqa: ANN001
             is_superadmin=False,
             tenant_context=None,
             claims={},
+        ),
+    )
+
+
+def _supervisor_tenant_context(tenant_id: UUID, deployment_node_id: UUID) -> TenantContext:
+    return TenantContext(
+        tenant_id=tenant_id,
+        tenant_slug="argus-dev",
+        user=AuthenticatedUser(
+            subject=f"deployment-node:{deployment_node_id}",
+            email=None,
+            role=RoleEnum.ADMIN,
+            issuer="supervisor-node-credential",
+            realm="argus-dev",
+            is_superadmin=False,
+            tenant_context=None,
+            claims={
+                "auth_type": "supervisor_node_credential",
+                "deployment_node_id": str(deployment_node_id),
+            },
         ),
     )
 
@@ -527,6 +565,107 @@ async def test_fleet_overview_uses_deployment_heartbeat_status_and_hides_duplica
     ]
     assert response.summary.offline_nodes == 0
     assert response.summary.stale_nodes == 0
+
+
+@pytest.mark.asyncio
+async def test_supervisor_edge_site_scope_allows_credential_for_any_edge_node_on_site() -> None:
+    tenant_id = uuid4()
+    site = _site(tenant_id)
+    stale_duplicate_edge = EdgeNode(
+        id=uuid4(),
+        site_id=site.id,
+        hostname="jetson-orin-old",
+        public_key="old-seed",
+        version="portable-demo",
+        last_seen_at=datetime.now(tz=UTC) - timedelta(days=2),
+    )
+    active_edge = EdgeNode(
+        id=uuid4(),
+        site_id=site.id,
+        hostname="jetson-orin-1",
+        public_key="new-seed",
+        version="portable-demo",
+        last_seen_at=datetime.now(tz=UTC),
+    )
+    deployment_node_id = uuid4()
+    deployment_node = DeploymentNode(
+        id=deployment_node_id,
+        tenant_id=tenant_id,
+        edge_node_id=active_edge.id,
+        supervisor_id="jetson-orin-1",
+        node_kind=DeploymentNodeKind.EDGE,
+        hostname="jetson-orin-1",
+        install_status=DeploymentInstallStatus.HEALTHY,
+        credential_status=DeploymentCredentialStatus.ACTIVE,
+        service_manager=DeploymentServiceManager.SYSTEMD,
+        service_status="running",
+        version="portable-demo",
+        os_name="linux",
+        host_profile="linux-aarch64-nvidia-jetson",
+        diagnostics={},
+    )
+    session_factory = _FakeSessionFactory(
+        [stale_duplicate_edge.id],
+        get_map={
+            (DeploymentNode, deployment_node_id): deployment_node,
+            (EdgeNode, active_edge.id): active_edge,
+            (Site, site.id): site,
+        },
+    )
+    service = OperationsService(session_factory=session_factory, settings=Settings(_env_file=None))
+
+    await service.assert_supervisor_edge_site_scope(
+        _supervisor_tenant_context(tenant_id, deployment_node_id),
+        site.id,
+    )
+
+
+@pytest.mark.asyncio
+async def test_supervisor_edge_site_scope_blocks_other_sites() -> None:
+    tenant_id = uuid4()
+    site = _site(tenant_id)
+    other_site = _site(tenant_id)
+    edge = EdgeNode(
+        id=uuid4(),
+        site_id=site.id,
+        hostname="jetson-orin-1",
+        public_key="seed",
+        version="portable-demo",
+        last_seen_at=datetime.now(tz=UTC),
+    )
+    deployment_node_id = uuid4()
+    deployment_node = DeploymentNode(
+        id=deployment_node_id,
+        tenant_id=tenant_id,
+        edge_node_id=edge.id,
+        supervisor_id="jetson-orin-1",
+        node_kind=DeploymentNodeKind.EDGE,
+        hostname="jetson-orin-1",
+        install_status=DeploymentInstallStatus.HEALTHY,
+        credential_status=DeploymentCredentialStatus.ACTIVE,
+        service_manager=DeploymentServiceManager.SYSTEMD,
+        service_status="running",
+        version="portable-demo",
+        os_name="linux",
+        host_profile="linux-aarch64-nvidia-jetson",
+        diagnostics={},
+    )
+    session_factory = _FakeSessionFactory(
+        get_map={
+            (DeploymentNode, deployment_node_id): deployment_node,
+            (EdgeNode, edge.id): edge,
+            (Site, site.id): site,
+        },
+    )
+    service = OperationsService(session_factory=session_factory, settings=Settings(_env_file=None))
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.assert_supervisor_edge_site_scope(
+            _supervisor_tenant_context(tenant_id, deployment_node_id),
+            other_site.id,
+        )
+
+    assert exc_info.value.status_code == 403
 
 
 @pytest.mark.asyncio
