@@ -43,6 +43,7 @@ class WorkerLaunchConfig:
     extra_env: Mapping[str, str] | None = None
     base_env: Mapping[str, str] | None = None
     graceful_timeout_seconds: float = 10.0
+    startup_probe_seconds: float = 1.0
 
 
 class LocalWorkerProcessAdapter:
@@ -71,6 +72,9 @@ class LocalWorkerProcessAdapter:
             process = await self._subprocess_exec(*argv, env=await self._env())
         except Exception as exc:
             return WorkerProcessResult(runtime_state="error", last_error=str(exc))
+        startup_error = await self._startup_error(process)
+        if startup_error is not None:
+            return WorkerProcessResult(runtime_state="error", last_error=startup_error)
         self._processes[camera_id] = process
         return WorkerProcessResult(runtime_state="running")
 
@@ -122,6 +126,17 @@ class LocalWorkerProcessAdapter:
         provided = self.config.bearer_token_provider()
         token = await provided if inspect.isawaitable(provided) else provided
         return token or None
+
+    async def _startup_error(self, process: object) -> str | None:
+        await asyncio.sleep(max(self.config.startup_probe_seconds, 0.0))
+        returncode = _returncode(process)
+        if returncode is None:
+            return None
+        try:
+            await process.wait()  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        return f"Worker exited during startup with code {returncode}."
 
     async def _terminate(self, process: object) -> str | None:
         if _returncode(process) is not None:

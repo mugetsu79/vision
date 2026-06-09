@@ -853,6 +853,11 @@ class CameraService:
                 camera=camera,
                 model=primary_model,
             )
+            runtime_target_profile = await _load_worker_runtime_target_profile(
+                session=session,
+                tenant_id=tenant_context.tenant_id,
+                camera=camera,
+            )
             incident_rules = await _load_enabled_incident_rules(
                 session=session,
                 camera_id=camera.id,
@@ -909,6 +914,7 @@ class CameraService:
             evidence_storage=evidence_storage,
             stream_delivery=stream_delivery,
             runtime_selection=runtime_selection,
+            runtime_target_profile=runtime_target_profile,
             privacy_policy=privacy_policy,
             incident_rules=incident_rules,
         )
@@ -941,6 +947,7 @@ class CameraService:
                 primary_model,
                 runtime_artifacts=runtime_artifacts,
                 runtime_selection=base_config.runtime_selection,
+                target_profile=runtime_target_profile,
             ),
             vision_profile=base_config.vision_profile.model_dump(mode="json"),
             detection_regions=[
@@ -5002,6 +5009,48 @@ async def _load_worker_runtime_artifacts(
     ]
 
 
+async def _load_worker_runtime_target_profile(
+    *,
+    session: AsyncSession,
+    tenant_id: UUID,
+    camera: Camera,
+) -> str | None:
+    statement = (
+        select(EdgeNodeHardwareReport)
+        .where(EdgeNodeHardwareReport.tenant_id == tenant_id)
+        .order_by(EdgeNodeHardwareReport.reported_at.desc())
+    )
+    if camera.edge_node_id is not None:
+        statement = statement.where(EdgeNodeHardwareReport.edge_node_id == camera.edge_node_id)
+    elif camera.processing_mode in {ProcessingMode.CENTRAL, ProcessingMode.HYBRID}:
+        statement = statement.where(EdgeNodeHardwareReport.edge_node_id.is_(None))
+    else:
+        return None
+
+    rows = (await session.execute(statement)).scalars().all()
+    report = next(
+        (
+            row
+            for row in rows
+            if isinstance(row, EdgeNodeHardwareReport)
+            and row.tenant_id == tenant_id
+            and (
+                (
+                    camera.edge_node_id is not None
+                    and row.edge_node_id == camera.edge_node_id
+                )
+                or (
+                    camera.edge_node_id is None
+                    and camera.processing_mode in {ProcessingMode.CENTRAL, ProcessingMode.HYBRID}
+                    and row.edge_node_id is None
+                )
+            )
+        ),
+        None,
+    )
+    return report.host_profile if report is not None else None
+
+
 async def _load_enabled_incident_rules(
     *,
     session: AsyncSession,
@@ -5685,6 +5734,7 @@ def _camera_to_worker_config(
     evidence_storage: WorkerEvidenceStorageSettings | None = None,
     stream_delivery: WorkerStreamDeliverySettings | None = None,
     runtime_selection: WorkerRuntimeSelectionSettings | None = None,
+    runtime_target_profile: str | None = None,
     privacy_policy: WorkerPrivacyPolicySettings | None = None,
     scene_contract_snapshot_id: UUID | None = None,
     scene_contract_hash: str | None = None,
@@ -5743,6 +5793,7 @@ def _camera_to_worker_config(
         model=primary_model,
         runtime_artifacts=runtime_artifacts or [],
         runtime_selection=runtime_selection,
+        target_profile=runtime_target_profile,
     )
     if runtime_selection_decision.blocked_reason is not None:
         raise HTTPException(
@@ -6047,12 +6098,14 @@ def _runtime_selection_contract_payload(
     *,
     runtime_artifacts: list[ModelRuntimeArtifact] | None,
     runtime_selection: WorkerRuntimeSelectionSettings | None = None,
+    target_profile: str | None = None,
 ) -> dict[str, object]:
     artifacts = runtime_artifacts or []
     decision = _runtime_selection_decision_for_model(
         model=model,
         runtime_artifacts=artifacts,
         runtime_selection=runtime_selection,
+        target_profile=target_profile,
     )
     if decision.blocked_reason is not None:
         raise HTTPException(
@@ -6099,6 +6152,7 @@ def _runtime_selection_decision_for_model(
     model: Model,
     runtime_artifacts: list[ModelRuntimeArtifact],
     runtime_selection: WorkerRuntimeSelectionSettings | None,
+    target_profile: str | None = None,
 ) -> RuntimeSelectionDecision:
     model_backend = _string_or_none(_model_capability_config(model).get("runtime_backend"))
     preferred_backend = (
@@ -6120,8 +6174,10 @@ def _runtime_selection_decision_for_model(
         available_backends=_runtime_selection_available_backends(
             model_backend=model_backend,
             runtime_artifacts=runtime_artifacts,
+            target_profile=target_profile,
         ),
         model_backend=model_backend,
+        target_profile=target_profile,
     )
 
 
@@ -6133,11 +6189,26 @@ def _runtime_selection_decision(
     available_artifacts: Sequence[object],
     available_backends: Sequence[str] | None = None,
     model_backend: str | None = None,
+    target_profile: str | None = None,
 ) -> RuntimeSelectionDecision:
     artifacts = list(available_artifacts)
+    target_matched_artifacts = _filter_runtime_artifacts_by_target(
+        artifacts,
+        target_profile=target_profile,
+    )
+    artifact_target_mismatch = (
+        target_profile is not None and len(artifacts) > 0 and not target_matched_artifacts
+    )
+    available_backends_for_target = _filter_runtime_backends_by_target(
+        available_backends or [],
+        artifacts=artifacts,
+        target_matched_artifacts=target_matched_artifacts,
+        target_profile=target_profile,
+        model_backend=model_backend,
+    )
     backend_candidates = _ordered_unique(
         [
-            *(available_backends or []),
+            *available_backends_for_target,
             model_backend,
             "onnxruntime",
         ]
@@ -6159,7 +6230,7 @@ def _runtime_selection_decision(
         )
 
     selected_artifact = _select_runtime_artifact(
-        artifacts,
+        target_matched_artifacts,
         preferred_backend=preferred_backend,
         artifact_preference=artifact_preference,
     )
@@ -6196,7 +6267,11 @@ def _runtime_selection_decision(
     return RuntimeSelectionDecision(
         selected_backend=_first_or_none(backend_candidates) or preferred_backend,
         selected_artifact_id=None,
-        fallback_reason="no_validated_runtime_artifact",
+        fallback_reason=(
+            "artifact_target_mismatch"
+            if artifact_target_mismatch
+            else "no_validated_runtime_artifact"
+        ),
         blocked_reason=None,
     )
 
@@ -6216,14 +6291,60 @@ def _runtime_selection_available_backends(
     *,
     model_backend: str | None,
     runtime_artifacts: Sequence[object],
+    target_profile: str | None = None,
 ) -> list[str]:
+    artifacts = _filter_runtime_artifacts_by_target(
+        runtime_artifacts,
+        target_profile=target_profile,
+    )
     return _ordered_unique(
         [
-            *(_artifact_runtime_backend(artifact) for artifact in runtime_artifacts),
+            *(_artifact_runtime_backend(artifact) for artifact in artifacts),
             model_backend,
             "onnxruntime",
         ]
     )
+
+
+def _filter_runtime_artifacts_by_target(
+    artifacts: Sequence[object],
+    *,
+    target_profile: str | None,
+) -> list[object]:
+    if target_profile is None:
+        return list(artifacts)
+    return [
+        artifact
+        for artifact in artifacts
+        if _artifact_target_profile(artifact) == target_profile
+    ]
+
+
+def _filter_runtime_backends_by_target(
+    available_backends: Sequence[str],
+    *,
+    artifacts: Sequence[object],
+    target_matched_artifacts: Sequence[object],
+    target_profile: str | None,
+    model_backend: str | None,
+) -> list[str]:
+    if target_profile is None:
+        return list(available_backends)
+    artifact_backends = {
+        backend for artifact in artifacts if (backend := _artifact_runtime_backend(artifact))
+    }
+    matched_backends = {
+        backend
+        for artifact in target_matched_artifacts
+        if (backend := _artifact_runtime_backend(artifact))
+    }
+    return [
+        backend
+        for backend in available_backends
+        if backend == model_backend
+        or backend not in artifact_backends
+        or backend in matched_backends
+    ]
 
 
 def _select_runtime_artifact(
@@ -6271,6 +6392,10 @@ def _runtime_artifact_by_id(
 
 def _artifact_runtime_backend(artifact: object) -> str | None:
     return _string_or_none(getattr(artifact, "runtime_backend", None))
+
+
+def _artifact_target_profile(artifact: object) -> str | None:
+    return _string_or_none(getattr(artifact, "target_profile", None))
 
 
 def _artifact_uuid(artifact: object) -> UUID | None:

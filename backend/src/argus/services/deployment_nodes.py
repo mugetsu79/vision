@@ -37,11 +37,13 @@ from argus.models.enums import (
     DeploymentCredentialStatus,
     DeploymentInstallStatus,
     DeploymentNodeKind,
+    EdgeConfigurationApplyStatus,
     RoleEnum,
 )
 from argus.models.tables import (
     DeploymentCredentialEvent,
     DeploymentNode,
+    EdgeConfigurationAssignment,
     EdgeNodeHardwareReport,
     MasterBootstrapSession,
     NodePairingSession,
@@ -676,6 +678,15 @@ class DeploymentNodeService:
                 node.credential_status = DeploymentCredentialStatus.ACTIVE
                 node.updated_at = now
 
+            if node.node_kind is DeploymentNodeKind.EDGE:
+                await self._ensure_default_edge_configuration_assignment(
+                    session=session,
+                    tenant_id=effective_tenant_id,
+                    deployment_node_id=node.id,
+                    actor_subject=payload.supervisor_id,
+                    now=now,
+                )
+
             credential_material = _new_credential_material()
             credential = SupervisorNodeCredential(
                 tenant_id=effective_tenant_id,
@@ -995,6 +1006,35 @@ class DeploymentNodeService:
         )
         row = (await session.execute(statement)).scalar_one_or_none()
         return row if isinstance(row, DeploymentNode) else None
+
+    async def _ensure_default_edge_configuration_assignment(
+        self,
+        *,
+        session: AsyncSession,
+        tenant_id: UUID,
+        deployment_node_id: UUID,
+        actor_subject: str,
+        now: datetime,
+    ) -> None:
+        statement = (
+            select(EdgeConfigurationAssignment)
+            .where(EdgeConfigurationAssignment.tenant_id == tenant_id)
+            .where(EdgeConfigurationAssignment.deployment_node_id == deployment_node_id)
+        )
+        existing = (await session.execute(statement)).scalar_one_or_none()
+        if isinstance(existing, EdgeConfigurationAssignment):
+            return
+        assignment = EdgeConfigurationAssignment(
+            tenant_id=tenant_id,
+            deployment_node_id=deployment_node_id,
+            revision=1,
+            desired_config={},
+            apply_status=EdgeConfigurationApplyStatus.PENDING,
+            actor_subject=actor_subject,
+            error=None,
+        )
+        _ensure_identity_and_timestamps(assignment, now=now)
+        session.add(assignment)
 
     async def _load_node_for_service_report(
         self,

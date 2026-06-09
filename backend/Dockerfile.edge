@@ -1,14 +1,19 @@
 FROM nvcr.io/nvidia/l4t-jetpack:r36.4.0
 
-ARG JETSON_ORT_WHEEL_URL=""
-ARG JETSON_ORT_WHEEL_SHA256=""
+ARG JETSON_ORT_WHEEL_URL="https://pypi.jetson-ai-lab.io/jp6/cu126/+f/d98/0b934b9a29c1a/onnxruntime_gpu-1.24.0-cp310-cp310-linux_aarch64.whl"
+ARG JETSON_ORT_WHEEL_SHA256="d980b934b9a29c1a9d6f39751edd7662b69fadd75556a10ff363773a58ce0950"
+ARG JETSON_TORCH_WHEEL_URL="https://pypi.jetson-ai-lab.io/jp6/cu126/+f/62a/1beee9f2f1470/torch-2.8.0-cp310-cp310-linux_aarch64.whl"
+ARG JETSON_TORCH_WHEEL_SHA256="62a1beee9f2f147076a974d2942c90060c12771c94740830327cae705b2595fc"
+ARG JETSON_TORCHVISION_WHEEL_URL="https://pypi.jetson-ai-lab.io/jp6/cu126/+f/907/c4c1933789645/torchvision-0.23.0-cp310-cp310-linux_aarch64.whl"
+ARG JETSON_TORCHVISION_WHEEL_SHA256="907c4c1933789645ebb20dd9181d40f8647978e6bd30086ae7b01febb937d2d1"
 ARG ALLOW_CPU_ONNX_RUNTIME="0"
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/app/.venv \
-    PYTHONPATH=/app/src
+    PYTHONPATH=/app/src \
+    YOLO_AUTOINSTALL=false
 
 WORKDIR /app
 
@@ -29,14 +34,39 @@ RUN apt-get update \
         gstreamer1.0-rtsp \
         python3-gst-1.0 \
         libglib2.0-0 \
+        libopenblas0-pthread \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml uv.lock alembic.ini README.md requirements-edge.txt ./
 
 RUN python3 -m pip install --no-cache-dir uv \
-    && python3 -m venv "$UV_PROJECT_ENVIRONMENT" \
+    && python3 -m venv --system-site-packages "$UV_PROJECT_ENVIRONMENT" \
     && PATH="$UV_PROJECT_ENVIRONMENT/bin:$PATH" python -c "import sys; assert sys.version_info[:2] == (3, 10), sys.version" \
     && uv pip install --python "$UV_PROJECT_ENVIRONMENT/bin/python" --no-cache -r requirements-edge.txt \
+    && if [ -z "$JETSON_TORCH_WHEEL_URL" ] || [ -z "$JETSON_TORCH_WHEEL_SHA256" ] || [ -z "$JETSON_TORCHVISION_WHEEL_URL" ] || [ -z "$JETSON_TORCHVISION_WHEEL_SHA256" ]; then \
+        echo "Verified Jetson PyTorch and TorchVision wheels are required for Jetson builds." >&2; \
+        exit 1; \
+    fi \
+    && JETSON_TORCH_WHEEL_BASENAME="${JETSON_TORCH_WHEEL_URL##*/}" \
+    && JETSON_TORCH_WHEEL_BASENAME="${JETSON_TORCH_WHEEL_BASENAME%%\?*}" \
+    && JETSON_TORCH_WHEEL_BASENAME="${JETSON_TORCH_WHEEL_BASENAME%%#*}" \
+    && JETSON_TORCH_WHEEL_PATH="/tmp/$JETSON_TORCH_WHEEL_BASENAME" \
+    && case "$JETSON_TORCH_WHEEL_PATH" in *.whl) ;; *) echo "Jetson PyTorch URL must end with a .whl filename." >&2; exit 1 ;; esac \
+    && curl -fsSL "$JETSON_TORCH_WHEEL_URL" -o "$JETSON_TORCH_WHEEL_PATH" \
+    && echo "$JETSON_TORCH_WHEEL_SHA256  $JETSON_TORCH_WHEEL_PATH" | sha256sum -c - \
+    && "$UV_PROJECT_ENVIRONMENT/bin/pip" install --no-cache-dir --force-reinstall --no-deps "$JETSON_TORCH_WHEEL_PATH" \
+    && rm -f "$JETSON_TORCH_WHEEL_PATH" \
+    && JETSON_TORCHVISION_WHEEL_BASENAME="${JETSON_TORCHVISION_WHEEL_URL##*/}" \
+    && JETSON_TORCHVISION_WHEEL_BASENAME="${JETSON_TORCHVISION_WHEEL_BASENAME%%\?*}" \
+    && JETSON_TORCHVISION_WHEEL_BASENAME="${JETSON_TORCHVISION_WHEEL_BASENAME%%#*}" \
+    && JETSON_TORCHVISION_WHEEL_PATH="/tmp/$JETSON_TORCHVISION_WHEEL_BASENAME" \
+    && case "$JETSON_TORCHVISION_WHEEL_PATH" in *.whl) ;; *) echo "Jetson TorchVision URL must end with a .whl filename." >&2; exit 1 ;; esac \
+    && curl -fsSL "$JETSON_TORCHVISION_WHEEL_URL" -o "$JETSON_TORCHVISION_WHEEL_PATH" \
+    && echo "$JETSON_TORCHVISION_WHEEL_SHA256  $JETSON_TORCHVISION_WHEEL_PATH" | sha256sum -c - \
+    && "$UV_PROJECT_ENVIRONMENT/bin/pip" install --no-cache-dir --force-reinstall --no-deps "$JETSON_TORCHVISION_WHEEL_PATH" \
+    && rm -f "$JETSON_TORCHVISION_WHEEL_PATH" \
+    && "$UV_PROJECT_ENVIRONMENT/bin/pip" install --no-cache-dir --no-deps "ultralytics>=8.3" "ultralytics-thop>=2.0" \
+    && "$UV_PROJECT_ENVIRONMENT/bin/python" -c "import torch, torchvision; cuda=str(torch.version.cuda); assert cuda.startswith('12.6'), cuda; assert torch.__version__.startswith('2.8.'), torch.__version__; assert torchvision.__version__.startswith('0.23.'), torchvision.__version__" \
     && if [ -n "$JETSON_ORT_WHEEL_URL" ]; then \
         if [ -z "$JETSON_ORT_WHEEL_SHA256" ]; then \
             echo "A verified Jetson GPU ONNX Runtime wheel is required: JETSON_ORT_WHEEL_SHA256 is missing." >&2; \
@@ -58,6 +88,15 @@ RUN python3 -m pip install --no-cache-dir uv \
         echo "A verified Jetson GPU ONNX Runtime wheel is required for Jetson builds. Set ALLOW_CPU_ONNX_RUNTIME=1 only for CPU-only diagnostics." >&2; \
         exit 1; \
     fi \
+    && "$UV_PROJECT_ENVIRONMENT/bin/pip" uninstall -y \
+        tensorrt \
+        tensorrt-cu13 \
+        tensorrt-cu13-bindings \
+        tensorrt-cu13-libs \
+        tensorrt_cu13 \
+        tensorrt_cu13_bindings \
+        tensorrt_cu13_libs || true \
+    && "$UV_PROJECT_ENVIRONMENT/bin/python" -c "import importlib.metadata as metadata, importlib.util, pathlib; spec=importlib.util.find_spec('tensorrt'); assert spec and spec.origin, spec; path=pathlib.Path(spec.origin).as_posix(); version=metadata.version('tensorrt'); assert version.startswith('10.'), version; assert '/usr/lib/python3.10/dist-packages/' in path, path" \
     && groupadd --system --gid 10001 argus \
     && useradd --system --uid 10001 --gid 10001 --create-home argus \
     && chown -R argus:argus /app "$UV_PROJECT_ENVIRONMENT"

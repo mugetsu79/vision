@@ -497,14 +497,14 @@ def test_ffmpeg_rtsp_timeout_covers_worker_first_frame_wait() -> None:
     )
 
 
-def test_ffmpeg_rtsp_timeout_uses_rw_timeout_on_linux(
+def test_ffmpeg_rtsp_timeout_uses_socket_io_timeout_on_linux(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(camera_module.platform, "system", lambda: "Linux")
 
     timeout_args = camera_module._ffmpeg_rtsp_timeout_args()
 
-    assert timeout_args == ["-rw_timeout", "20000000"]
+    assert timeout_args == ["-stimeout", "20000000"]
 
 
 def test_latest_frame_capture_release_waits_for_pump_before_releasing() -> None:
@@ -607,9 +607,9 @@ def test_default_capture_factory_uses_ffmpeg_rawvideo_on_intel_macos_rtsp(
     capture.release()
     assert created_commands[0][:4] == ["ffmpeg", "-loglevel", "error", "-rtsp_transport"]
     assert "-rw_timeout" not in created_commands[0]
-    assert "-stimeout" not in created_commands[0]
-    assert "-timeout" in created_commands[0]
-    timeout_index = created_commands[0].index("-timeout")
+    assert "-timeout" not in created_commands[0]
+    assert "-stimeout" in created_commands[0]
+    timeout_index = created_commands[0].index("-stimeout")
     assert created_commands[0][timeout_index + 1] == "20000000"
     assert "-analyzeduration" in created_commands[0]
     analyze_index = created_commands[0].index("-analyzeduration")
@@ -1126,9 +1126,9 @@ def test_probe_via_ffmpeg_uses_rtsp_timeout_and_redacts_timeout_error(
     command = captured["command"]
     assert isinstance(command, list)
     assert "-rw_timeout" not in command
-    assert "-stimeout" not in command
-    assert "-timeout" in command
-    timeout_index = command.index("-timeout")
+    assert "-timeout" not in command
+    assert "-stimeout" in command
+    timeout_index = command.index("-stimeout")
     assert command[timeout_index + 1] == "20000000"
     kwargs = captured["kwargs"]
     assert isinstance(kwargs, dict)

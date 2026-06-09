@@ -981,9 +981,7 @@ def _should_use_ffmpeg_rawvideo_capture(*, source: str | int, backend: int | Non
 
 
 def _ffmpeg_rtsp_timeout_args() -> list[str]:
-    if platform.system() == "Linux":
-        return ["-rw_timeout", _FFMPEG_RTSP_TIMEOUT_US]
-    return ["-timeout", _FFMPEG_RTSP_TIMEOUT_US]
+    return ["-stimeout", _FFMPEG_RTSP_TIMEOUT_US]
 
 
 _FFMPEG_VIDEO_LINE_PATTERN = re.compile(

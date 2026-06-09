@@ -17,12 +17,14 @@ from argus.models.enums import (
     DeploymentInstallStatus,
     DeploymentNodeKind,
     DeploymentServiceManager,
+    EdgeConfigurationApplyStatus,
     RoleEnum,
     WorkerRuntimeState,
 )
 from argus.models.tables import (
     DeploymentCredentialEvent,
     DeploymentNode,
+    EdgeConfigurationAssignment,
     EdgeNode,
     EdgeNodeHardwareReport,
     MasterBootstrapSession,
@@ -559,6 +561,106 @@ async def test_pairing_session_stores_only_hash_and_claim_returns_credential_onc
                 hostname="vezor-central",
             ),
         )
+
+
+@pytest.mark.asyncio
+async def test_edge_pairing_claim_creates_default_edge_configuration_assignment() -> None:
+    tenant_id = uuid4()
+    edge_node_id = uuid4()
+    now = datetime(2026, 5, 13, 9, 15, tzinfo=UTC)
+    session_factory = _MemorySessionFactory()
+    _seed_edge_node_scope(session_factory, tenant_id=tenant_id, edge_node_id=edge_node_id)
+    service = DeploymentNodeService(session_factory, now_factory=lambda: now)
+
+    created = await service.create_pairing_session(
+        tenant_id=tenant_id,
+        payload=NodePairingSessionCreate(
+            node_kind=DeploymentNodeKind.EDGE,
+            edge_node_id=edge_node_id,
+            hostname="orin-nano-01",
+            requested_ttl_seconds=300,
+        ),
+        actor_subject="admin-1",
+    )
+    claimed = await service.claim_pairing_session(
+        tenant_id=tenant_id,
+        session_id=created.id,
+        payload=NodePairingClaim(
+            pairing_code=created.pairing_code,
+            supervisor_id="edge-orin-1",
+            hostname="orin-nano-01",
+        ),
+    )
+
+    assignments = [
+        row
+        for row in service.session_factory.session.rows
+        if isinstance(row, EdgeConfigurationAssignment)
+    ]
+    assert len(assignments) == 1
+    assert assignments[0].tenant_id == tenant_id
+    assert assignments[0].deployment_node_id == claimed.node.id
+    assert assignments[0].desired_config == {}
+    assert assignments[0].revision == 1
+    assert assignments[0].apply_status is EdgeConfigurationApplyStatus.PENDING
+    assert assignments[0].actor_subject == "edge-orin-1"
+
+
+@pytest.mark.asyncio
+async def test_edge_pairing_claim_reuses_existing_edge_configuration_assignment() -> None:
+    tenant_id = uuid4()
+    edge_node_id = uuid4()
+    now = datetime(2026, 5, 13, 9, 15, tzinfo=UTC)
+    session_factory = _MemorySessionFactory()
+    _seed_edge_node_scope(session_factory, tenant_id=tenant_id, edge_node_id=edge_node_id)
+    service = DeploymentNodeService(session_factory, now_factory=lambda: now)
+
+    first = await service.create_pairing_session(
+        tenant_id=tenant_id,
+        payload=NodePairingSessionCreate(
+            node_kind=DeploymentNodeKind.EDGE,
+            edge_node_id=edge_node_id,
+            hostname="orin-nano-01",
+            requested_ttl_seconds=300,
+        ),
+        actor_subject="admin-1",
+    )
+    await service.claim_pairing_session(
+        tenant_id=tenant_id,
+        session_id=first.id,
+        payload=NodePairingClaim(
+            pairing_code=first.pairing_code,
+            supervisor_id="edge-orin-1",
+            hostname="orin-nano-01",
+        ),
+    )
+    second = await service.create_pairing_session(
+        tenant_id=tenant_id,
+        payload=NodePairingSessionCreate(
+            node_kind=DeploymentNodeKind.EDGE,
+            edge_node_id=edge_node_id,
+            hostname="orin-nano-01",
+            requested_ttl_seconds=300,
+        ),
+        actor_subject="admin-1",
+    )
+
+    await service.claim_pairing_session(
+        tenant_id=tenant_id,
+        session_id=second.id,
+        payload=NodePairingClaim(
+            pairing_code=second.pairing_code,
+            supervisor_id="edge-orin-1",
+            hostname="orin-nano-01",
+        ),
+    )
+
+    assignments = [
+        row
+        for row in service.session_factory.session.rows
+        if isinstance(row, EdgeConfigurationAssignment)
+    ]
+    assert len(assignments) == 1
 
 
 @pytest.mark.asyncio

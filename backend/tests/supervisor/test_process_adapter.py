@@ -173,6 +173,23 @@ async def test_start_reports_error_when_subprocess_creation_fails() -> None:
     assert result.last_error == "no python"
 
 
+@pytest.mark.asyncio
+async def test_start_reports_error_when_worker_exits_during_startup_probe() -> None:
+    camera_id = uuid4()
+    process = _FakeProcess()
+    process.returncode = 2
+    adapter = LocalWorkerProcessAdapter(
+        WorkerLaunchConfig(base_env={}, startup_probe_seconds=0),
+        subprocess_exec=_exec_factory(process),
+    )
+
+    result = await adapter.start(camera_id)
+
+    assert result.runtime_state == "error"
+    assert result.last_error == "Worker exited during startup with code 2."
+    assert not adapter.is_running(camera_id)
+
+
 class _FakeProcess:
     def __init__(self) -> None:
         self.returncode: int | None = None

@@ -443,6 +443,16 @@ function deriveDeliverySignal(
     return { health: "healthy", label: "Native stream available" };
   }
   if (nativeStatus?.available === false) {
+    if (
+      nativeStatus.reason === "privacy_filtering_required" &&
+      defaultProfile !== "native"
+    ) {
+      return {
+        health: "healthy",
+        label: "Privacy-safe delivery selected",
+        detail: formatReason(nativeStatus.reason),
+      };
+    }
     return {
       health: defaultProfile === "native" ? "danger" : "attention",
       label: "Direct stream unavailable",

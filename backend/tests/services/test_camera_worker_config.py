@@ -36,6 +36,7 @@ from argus.models.tables import (
     Camera,
     DeploymentNode,
     DetectionRule,
+    EdgeNodeHardwareReport,
     Model,
     ModelRuntimeArtifact,
     PrivacyManifestSnapshot,
@@ -193,6 +194,10 @@ class _WorkerConfigSession:
             artifacts = self.state["artifacts"]
             assert isinstance(artifacts, list)
             return _Result(artifacts)
+        if "edge_node_hardware_reports" in str(statement):
+            hardware_reports = self.state["hardware_reports"]
+            assert isinstance(hardware_reports, list)
+            return _Result(hardware_reports)
         if "privacy_manifest_snapshots" in str(statement):
             snapshots = self.state["privacy_manifest_snapshots"]
             assert isinstance(snapshots, list)
@@ -274,6 +279,7 @@ class _WorkerConfigSessionFactory:
         tenant: Tenant | None = None,
         detection_rules: list[DetectionRule] | None = None,
         deployment_node: DeploymentNode | None = None,
+        hardware_reports: list[EdgeNodeHardwareReport] | None = None,
     ) -> None:
         self.state: dict[str, object] = {
             "camera": camera,
@@ -285,6 +291,7 @@ class _WorkerConfigSessionFactory:
             "tenant": tenant,
             "detection_rules": detection_rules or [],
             "deployment_node": deployment_node,
+            "hardware_reports": hardware_reports or [],
         }
 
     def __call__(self) -> _WorkerConfigSession:
@@ -430,6 +437,34 @@ def _deployment_node(tenant_id, edge_node_id, node_id):  # noqa: ANN001
         edge_node_id=edge_node_id,
         supervisor_id="edge-kit-1",
         node_kind=DeploymentNodeKind.EDGE,
+    )
+
+
+def _hardware_report(
+    tenant_id,
+    *,
+    edge_node_id=None,
+    host_profile: str = "linux-aarch64",
+    supervisor_id: str = "central",
+) -> EdgeNodeHardwareReport:
+    now = datetime.now(tz=UTC)
+    return EdgeNodeHardwareReport(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        edge_node_id=edge_node_id,
+        supervisor_id=supervisor_id,
+        reported_at=now,
+        host_profile=host_profile,
+        os_name="Linux",
+        machine_arch="aarch64",
+        cpu_model="test cpu",
+        cpu_cores=8,
+        memory_total_mb=8192,
+        accelerators=[],
+        provider_capabilities={},
+        observed_performance=[],
+        thermal_state=None,
+        report_hash="h" * 64,
     )
 
 
@@ -1518,6 +1553,47 @@ async def test_worker_config_blocks_runtime_selection_without_fallback_artifact(
     assert exc_info.value.detail == (
         "Runtime selection has no compatible artifact and fallback is disabled."
     )
+
+
+@pytest.mark.asyncio
+async def test_central_worker_config_does_not_select_edge_tensorrt_artifact() -> None:
+    settings = _settings()
+    tenant_id = uuid4()
+    model = _model(uuid4())
+    camera = _camera(
+        primary_model_id=model.id,
+        active_classes=["person"],
+        rtsp_url_encrypted=_encrypted_rtsp_url(settings),
+    )
+    session_factory = _WorkerConfigSessionFactory(
+        camera=camera,
+        models={model.id: model},
+        artifacts=[_runtime_artifact(model_id=model.id)],
+        tenant=_tenant(tenant_id),
+        hardware_reports=[
+            _hardware_report(
+                tenant_id,
+                edge_node_id=None,
+                host_profile="linux-aarch64",
+                supervisor_id="vezor-master",
+            )
+        ],
+    )
+    service = CameraService(
+        session_factory=session_factory,
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+        configuration_service=_FakeOperatorConfigurationService(),
+    )
+
+    config = await service.get_worker_config(_tenant_context(tenant_id), camera.id)
+
+    assert config.configuration.runtime_selection.selected_backend == "onnxruntime"
+    assert config.configuration.runtime_selection.selected_artifact_id is None
+    assert config.configuration.runtime_selection.fallback_reason == "artifact_target_mismatch"
+    snapshot = session_factory.state["runtime_passport_snapshots"][0]
+    assert snapshot.passport["selected_runtime"]["runtime_artifact_id"] is None
+    assert snapshot.passport["selected_runtime"]["target_profile"] is None
 
 
 @pytest.mark.asyncio

@@ -3,6 +3,7 @@ from pathlib import Path
 
 EDGE_DOCKERFILE_PATH = Path(__file__).resolve().parents[2] / "Dockerfile.edge"
 BACKEND_ROOT = EDGE_DOCKERFILE_PATH.parent
+EDGE_REQUIREMENTS_PATH = BACKEND_ROOT / "requirements-edge.txt"
 ARGUS_SOURCE_ROOT = BACKEND_ROOT / "src" / "argus"
 PYTHON_310_ASSERTION = (
     'python -c "import sys; assert sys.version_info[:2] == (3, 10), sys.version"'
@@ -13,16 +14,35 @@ JETSON_ORT_INSTALL_COMMAND = (
 CPU_ORT_INSTALL_COMMAND = (
     '"$UV_PROJECT_ENVIRONMENT/bin/pip" install --no-cache-dir "onnxruntime>=1.20"'
 )
+JETSON_TORCH_INSTALL_COMMAND = (
+    '"$UV_PROJECT_ENVIRONMENT/bin/pip" install --no-cache-dir '
+    '--force-reinstall --no-deps "$JETSON_TORCH_WHEEL_PATH"'
+)
+JETSON_TORCHVISION_INSTALL_COMMAND = (
+    '"$UV_PROJECT_ENVIRONMENT/bin/pip" install --no-cache-dir '
+    '--force-reinstall --no-deps "$JETSON_TORCHVISION_WHEEL_PATH"'
+)
 
 
 def test_edge_dockerfile_uses_system_python_310_virtualenv() -> None:
     dockerfile = EDGE_DOCKERFILE_PATH.read_text(encoding="utf-8")
 
-    assert 'python3 -m venv "$UV_PROJECT_ENVIRONMENT"' in dockerfile
+    assert 'python3 -m venv --system-site-packages "$UV_PROJECT_ENVIRONMENT"' in dockerfile
     assert PYTHON_310_ASSERTION in dockerfile
     assert "uv python install 3.12" not in dockerfile
     assert "--managed-python" not in dockerfile
     assert 'chown -R argus:argus /app "$UV_PROJECT_ENVIRONMENT"' in dockerfile
+
+
+def test_edge_dockerfile_uses_jetpack_tensorrt_bindings_without_runtime_autoinstall() -> None:
+    dockerfile = EDGE_DOCKERFILE_PATH.read_text(encoding="utf-8")
+
+    assert 'python3 -m venv --system-site-packages "$UV_PROJECT_ENVIRONMENT"' in dockerfile
+    assert "YOLO_AUTOINSTALL=false" in dockerfile
+    assert '"$UV_PROJECT_ENVIRONMENT/bin/pip" uninstall -y' in dockerfile
+    assert "tensorrt-cu13" in dockerfile
+    assert "importlib.util.find_spec('tensorrt')" in dockerfile
+    assert "metadata.version('tensorrt')" in dockerfile
 
 
 def test_edge_dockerfile_installs_jetson_onnxruntime_wheel_after_base_deps() -> None:
@@ -43,7 +63,7 @@ def test_edge_dockerfile_installs_jetson_onnxruntime_wheel_after_base_deps() -> 
 def test_edge_dockerfile_verifies_gpu_ort_wheel_digest_and_probes_providers() -> None:
     dockerfile = EDGE_DOCKERFILE_PATH.read_text(encoding="utf-8")
 
-    assert 'ARG JETSON_ORT_WHEEL_SHA256=""' in dockerfile
+    assert 'ARG JETSON_ORT_WHEEL_SHA256="' in dockerfile
     assert 'JETSON_ORT_WHEEL_BASENAME="${JETSON_ORT_WHEEL_URL##*/}"' in dockerfile
     assert 'JETSON_ORT_WHEEL_PATH="/tmp/$JETSON_ORT_WHEEL_BASENAME"' in dockerfile
     assert 'case "$JETSON_ORT_WHEEL_PATH" in' in dockerfile
@@ -52,6 +72,49 @@ def test_edge_dockerfile_verifies_gpu_ort_wheel_digest_and_probes_providers() ->
     assert "import onnxruntime as ort" in dockerfile
     assert "ort.get_available_providers()" in dockerfile
     assert "A verified Jetson GPU ONNX Runtime wheel is required" in dockerfile
+
+
+def test_edge_dockerfile_defaults_to_verified_jetson_gpu_runtime_wheels() -> None:
+    dockerfile = EDGE_DOCKERFILE_PATH.read_text(encoding="utf-8")
+
+    assert 'ARG JETSON_ORT_WHEEL_URL="https://pypi.jetson-ai-lab.io/jp6/cu126/' in dockerfile
+    assert 'ARG JETSON_ORT_WHEEL_SHA256="d980b934b9a29c1a9d6f39751edd7662b69fadd75556a10ff363773a58ce0950"' in dockerfile
+    assert 'ARG JETSON_TORCH_WHEEL_URL="https://pypi.jetson-ai-lab.io/jp6/cu126/' in dockerfile
+    assert 'ARG JETSON_TORCH_WHEEL_SHA256="62a1beee9f2f147076a974d2942c90060c12771c94740830327cae705b2595fc"' in dockerfile
+    assert 'ARG JETSON_TORCHVISION_WHEEL_URL="https://pypi.jetson-ai-lab.io/jp6/cu126/' in dockerfile
+    assert 'ARG JETSON_TORCHVISION_WHEEL_SHA256="907c4c1933789645ebb20dd9181d40f8647978e6bd30086ae7b01febb937d2d1"' in dockerfile
+
+
+def test_edge_dockerfile_installs_verified_jetson_torch_stack_without_pypi_resolution() -> None:
+    dockerfile = EDGE_DOCKERFILE_PATH.read_text(encoding="utf-8")
+
+    assert 'ARG JETSON_TORCH_WHEEL_URL="' in dockerfile
+    assert 'ARG JETSON_TORCH_WHEEL_SHA256="' in dockerfile
+    assert 'ARG JETSON_TORCHVISION_WHEEL_URL="' in dockerfile
+    assert 'ARG JETSON_TORCHVISION_WHEEL_SHA256="' in dockerfile
+    assert 'JETSON_TORCH_WHEEL_BASENAME="${JETSON_TORCH_WHEEL_URL##*/}"' in dockerfile
+    assert 'JETSON_TORCHVISION_WHEEL_BASENAME="${JETSON_TORCHVISION_WHEEL_URL##*/}"' in dockerfile
+    assert JETSON_TORCH_INSTALL_COMMAND in dockerfile
+    assert JETSON_TORCHVISION_INSTALL_COMMAND in dockerfile
+    assert 'pip" install --no-cache-dir --no-deps "ultralytics>=8.3"' in dockerfile
+    assert "import torch, torchvision" in dockerfile
+    assert "torch.version.cuda" in dockerfile
+    assert "startswith('12.6')" in dockerfile
+
+
+def test_edge_requirements_do_not_let_ultralytics_resolve_generic_torch_wheels() -> None:
+    requirements = EDGE_REQUIREMENTS_PATH.read_text(encoding="utf-8")
+
+    assert "ultralytics" not in requirements
+    assert "torch" not in requirements
+    assert "torchvision" not in requirements
+
+
+def test_edge_requirements_include_pytorch_runtime_dependencies_without_torch_wheels() -> None:
+    requirements = EDGE_REQUIREMENTS_PATH.read_text(encoding="utf-8")
+
+    assert "sympy>=" in requirements
+    assert "networkx>=" in requirements
 
 
 def test_edge_dockerfile_installs_dependencies_before_source_copy() -> None:
@@ -72,6 +135,12 @@ def test_edge_dockerfile_installs_gstreamer_rtsp_sink_plugin() -> None:
     dockerfile = EDGE_DOCKERFILE_PATH.read_text(encoding="utf-8")
 
     assert "gstreamer1.0-rtsp" in dockerfile
+
+
+def test_edge_dockerfile_installs_native_libraries_required_by_jetson_torch() -> None:
+    dockerfile = EDGE_DOCKERFILE_PATH.read_text(encoding="utf-8")
+
+    assert "libopenblas0-pthread" in dockerfile
 
 
 def test_edge_dockerfile_smoke_tests_python_stdlib_before_runtime() -> None:

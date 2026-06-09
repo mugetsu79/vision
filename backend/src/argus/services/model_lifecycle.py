@@ -545,15 +545,15 @@ class ModelLifecycleService:
         deployment_node_id: UUID,
     ) -> DeploymentModelInventoryReport:
         async with self.session_factory() as session:
-            await _load_deployment_node(
+            node = await _load_deployment_node_or_edge_node(
                 session=session,
                 tenant_id=tenant_id,
-                deployment_node_id=deployment_node_id,
+                node_id=deployment_node_id,
             )
             inventory_rows = await _load_inventory_rows(
                 session=session,
                 tenant_id=tenant_id,
-                deployment_node_id=deployment_node_id,
+                deployment_node_id=node.id,
             )
         return DeploymentModelInventoryReport(
             items=[
@@ -1996,6 +1996,27 @@ async def _load_deployment_node(
     if not isinstance(node, DeploymentNode) or node.tenant_id != tenant_id:
         raise ValueError("Deployment node not found.")
     return node
+
+
+async def _load_deployment_node_or_edge_node(
+    *,
+    session: AsyncSession,
+    tenant_id: UUID,
+    node_id: UUID,
+) -> DeploymentNode:
+    node = await session.get(DeploymentNode, node_id)
+    if isinstance(node, DeploymentNode) and node.tenant_id == tenant_id:
+        return node
+
+    statement = (
+        select(DeploymentNode)
+        .where(DeploymentNode.tenant_id == tenant_id)
+        .where(DeploymentNode.edge_node_id == node_id)
+    )
+    row = (await session.execute(statement)).scalars().first()
+    if not isinstance(row, DeploymentNode) or row.tenant_id != tenant_id:
+        raise ValueError("Deployment node not found.")
+    return row
 
 
 async def _load_deployment_node_by_supervisor(

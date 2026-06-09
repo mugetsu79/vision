@@ -28,6 +28,31 @@ def test_no_fallback_blocks_when_selected_backend_unavailable() -> None:
     )
 
 
+def test_runtime_selection_filters_artifacts_by_target_profile() -> None:
+    artifact_id = uuid4()
+
+    decision = app_service._runtime_selection_decision(
+        preferred_backend=None,
+        artifact_preference="tensorrt_first",
+        fallback_allowed=True,
+        available_artifacts=[
+            SimpleNamespace(
+                id=artifact_id,
+                runtime_backend="tensorrt_engine",
+                target_profile="linux-aarch64-nvidia-jetson",
+            )
+        ],
+        available_backends=["tensorrt_engine", "onnxruntime"],
+        model_backend="onnxruntime",
+        target_profile="linux-aarch64",
+    )
+
+    assert decision.selected_backend == "onnxruntime"
+    assert decision.selected_artifact_id is None
+    assert decision.fallback_reason == "artifact_target_mismatch"
+    assert decision.blocked_reason is None
+
+
 def test_runtime_passport_records_selected_artifact_and_fallback_reason() -> None:
     artifact_id = str(uuid4())
     fallback_reason = "TensorRT artifact unavailable"

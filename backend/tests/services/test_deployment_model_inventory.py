@@ -115,6 +115,30 @@ async def test_inventory_report_upserts_node_assets() -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_model_inventory_accepts_edge_node_id_from_fleet_payload() -> None:
+    tenant, model, node = _tenant_model_and_node()
+    reported_at = datetime(2026, 6, 8, 9, 0, tzinfo=UTC)
+    session_factory = _MemorySessionFactory([tenant, model, node])
+    service = ModelLifecycleService(session_factory=session_factory)
+
+    await service.record_model_inventory(
+        tenant_id=tenant.id,
+        supervisor_id=node.supervisor_id,
+        authenticated_node_id=node.id,
+        payload=DeploymentModelInventoryReport(
+            items=[_inventory_item(model, reported_at=reported_at)]
+        ),
+    )
+
+    report = await service.list_model_inventory(
+        tenant_id=tenant.id,
+        deployment_node_id=node.edge_node_id,
+    )
+
+    assert [item.asset_id for item in report.items] == [model.id]
+
+
+@pytest.mark.asyncio
 async def test_inventory_report_handles_unique_conflict_idempotently() -> None:
     tenant, model, node = _tenant_model_and_node()
     reported_at = datetime(2026, 6, 8, 9, 0, tzinfo=UTC)
@@ -449,6 +473,8 @@ def _filter_statement_rows(rows: list[object], params: dict[str, object]) -> lis
             rows = [row for row in rows if getattr(row, "id", None) == value]
         elif key.startswith("deployment_node_id"):
             rows = [row for row in rows if getattr(row, "deployment_node_id", None) == value]
+        elif key.startswith("edge_node_id"):
+            rows = [row for row in rows if getattr(row, "edge_node_id", None) == value]
         elif key.startswith("model_id"):
             rows = [row for row in rows if getattr(row, "model_id", None) == value]
         elif key.startswith("supervisor_id"):

@@ -307,7 +307,7 @@ describe("operational health", () => {
     });
   });
 
-  test("does not treat optional rules zones or all-class filters as missing setup", () => {
+  test("treats privacy-required processed delivery as ready when the worker is live", () => {
     const officeCamera = createCamera({
       id: "camera-4",
       name: "Office",
@@ -317,7 +317,7 @@ describe("operational health", () => {
       browser_delivery: {
         default_profile: "720p10",
         allow_native_on_demand: true,
-        profiles: [],
+        profiles: [{ id: "720p10", kind: "transcode" }],
         unsupported_profiles: [],
         native_status: { available: false, reason: "privacy_filtering_required" },
       },
@@ -350,7 +350,7 @@ describe("operational health", () => {
           assigned_node_id: null,
           source_capability: { width: 1280, height: 720, fps: 20, codec: "h264" },
           default_profile: "720p10",
-          available_profiles: [],
+          available_profiles: [{ id: "720p10", kind: "transcode" }],
           native_status: { available: false, reason: "privacy_filtering_required" },
           selected_stream_mode: "transcode",
         },
@@ -372,11 +372,11 @@ describe("operational health", () => {
     });
 
     expect(rows[0]).toMatchObject({
-      readiness: { health: "attention", label: "Needs attention" },
+      readiness: { health: "healthy", label: "Ready" },
       worker: { health: "healthy", label: "Worker running" },
       delivery: {
-        health: "attention",
-        label: "Direct stream unavailable",
+        health: "healthy",
+        label: "Privacy-safe delivery selected",
         detail: "privacy filtering required",
       },
       liveRendition: {
@@ -384,8 +384,8 @@ describe("operational health", () => {
         label: "720p / 10 fps",
         detail: "transcode stream",
       },
-      actionHref: "/settings",
-      actionLabel: "Inspect delivery",
+      actionHref: "/live",
+      actionLabel: "Open live",
     });
   });
 
