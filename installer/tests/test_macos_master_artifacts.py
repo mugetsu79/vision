@@ -100,6 +100,7 @@ def test_macos_installer_validates_target_and_dependencies() -> None:
     assert "VEZOR_PUBLIC_OIDC_AUTHORITY=$PUBLIC_OIDC_AUTHORITY" in script
     assert "${PUBLIC_URL%:*}" not in script
     assert "VEZOR_OIDC_CLIENT_ID=argus-frontend" in script
+    assert "VEZOR_LINK_REFLECTOR_ENABLED=true" in script
     assert "VEZOR_LINK_REFLECTOR_SECRET_FILE=$CONFIG_DIR/secrets/link_reflector_secret" in script
     assert "  /run/vezor" not in script
     assert 'chmod 0644 "$MASTER_ENV"' in script

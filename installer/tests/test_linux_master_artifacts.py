@@ -263,6 +263,7 @@ def test_linux_master_install_script_exposes_safe_install_options() -> None:
     assert "VEZOR_CREDENTIALS_HOST_DIR=$DATA_DIR/credentials" in script
     assert "check_udp_port_available" in script
     assert "for port in 8189 8622" in script
+    assert "VEZOR_LINK_REFLECTOR_ENABLED=true" in script
     assert "VEZOR_LINK_REFLECTOR_SECRET_FILE=$CONFIG_DIR/secrets/link_reflector_secret" in script
     assert "VEZOR_PUBLIC_KEYCLOAK_URL=" in script
     assert "VEZOR_PUBLIC_OIDC_AUTHORITY=$PUBLIC_OIDC_AUTHORITY" in script
