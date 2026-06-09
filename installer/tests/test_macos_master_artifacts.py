@@ -80,7 +80,16 @@ def test_macos_installer_validates_target_and_dependencies() -> None:
     assert "$CONFIG_DIR/secrets/postgres_password" in script
     assert "$CONFIG_DIR/secrets/backend_db_url" in script
     assert "$CONFIG_DIR/secrets/link_reflector_secret" in script
+    assert "$CONFIG_DIR/secrets/central_supervisor_credential" in script
     assert "write_backend_db_url_secret" in script
+    assert (
+        'write_prefixed_secret_if_missing "$CONFIG_DIR/secrets/central_supervisor_credential" '
+        '"vzcred_"'
+    ) in script
+    assert (
+        'run install -m 0640 "$CONFIG_DIR/secrets/central_supervisor_credential" '
+        '"$DATA_DIR/credentials/supervisor.credential"'
+    ) in script
     assert "$CONFIG_DIR/nats/nats.conf" in script
     assert "$CONFIG_DIR/mediamtx/mediamtx.yml" in script
     assert "$DATA_DIR/credentials" in script
@@ -104,6 +113,10 @@ def test_macos_installer_makes_secrets_readable_by_docker_desktop() -> None:
     assert 'chgrp staff "$path"' in script
     assert 'chmod 0640 "$path"' in script
     assert 'prepare_secret_for_docker_desktop "$path"' in script
+    assert (
+        'prepare_secret_for_docker_desktop '
+        '"$CONFIG_DIR/secrets/central_supervisor_credential"'
+    ) in script
 
 
 def test_macos_installer_makes_bound_config_files_readable_by_docker_desktop() -> None:

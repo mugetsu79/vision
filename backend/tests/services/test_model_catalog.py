@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
 from uuid import uuid4
+
+import pytest
 
 from argus.models.enums import DetectorCapability, ModelFormat, ModelTask
 from argus.models.tables import Model
@@ -58,3 +61,19 @@ def test_catalog_status_matches_registered_model_by_catalog_id(tmp_path) -> None
     assert yolo26n.registered_model_id == registered_model.id
     assert yolo26n.artifact_exists is True
     assert yolo26n.registration_state == "registered"
+
+
+def test_catalog_status_resolves_installed_model_mount_for_bundled_path_hint(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    mounted_models = tmp_path / "models-mount"
+    mounted_models.mkdir()
+    (mounted_models / "yolo26n.onnx").write_bytes(b"fake")
+    monkeypatch.setenv("ARGUS_MODEL_CATALOG_MOUNT_DIR", str(mounted_models))
+
+    status = resolve_catalog_status([])
+    yolo26n = next(entry for entry in status if entry.id == "yolo26n-coco-onnx")
+
+    assert yolo26n.artifact_exists is True
+    assert yolo26n.registration_state == "unregistered"

@@ -57,7 +57,11 @@ from argus.models.tables import (
     RuntimeArtifactBuildJob,
     SupervisorModelJobEvent,
 )
-from argus.services.model_catalog import ModelCatalogEntry, get_model_catalog_entry
+from argus.services.model_catalog import (
+    ModelCatalogEntry,
+    get_model_catalog_entry,
+    resolve_catalog_artifact_path,
+)
 from argus.services.runtime_artifacts import create_runtime_artifacts_for_model_in_session
 from argus.vision.vocabulary import hash_vocabulary, normalize_vocabulary_terms
 
@@ -304,13 +308,19 @@ class ModelLifecycleService:
         catalog_id: str,
     ) -> ModelImportJobResponse:
         entry = _find_catalog_entry(catalog_id)
+        artifact_path = str(resolve_catalog_artifact_path(entry.path_hint))
+        declared_classes: list[str] | None
+        if entry.capability is DetectorCapability.FIXED_VOCAB and not entry.classes:
+            declared_classes = None
+        else:
+            declared_classes = list(entry.classes)
         capability_config = entry.capability_config.model_copy()
         return await self._register_file_import(
             tenant_id=tenant_id,
             actor_subject=actor_subject,
             source=ModelImportSource.CATALOG,
-            source_uri=entry.path_hint,
-            target_path=entry.path_hint,
+            source_uri=artifact_path,
+            target_path=artifact_path,
             expected_sha256=None,
             name=entry.name,
             version=entry.version,
@@ -319,7 +329,7 @@ class ModelLifecycleService:
             capability=entry.capability,
             capability_config=capability_config,
             input_shape=entry.input_shape,
-            classes=list(entry.classes),
+            classes=declared_classes,
             license=entry.license,
             catalog_id=entry.id,
         )
@@ -643,10 +653,11 @@ class ModelLifecycleService:
                 actor_subject=actor_subject,
                 error=None,
             )
+            session.add(job)
+            await session.flush()
             assignment.status = DeploymentModelAssignmentStatus.SYNCING
             assignment.last_sync_job_id = job.id
             assignment.error = None
-            session.add(job)
             await session.commit()
             await session.refresh(job)
             await session.refresh(assignment)
@@ -1126,7 +1137,7 @@ class ModelLifecycleService:
         capability: DetectorCapability,
         capability_config: ModelCapabilityConfig,
         input_shape: dict[str, int],
-        classes: list[str],
+        classes: list[str] | None,
         license: str | None,
         catalog_id: str | None,
     ) -> ModelImportJobResponse:
@@ -1220,7 +1231,7 @@ class ModelLifecycleService:
                 capability=capability,
                 path=target_path,
                 format=format,
-                classes=list(classes),
+                classes=None if classes is None else list(classes),
                 capability_config=config_data,
             )
         except HTTPException as exc:

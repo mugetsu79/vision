@@ -68,6 +68,13 @@ The backend may render or validate these artifacts, but it must not install,
 start, or shell into a node. Installation is a bootstrap responsibility; daily
 operation is UI intent plus node-local supervisor reconciliation.
 
+For installed master appliances, the installer generates a central supervisor
+credential, stores the backend-facing secret under
+`/etc/vezor/secrets/central_supervisor_credential`, and mirrors the local
+supervisor copy into `/var/lib/vezor/credentials/supervisor.credential`.
+First-run registers the credential hash against the central deployment node, so
+normal central worker lifecycle does not require pasted bearer tokens.
+
 For step-by-step installation, first-run, pairing, reboot validation, support
 bundle, upgrade, and uninstall instructions, use
 `docs/product-installer-and-first-run-guide.md`.

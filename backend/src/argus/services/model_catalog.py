@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -135,7 +136,9 @@ def resolve_catalog_status(models: list[Model]) -> list[ModelCatalogEntryRespons
     responses: list[ModelCatalogEntryResponse] = []
     for entry in list_model_catalog_entries():
         registered = registered_by_catalog_id.get(entry.id)
-        artifact_path = Path(registered.path if registered is not None else entry.path_hint)
+        artifact_path = resolve_catalog_artifact_path(
+            registered.path if registered is not None else entry.path_hint
+        )
         readiness = entry.capability_config.readiness or "ready"
         if readiness == "planned":
             state = ModelCatalogRegistrationState.PLANNED
@@ -165,6 +168,20 @@ def resolve_catalog_status(models: list[Model]) -> list[ModelCatalogEntryRespons
             )
         )
     return responses
+
+
+def resolve_catalog_artifact_path(path_hint: str) -> Path:
+    path = Path(path_hint)
+    if path.exists():
+        return path
+    if path.is_absolute() or len(path.parts) < 2 or path.parts[0] != "models":
+        return path
+
+    mounted_root = Path(os.getenv("ARGUS_MODEL_CATALOG_MOUNT_DIR", "/models"))
+    mounted_path = mounted_root.joinpath(*path.parts[1:])
+    if mounted_path.exists():
+        return mounted_path
+    return path
 
 
 def _fixed(

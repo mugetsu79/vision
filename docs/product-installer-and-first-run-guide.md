@@ -564,6 +564,13 @@ The installer creates `/etc/vezor/master.json`, `/etc/vezor/supervisor.json`,
 `/etc/vezor/master.env`, generated secret files, NATS config, and MediaMTX
 config, then starts `vezor-master.service`.
 
+The master installer also creates a generated central supervisor credential in
+`/etc/vezor/secrets/central_supervisor_credential` and mirrors it into
+`/var/lib/vezor/credentials/supervisor.credential`. First-run registers only
+the hashed credential for the central deployment node, so the installed central
+supervisor can poll lifecycle requests and report runtime state without an
+operator pasting a bearer token.
+
 Validate:
 
 ```bash
@@ -1805,12 +1812,14 @@ starting.
 
 ### Supervisor is unhealthy before first-run pairing
 
-Before first-run completes, the installed supervisor may not have a node
-credential yet. It should stay alive and report healthy while waiting for the
-credential store to be populated by first-run/pairing. If the health log says
-`unrecognized arguments: --healthcheck` or the supervisor restarts because
-`Supervisor API bearer token is not configured`, pull the latest source ref or
-`main` and rerun the installer.
+Before first-run completes, the installed supervisor has local credential
+material but the backend may not have registered its hash yet. It should stay
+alive and report healthy while waiting for first-run to bind that credential to
+the central deployment node. If the health log says
+`unrecognized arguments: --healthcheck`, `Supervisor API bearer token is not
+configured`, or `Invalid supervisor credential` after first-run, pull the latest
+source ref or `main`, rerun the installer, and confirm the central supervisor id
+in `/etc/vezor/supervisor.json` matches the central deployment node.
 
 ### The Jetson says the TensorRT engine is invalid
 

@@ -26,6 +26,7 @@ class Settings(BaseSettings):
 
     api_base_url: str = "http://localhost:8000"
     api_bearer_token: SecretStr | None = None
+    central_supervisor_credential: SecretStr | None = None
     cors_allowed_origins: tuple[str, ...] = (
         "http://localhost:3000",
         "http://127.0.0.1:3000",

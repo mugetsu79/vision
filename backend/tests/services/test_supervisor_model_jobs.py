@@ -73,6 +73,28 @@ async def test_create_model_sync_job_for_assigned_model_sets_assignment_syncing(
 
 
 @pytest.mark.asyncio
+async def test_create_model_sync_job_flushes_job_before_assignment_fk_update() -> None:
+    tenant, model, node = _tenant_model_and_node()
+    session_factory = _ForeignKeyCheckingSessionFactory([tenant, model, node])
+    service = ModelLifecycleService(session_factory=session_factory)
+    assignment = await service.assign_model_to_node(
+        tenant_id=tenant.id,
+        deployment_node_id=node.id,
+        payload=DeploymentModelAssignmentCreate(model_id=model.id),
+        actor_subject="admin@example.test",
+    )
+
+    job = await service.create_model_sync_job(
+        tenant_id=tenant.id,
+        deployment_node_id=node.id,
+        actor_subject="admin@example.test",
+    )
+
+    assignment_row = _row(session_factory, DeploymentModelAssignment, assignment.id)
+    assert assignment_row.last_sync_job_id == job.id
+
+
+@pytest.mark.asyncio
 async def test_model_sync_job_uses_configured_model_store_path_without_assignment_path() -> None:
     tenant, model, node = _tenant_model_and_node()
     session_factory = _MemorySessionFactory([tenant, model, node])
@@ -484,6 +506,11 @@ class _MemorySessionFactory:
         return _MemorySession(self)
 
 
+class _ForeignKeyCheckingSessionFactory(_MemorySessionFactory):
+    def __call__(self) -> _ForeignKeyCheckingSession:
+        return _ForeignKeyCheckingSession(self)
+
+
 class _MemorySession:
     def __init__(self, session_factory: _MemorySessionFactory) -> None:
         self.session_factory = session_factory
@@ -499,6 +526,9 @@ class _MemorySession:
         self.session_factory.rows.append(row)
 
     async def commit(self) -> None:
+        return None
+
+    async def flush(self) -> None:
         return None
 
     async def refresh(self, row: object) -> None:
@@ -526,6 +556,31 @@ class _MemorySession:
         rows = _filter_statement_rows(rows, statement.compile().params)
         rows = _apply_statement_limit(rows, statement)
         return _Result(rows)
+
+
+class _ForeignKeyCheckingSession(_MemorySession):
+    def __init__(self, session_factory: _MemorySessionFactory) -> None:
+        super().__init__(session_factory)
+        self._pending_sync_job_ids: set[UUID] = set()
+
+    def add(self, row: object) -> None:
+        super().add(row)
+        if isinstance(row, DeploymentModelSyncJob):
+            self._pending_sync_job_ids.add(row.id)
+
+    async def commit(self) -> None:
+        await self.flush()
+
+    async def flush(self) -> None:
+        if any(
+            isinstance(row, DeploymentModelAssignment)
+            and row.last_sync_job_id in self._pending_sync_job_ids
+            for row in self.session_factory.rows
+        ):
+            raise AssertionError(
+                "deployment model assignment pointed at an unflushed sync job"
+            )
+        self._pending_sync_job_ids.clear()
 
 
 class _Result:

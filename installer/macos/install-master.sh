@@ -238,6 +238,23 @@ write_secret_if_missing() {
   write_secret "$path" "$value"
 }
 
+write_prefixed_secret_if_missing() {
+  local path="$1"
+  local prefix="$2"
+
+  if [[ -f "$path" ]]; then
+    prepare_secret_for_docker_desktop "$path"
+    return 0
+  fi
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "[dry-run] write secret $path"
+    return 0
+  fi
+
+  write_secret "$path" "${prefix}$(random_secret)"
+}
+
 write_secret() {
   local path="$1"
   local value="$2"
@@ -535,6 +552,10 @@ write_secret_if_missing "$CONFIG_DIR/secrets/minio_root_password"
 write_secret_if_missing "$CONFIG_DIR/secrets/keycloak_admin_username" "admin"
 write_secret_if_missing "$CONFIG_DIR/secrets/keycloak_admin_password"
 write_secret_if_missing "$CONFIG_DIR/secrets/link_reflector_secret"
+write_prefixed_secret_if_missing "$CONFIG_DIR/secrets/central_supervisor_credential" "vzcred_"
+prepare_secret_for_docker_desktop "$CONFIG_DIR/secrets/central_supervisor_credential"
+run install -m 0640 "$CONFIG_DIR/secrets/central_supervisor_credential" "$DATA_DIR/credentials/supervisor.credential"
+prepare_secret_for_docker_desktop "$DATA_DIR/credentials/supervisor.credential"
 
 run install -m 0644 /opt/vezor/current/infra/nats/nats.conf "$CONFIG_DIR/nats/nats.conf"
 run python3 /opt/vezor/current/installer/lib/render_mediamtx_config.py \

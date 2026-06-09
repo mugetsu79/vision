@@ -139,6 +139,53 @@ async def test_master_bootstrap_complete_creates_initial_tenant_admin_node() -> 
 
 
 @pytest.mark.asyncio
+async def test_master_bootstrap_registers_configured_central_supervisor_credential() -> None:
+    now = datetime(2026, 5, 14, 8, 12, tzinfo=UTC)
+    credential_material = "vzcred_test-central-supervisor"
+    service = DeploymentNodeService(
+        _MemorySessionFactory(),
+        now_factory=lambda: now,
+        central_supervisor_credential=credential_material,
+    )
+    rotated = await service.rotate_local_bootstrap_token(actor_subject="local-installer")
+
+    completed = await service.complete_master_bootstrap(
+        MasterBootstrapComplete(
+            bootstrap_token=rotated.bootstrap_token,
+            tenant_name="Vezor Pilot",
+            tenant_slug="vezor-pilot",
+            admin_email="admin@vezor.local",
+            admin_password="not-persisted-password",
+            admin_first_name="Vezor",
+            admin_last_name="Admin",
+            central_node_name="macbook-pro-master",
+            central_supervisor_id="central-macbook-pro",
+        )
+    )
+
+    rows = service.session_factory.session.rows
+    credentials = [row for row in rows if isinstance(row, SupervisorNodeCredential)]
+    events = [row for row in rows if isinstance(row, DeploymentCredentialEvent)]
+    serialized_rows = str([row.__dict__ for row in rows])
+
+    assert completed.central_node.credential_status is DeploymentCredentialStatus.ACTIVE
+    assert len(credentials) == 1
+    assert credentials[0].tenant_id == completed.tenant_id
+    assert credentials[0].deployment_node_id == completed.central_node.id
+    assert credentials[0].supervisor_id == "central-macbook-pro"
+    assert credentials[0].credential_hash != credential_material
+    assert credentials[0].credential_version == 1
+    assert credentials[0].status is DeploymentCredentialStatus.ACTIVE
+    assert any(row.event_type == "credential.issued" for row in events)
+    assert await service.validate_supervisor_credential(
+        tenant_id=completed.tenant_id,
+        supervisor_id="central-macbook-pro",
+        credential_material=credential_material,
+    )
+    assert credential_material not in serialized_rows
+
+
+@pytest.mark.asyncio
 async def test_master_bootstrap_complete_provisions_oidc_admin_identity() -> None:
     now = datetime(2026, 5, 14, 8, 10, tzinfo=UTC)
     provisioner = _RecordingIdentityProvisioner(subject="keycloak-user-123")

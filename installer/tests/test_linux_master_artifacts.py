@@ -85,6 +85,11 @@ def test_linux_master_compose_profile_contains_required_product_services() -> No
     assert "ARGUS_CORS_ALLOWED_ORIGINS" in compose
     assert "${VEZOR_PUBLIC_FRONTEND_URL:-http://localhost:3000}" in compose
     assert "backend_db_url:" in compose
+    assert "central_supervisor_credential:" in compose
+    assert (
+        "file: ${VEZOR_CONFIG_DIR:-/etc/vezor}/secrets/central_supervisor_credential"
+        in compose
+    )
     assert "target: ARGUS_DB_URL" in compose
     assert "target: ARGUS_MINIO_ACCESS_KEY" in compose
     assert "target: ARGUS_MINIO_SECRET_KEY" in compose
@@ -97,6 +102,7 @@ def test_linux_master_compose_profile_contains_required_product_services() -> No
         "/secrets/link_reflector_secret}"
     ) in compose
     assert "target: ARGUS_LINK_REFLECTOR_SECRET" in compose
+    assert "target: ARGUS_CENTRAL_SUPERVISOR_CREDENTIAL" in compose
     assert "ARGUS_LINK_REFLECTOR_ALLOWED_SOURCE_CIDRS" in compose
 
 
@@ -224,7 +230,16 @@ def test_linux_master_install_script_exposes_safe_install_options() -> None:
     assert "$CONFIG_DIR/secrets/postgres_password" in script
     assert "$CONFIG_DIR/secrets/backend_db_url" in script
     assert "$CONFIG_DIR/secrets/link_reflector_secret" in script
+    assert "$CONFIG_DIR/secrets/central_supervisor_credential" in script
     assert "write_backend_db_url_secret" in script
+    assert (
+        'write_prefixed_secret_if_missing "$CONFIG_DIR/secrets/central_supervisor_credential" '
+        '"vzcred_"'
+    ) in script
+    assert (
+        'run install -m 0640 "$CONFIG_DIR/secrets/central_supervisor_credential" '
+        '"$DATA_DIR/credentials/supervisor.credential"'
+    ) in script
     assert "$CONFIG_DIR/nats/nats.conf" in script
     assert "$CONFIG_DIR/mediamtx/mediamtx.yml" in script
     assert "$DATA_DIR/credentials" in script

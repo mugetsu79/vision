@@ -4615,6 +4615,11 @@ def build_app_services(
     deployment_nodes = DeploymentNodeService(
         db.session_factory,
         identity_provisioner=keycloak_bootstrap_provisioner_from_settings(settings),
+        central_supervisor_credential=(
+            settings.central_supervisor_credential.get_secret_value()
+            if settings.central_supervisor_credential is not None
+            else None
+        ),
     )
     camera_service = CameraService(
         db.session_factory,

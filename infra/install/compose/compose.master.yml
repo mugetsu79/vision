@@ -15,6 +15,8 @@ secrets:
     file: ${VEZOR_CONFIG_DIR:-/etc/vezor}/secrets/keycloak_admin_password
   link_reflector_secret:
     file: ${VEZOR_LINK_REFLECTOR_SECRET_FILE:-${VEZOR_CONFIG_DIR:-/etc/vezor}/secrets/link_reflector_secret}
+  central_supervisor_credential:
+    file: ${VEZOR_CONFIG_DIR:-/etc/vezor}/secrets/central_supervisor_credential
 
 services:
   postgres:
@@ -191,6 +193,8 @@ services:
         target: ARGUS_KEYCLOAK_ADMIN_PASSWORD
       - source: link_reflector_secret
         target: ARGUS_LINK_REFLECTOR_SECRET
+      - source: central_supervisor_credential
+        target: ARGUS_CENTRAL_SUPERVISOR_CREDENTIAL
     depends_on:
       postgres:
         condition: service_healthy

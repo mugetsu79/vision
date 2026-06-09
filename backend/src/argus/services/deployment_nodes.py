@@ -106,10 +106,12 @@ class DeploymentNodeService:
         *,
         now_factory: Callable[[], datetime] | None = None,
         identity_provisioner: BootstrapIdentityProvisioner | None = None,
+        central_supervisor_credential: str | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.now_factory = now_factory or (lambda: datetime.now(tz=UTC))
         self.identity_provisioner = identity_provisioner
+        self.central_supervisor_credential = central_supervisor_credential
 
     async def close(self) -> None:
         close = getattr(self.identity_provisioner, "close", None)
@@ -307,6 +309,20 @@ class DeploymentNodeService:
                 _ensure_identity_and_timestamps(node, now=now)
                 session.add(node)
                 await _flush_if_available(session)
+            else:
+                if payload.central_supervisor_id is not None:
+                    node.supervisor_id = payload.central_supervisor_id
+                    node.updated_at = now
+
+            if self.central_supervisor_credential:
+                await _ensure_central_supervisor_credential(
+                    session,
+                    tenant_id=tenant.id,
+                    node=node,
+                    credential_material=self.central_supervisor_credential,
+                    actor_subject=admin_subject,
+                    now=now,
+                )
 
             await _ensure_control_plane_site(session, tenant_id=tenant.id, now=now)
 
@@ -1433,6 +1449,96 @@ async def _ensure_control_plane_site(
     session.add(site)
     await _flush_if_available(session)
     return site
+
+
+async def _ensure_central_supervisor_credential(
+    session: AsyncSession,
+    *,
+    tenant_id: UUID,
+    node: DeploymentNode,
+    credential_material: str,
+    actor_subject: str | None,
+    now: datetime,
+) -> SupervisorNodeCredential:
+    statement = (
+        select(SupervisorNodeCredential)
+        .where(SupervisorNodeCredential.tenant_id == tenant_id)
+        .where(SupervisorNodeCredential.deployment_node_id == node.id)
+    )
+    credentials = [
+        row
+        for row in (await session.execute(statement)).scalars().all()
+        if isinstance(row, SupervisorNodeCredential)
+    ]
+    credential_hash = _hash_secret(credential_material)
+    existing = next(
+        (
+            row
+            for row in credentials
+            if row.credential_hash == credential_hash
+            and row.status is DeploymentCredentialStatus.ACTIVE
+            and row.supervisor_id == node.supervisor_id
+        ),
+        None,
+    )
+    if existing is not None:
+        node.credential_status = DeploymentCredentialStatus.ACTIVE
+        node.updated_at = now
+        return existing
+
+    next_version = _next_credential_version(credentials)
+    for credential in credentials:
+        if credential.status is DeploymentCredentialStatus.REVOKED:
+            continue
+        credential.status = DeploymentCredentialStatus.REVOKED
+        credential.revoked_at = now
+        credential.updated_at = now
+        session.add(
+            _credential_event(
+                tenant_id=tenant_id,
+                deployment_node_id=node.id,
+                credential_id=credential.id,
+                event_type="credential.revoked",
+                actor_subject=actor_subject,
+                occurred_at=now,
+                metadata={"reason": "central_supervisor_configured"},
+            )
+        )
+
+    credential = SupervisorNodeCredential(
+        tenant_id=tenant_id,
+        deployment_node_id=node.id,
+        supervisor_id=node.supervisor_id,
+        credential_hash=credential_hash,
+        encrypted_credential=None,
+        credential_version=next_version,
+        status=DeploymentCredentialStatus.ACTIVE,
+        issued_at=now,
+        expires_at=None,
+        revoked_at=None,
+    )
+    _ensure_identity_and_timestamps(credential, now=now)
+    session.add(credential)
+    await _flush_if_available(session)
+    node.credential_status = DeploymentCredentialStatus.ACTIVE
+    if node.install_status is DeploymentInstallStatus.REVOKED:
+        node.install_status = DeploymentInstallStatus.INSTALLED
+    node.updated_at = now
+    session.add(
+        _credential_event(
+            tenant_id=tenant_id,
+            deployment_node_id=node.id,
+            credential_id=credential.id,
+            event_type="credential.issued",
+            actor_subject=actor_subject,
+            occurred_at=now,
+            metadata={
+                "reason": "central_supervisor_configured",
+                "credential_version": next_version,
+            },
+        )
+    )
+    return credential
 
 
 def _credential_event(

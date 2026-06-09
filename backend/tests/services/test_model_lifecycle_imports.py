@@ -267,6 +267,75 @@ async def test_register_catalog_entry_resolves_path_hint(
 
 
 @pytest.mark.asyncio
+async def test_register_catalog_entry_resolves_installed_mount_path_hint(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    tenant_id = uuid4()
+    mounted_models = tmp_path / "models-mount"
+    mounted_models.mkdir()
+    model_path = mounted_models / "yolo26n.onnx"
+    model_path.write_bytes(b"catalog-onnx")
+    monkeypatch.setenv("ARGUS_MODEL_CATALOG_MOUNT_DIR", str(mounted_models))
+    session_factory = _FakeSessionFactory()
+    service = ModelLifecycleService(session_factory=session_factory)
+    resolver_calls: list[list[str] | None] = []
+
+    def fake_resolve_model_classes_for_capability(
+        *,
+        capability: DetectorCapability,
+        path: str,
+        format: ModelFormat,
+        classes: list[str] | None,
+        capability_config: dict[str, object],
+    ) -> list[str]:
+        assert capability is DetectorCapability.FIXED_VOCAB
+        assert path == str(model_path)
+        assert format is ModelFormat.ONNX
+        assert capability_config["catalog_id"] == "mounted-yolo26n-coco-onnx"
+        resolver_calls.append(classes)
+        return ["person", "car"]
+
+    monkeypatch.setattr(
+        app_services,
+        "_resolve_model_classes_for_capability",
+        fake_resolve_model_classes_for_capability,
+    )
+    catalog_entry = ModelCatalogEntry(
+        id="mounted-yolo26n-coco-onnx",
+        name="Mounted YOLO26n COCO",
+        version="2026.1",
+        task=ModelTask.DETECT,
+        path_hint="models/yolo26n.onnx",
+        format=ModelFormat.ONNX,
+        capability=DetectorCapability.FIXED_VOCAB,
+        capability_config=ModelCapabilityConfig(),
+        classes=(),
+        input_shape={"width": 640, "height": 640},
+        license="AGPL-3.0",
+        note="Mounted test entry.",
+    )
+    monkeypatch.setattr(
+        model_lifecycle,
+        "get_model_catalog_entry",
+        lambda catalog_id: catalog_entry if catalog_id == catalog_entry.id else None,
+    )
+
+    response = await service.register_catalog_entry(
+        tenant_id=tenant_id,
+        actor_subject="admin@example.test",
+        catalog_id="mounted-yolo26n-coco-onnx",
+    )
+
+    assert response.status == ModelLifecycleJobStatus.SUCCEEDED
+    assert response.observed_sha256 == _sha256(b"catalog-onnx")
+    assert response.source_uri == str(model_path)
+    assert resolver_calls == [None]
+    assert session_factory.models[0].path == str(model_path)
+    assert session_factory.models[0].classes == ["person", "car"]
+
+
+@pytest.mark.asyncio
 async def test_repeated_catalog_registration_reuses_existing_model(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
