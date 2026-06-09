@@ -586,7 +586,7 @@ fi
 
 SUPERVISOR_CONFIG="$CONFIG_DIR/supervisor.json"
 CENTRAL_SUPERVISOR_ID="$(read_existing_supervisor_id "$SUPERVISOR_CONFIG")"
-CENTRAL_SUPERVISOR_ID="${CENTRAL_SUPERVISOR_ID:-100}"
+CENTRAL_SUPERVISOR_ID="${CENTRAL_SUPERVISOR_ID:-vezor-master}"
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "[dry-run] write $SUPERVISOR_CONFIG"
 else

@@ -347,7 +347,7 @@ def test_linux_master_installer_preserves_existing_central_supervisor_identity()
 
     assert "read_existing_supervisor_id" in script
     assert 'CENTRAL_SUPERVISOR_ID="$(read_existing_supervisor_id "$SUPERVISOR_CONFIG")"' in script
-    assert 'CENTRAL_SUPERVISOR_ID="${CENTRAL_SUPERVISOR_ID:-100}"' in script
+    assert 'CENTRAL_SUPERVISOR_ID="${CENTRAL_SUPERVISOR_ID:-vezor-master}"' in script
     assert '"supervisor_id": "$CENTRAL_SUPERVISOR_ID"' in script
 
 
