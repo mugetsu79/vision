@@ -2,7 +2,9 @@
 
 Date: 2026-06-09
 
-Branch/head: `codex/sceneops-pack-registry` at `5fc19c1f`, pushed to `origin/codex/sceneops-pack-registry`.
+Branch: `codex/sceneops-pack-registry`, pushed to `origin/codex/sceneops-pack-registry`.
+
+Smoke execution head: `5fc19c1f`. The report itself is committed after that smoke execution on the same branch.
 
 Stack type: installed macOS master product stack plus real Jetson Orin edge stack; master compose services and Jetson systemd services rebuilt/restarted from committed branch artifacts. No global Docker prune was run.
 
