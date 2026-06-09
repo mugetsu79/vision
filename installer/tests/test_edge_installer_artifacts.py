@@ -158,6 +158,23 @@ def test_edge_install_script_stops_existing_appliance_before_preflight_ports() -
     )
 
 
+def test_edge_install_script_shell_quotes_edge_agent_env_values() -> None:
+    script = _read(INSTALL_SCRIPT)
+
+    assert "shell_quote()" in script
+    assert 'EDGE_AGENT_LABEL="$EDGE_NAME Core Link"' in script
+    assert 'VEZOR_CONTAINER_ENGINE=$(shell_quote "$CONTAINER_ENGINE")' in script
+    assert 'VEZOR_SUPERVISOR_IMAGE=$(shell_quote "$EDGE_WORKER_IMAGE")' in script
+    assert 'ARGUS_API_BASE_URL=$(shell_quote "$API_URL")' in script
+    assert (
+        'ARGUS_LINK_EDGE_AGENT_CONFIG_URL=$(shell_quote "${API_URL%/}/api/v1/link/control-targets/master/edge-agent-config")'
+        in script
+    )
+    assert 'ARGUS_LINK_EDGE_AGENT_ID=$(shell_quote "$EDGE_NAME-core-link")' in script
+    assert 'ARGUS_LINK_EDGE_AGENT_LABEL=$(shell_quote "$EDGE_AGENT_LABEL")' in script
+    assert "ARGUS_LINK_EDGE_AGENT_LABEL=$EDGE_NAME Core Link" not in script
+
+
 def test_edge_artifacts_do_not_embed_dev_credentials_or_bearer_tokens() -> None:
     combined = "\n".join(
         _read(path)

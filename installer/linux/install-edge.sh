@@ -232,6 +232,15 @@ print(f"{scheme}://{host}:3000")
 PY
 }
 
+shell_quote() {
+  python3 - "$1" <<'PY'
+import shlex
+import sys
+
+print(shlex.quote(sys.argv[1]))
+PY
+}
+
 existing_supervisor_config_value() {
   local key="$1"
   if [[ ! -f "$SUPERVISOR_CONFIG" ]]; then
@@ -450,6 +459,7 @@ fi
 
 EDGE_ENV="$CONFIG_DIR/edge.env"
 EDGE_AGENT_ENV="$CONFIG_DIR/edge-agent.env"
+EDGE_AGENT_LABEL="$EDGE_NAME Core Link"
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "[dry-run] write $EDGE_ENV"
   echo "[dry-run] write $EDGE_AGENT_ENV"
@@ -465,13 +475,13 @@ VEZOR_NATS_LEAF_REMOTE_URL=$MASTER_NATS_LEAF_URL
 ENV
   chmod 0644 "$EDGE_ENV"
   cat > "$EDGE_AGENT_ENV" <<ENV
-VEZOR_CONTAINER_ENGINE=$CONTAINER_ENGINE
-VEZOR_SUPERVISOR_IMAGE=$EDGE_WORKER_IMAGE
-VEZOR_EDGE_AGENT_CREDENTIAL_PATH=$DATA_DIR/credentials/supervisor.credential
-ARGUS_API_BASE_URL=$API_URL
-ARGUS_LINK_EDGE_AGENT_CONFIG_URL=${API_URL%/}/api/v1/link/control-targets/master/edge-agent-config
-ARGUS_LINK_EDGE_AGENT_ID=$EDGE_NAME-core-link
-ARGUS_LINK_EDGE_AGENT_LABEL=$EDGE_NAME Core Link
+VEZOR_CONTAINER_ENGINE=$(shell_quote "$CONTAINER_ENGINE")
+VEZOR_SUPERVISOR_IMAGE=$(shell_quote "$EDGE_WORKER_IMAGE")
+VEZOR_EDGE_AGENT_CREDENTIAL_PATH=$(shell_quote "$DATA_DIR/credentials/supervisor.credential")
+ARGUS_API_BASE_URL=$(shell_quote "$API_URL")
+ARGUS_LINK_EDGE_AGENT_CONFIG_URL=$(shell_quote "${API_URL%/}/api/v1/link/control-targets/master/edge-agent-config")
+ARGUS_LINK_EDGE_AGENT_ID=$(shell_quote "$EDGE_NAME-core-link")
+ARGUS_LINK_EDGE_AGENT_LABEL=$(shell_quote "$EDGE_AGENT_LABEL")
 ARGUS_LINK_EDGE_AGENT_INTERVAL_SECONDS=300
 ENV
   chmod 0644 "$EDGE_AGENT_ENV"
