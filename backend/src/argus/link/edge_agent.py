@@ -312,7 +312,7 @@ async def run_udp_sequence_probe(
             remaining = max(0.0, deadline - loop.time())
             try:
                 data, received_ns = await asyncio.wait_for(queue.get(), timeout=remaining)
-            except TimeoutError:
+            except asyncio.TimeoutError:
                 break
             try:
                 packet = parse_probe_packet(data, secret=secret_bytes)

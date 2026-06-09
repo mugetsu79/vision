@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import inspect
+import socket
+
 import httpx
 import pytest
 
@@ -239,6 +242,36 @@ async def test_run_udp_sequence_probe_uses_reply_arrival_time_not_drain_time() -
 
     assert stats.packets_received == 4
     assert stats.measurement_metadata["rtt_max_ms"] < 30
+
+
+@pytest.mark.asyncio
+async def test_run_udp_sequence_probe_records_total_loss_without_raising() -> None:
+    socket_handle = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    socket_handle.bind(("127.0.0.1", 0))
+    unused_port = socket_handle.getsockname()[1]
+    socket_handle.close()
+
+    stats = await run_udp_sequence_probe(
+        reflector_host="127.0.0.1",
+        reflector_port=unused_port,
+        reflector_secret="reflector-secret",
+        reflector_key_id="master-reflector-test",
+        packet_count=2,
+        packet_spacing_ms=1,
+        loss_timeout_ms=10,
+    )
+
+    assert stats.packet_count == 2
+    assert stats.packets_received == 0
+    assert stats.latency_ms == 0
+    assert stats.measurement_metadata["packets_lost"] == 2
+    assert stats.measurement_metadata["reflector_port"] == unused_port
+
+
+def test_run_udp_sequence_probe_catches_python310_asyncio_timeout() -> None:
+    source = inspect.getsource(run_udp_sequence_probe)
+
+    assert "asyncio.TimeoutError" in source
 
 
 def test_build_udp_sequence_edge_sample_payload_includes_sequence_metadata() -> None:
