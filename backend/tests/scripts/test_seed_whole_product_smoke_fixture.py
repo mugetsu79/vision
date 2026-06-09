@@ -159,6 +159,37 @@ async def test_seed_smoke_fixture_creates_reviewable_artifact(
 
 
 @pytest.mark.asyncio
+async def test_seed_smoke_fixture_object_key_remains_reviewable_with_subdirectory_root(
+    db_session_factory: _SmokeFixtureSessionFactory,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    storage_root = tmp_path / "evidence"
+    smoke_root = storage_root / "smoke"
+    monkeypatch.setenv("ARGUS_INCIDENT_LOCAL_STORAGE_ROOT", str(storage_root))
+    request = SmokeFixtureRequest(
+        tenant_id=TENANT_ID,
+        site_id=SITE_ID,
+        camera_id=CAMERA_ID,
+        smoke_run_id="closure-2026-06-09",
+        occurred_at=datetime(2026, 6, 9, 12, 0, tzinfo=UTC),
+        evidence_root=smoke_root,
+    )
+
+    result = await seed_smoke_fixture(
+        db_session_factory,
+        request,
+        billing_service=BillingService(),
+    )
+
+    artifact = next(
+        row for row in db_session_factory.rows if row.__class__.__name__ == "EvidenceArtifact"
+    )
+    assert artifact.object_key == f"smoke/closure-2026-06-09/{result.artifact_id}.txt"
+    assert (storage_root / artifact.object_key).read_bytes() == result.artifact_path.read_bytes()
+
+
+@pytest.mark.asyncio
 async def test_seed_smoke_fixture_breaks_runtime_passport_incident_fk_cycle(
     db_session_factory: _SmokeFixtureSessionFactory,
     tmp_path: Path,

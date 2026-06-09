@@ -83,7 +83,10 @@ async def seed_smoke_fixture(
     artifact_dir = request.evidence_root / request.smoke_run_id
     artifact_dir.mkdir(parents=True, exist_ok=True)
     artifact_path = artifact_dir / f"{artifact_id}.txt"
-    artifact_object_key = f"{request.smoke_run_id}/{artifact_path.name}"
+    artifact_object_key = _artifact_object_key(
+        artifact_path,
+        evidence_root=request.evidence_root,
+    )
     artifact_payload = (
         "Vezor whole-product smoke evidence\n"
         f"smoke_run_id={request.smoke_run_id}\n"
@@ -155,6 +158,18 @@ async def seed_smoke_fixture(
         billing_account_id=billing_result.account.id,
         invoice_run_id=billing_result.invoice.id,
     )
+
+
+def _artifact_object_key(artifact_path: Path, *, evidence_root: Path) -> str:
+    artifact_path = artifact_path.expanduser().resolve()
+    evidence_root = evidence_root.expanduser().resolve()
+    configured_root = Path(Settings().incident_local_storage_root).expanduser().resolve()
+    storage_root = (
+        configured_root
+        if evidence_root == configured_root or configured_root in evidence_root.parents
+        else evidence_root
+    )
+    return artifact_path.relative_to(storage_root).as_posix()
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
