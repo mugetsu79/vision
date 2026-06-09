@@ -34,6 +34,8 @@ if [[ ! -s "$CREDENTIAL_PATH" ]]; then
   exit 1
 fi
 
+"$CONTAINER_ENGINE" rm -f vezor-edge-agent >/dev/null 2>&1 || true
+
 exec "$CONTAINER_ENGINE" run --rm --network host \
   --name vezor-edge-agent \
   -v "$CREDENTIAL_PATH:/run/vezor/credentials/supervisor.credential:ro" \

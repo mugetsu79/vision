@@ -49,6 +49,13 @@ def test_edge_agent_systemd_service_uses_node_credential_file_not_bearer_token()
     assert "ARGUS_API_BEARER_TOKEN" not in wrapper
 
 
+def test_edge_agent_wrapper_removes_stale_container_before_systemd_restart() -> None:
+    wrapper = _read(EDGE_AGENT_WRAPPER)
+
+    assert '"$CONTAINER_ENGINE" rm -f vezor-edge-agent' in wrapper
+    assert wrapper.index('rm -f vezor-edge-agent') < wrapper.index('"$CONTAINER_ENGINE" run')
+
+
 def test_edge_installer_runs_initial_edge_throughput_sample() -> None:
     script = _read(INSTALL_SCRIPT)
     wrapper = _read(EDGE_AGENT_WRAPPER)
