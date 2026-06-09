@@ -6,6 +6,7 @@ import {
   type LucideIcon,
   MapPinned,
   Network,
+  Package,
   Radio,
   ServerCog,
   Settings2,
@@ -49,11 +50,13 @@ const baseWorkspaceNavGroups = omniNavGroups.map((group) => ({
               ? ShieldAlert
               : item.to === "/deployment"
                 ? ServerCog
-                : item.to === "/sites"
-                  ? MapPinned
-                  : item.to === "/cameras"
-                    ? Video
-                    : Settings2,
+                : item.to === "/models"
+                  ? Package
+                  : item.to === "/sites"
+                    ? MapPinned
+                    : item.to === "/cameras"
+                      ? Video
+                      : Settings2,
   })),
 })) as readonly WorkspaceNavGroup[];
 
@@ -128,6 +131,10 @@ export function prefetchWorkspaceRoute(
 
   if (route === "/deployment") {
     void import("@/pages/Deployment");
+  }
+
+  if (route === "/models") {
+    void import("@/pages/Models");
   }
 
   if (route === "/links") {
