@@ -78,8 +78,8 @@ The Linux master appliance bundles `yolo26n.onnx` and `yolo26s.onnx` in
 `installer/assets/models/`. During install, the bundle is copied into
 `/var/lib/vezor/models/` and mounted into containers at `/models`.
 First-run smoke validation must register `/models/yolo26n.onnx` and
-`/models/yolo26s.onnx`; falling back to YOLO11 is a BLOCKED result for the
-YOLO26 bundle check.
+`/models/yolo26s.onnx`, preferably from Models -> Catalog. Falling back to
+YOLO11 is a BLOCKED result for the YOLO26 bundle check.
 
 Use deterministic smoke first:
 
@@ -757,7 +757,13 @@ model registration, scene configuration, and runtime artifact loading, see
 
 ### Model Catalog And Open-Vocab Runtime
 
-`/api/v1/model-catalog` lists recommended local model presets. It does not download model files and does not replace registered `Model` rows. A camera can only select models that are registered in `/api/v1/models`. Use `backend/scripts/register_model_preset.py` when an operator has a catalog artifact on disk and wants to create the matching `Model` row without hand-writing JSON.
+Models -> Catalog is the normal operator path for registering bundled source
+models and starting import/download jobs. `/api/v1/model-catalog` lists
+recommended local model presets; the API helpers remain available for
+automation and break-glass flows. A camera can only select models that are
+registered in `/api/v1/models`. Use `backend/scripts/register_model_preset.py`
+only when an operator has a catalog artifact on disk and needs a CLI fallback
+instead of the UI.
 
 Fixed-vocab ONNX models use ONNX Runtime. Provider selection can choose TensorRT, CUDA, OpenVINO, CoreML, or CPU depending on host support.
 
@@ -767,7 +773,12 @@ Raw TensorRT `.engine` files must not be registered as primary camera models. Ke
 
 ### Fixed-Vocab Runtime Artifact Registration
 
-Keep the registered fixed-vocab model row pointed at the canonical ONNX file. When a Jetson TensorRT engine has already been built and copied into place, register it as a runtime artifact instead of registering the `.engine` as a model:
+Keep the registered fixed-vocab model row pointed at the canonical ONNX file.
+Normal installed operation should use Models -> Edge distribution to sync that
+model to the node and Models -> Runtime artifacts to queue a TensorRT build for
+the target profile. When a Jetson TensorRT engine has already been built and
+copied into place, register it as a runtime artifact instead of registering the
+`.engine` as a model:
 
 ```bash
 cd /Users/yann.moren/vision/backend
@@ -796,16 +807,20 @@ python3 -m uv run python -m argus.scripts.validate_runtime_artifact \
   --host-profile linux-aarch64-nvidia-jetson
 ```
 
-The first-pass builder intentionally supports prebuilt engines only. Do not let the control plane guess TensorRT builder flags silently; record the artifact after the target-specific build is already produced.
+Use the UI-created build job as the preferred source of artifact status. For
+manual imports, do not let the control plane guess TensorRT builder flags
+silently; record the artifact after the target-specific build is already
+produced and validated.
 
 ### Open-Vocab Scene Runtime Artifact Compilation
 
 Dynamic `.pt` open-vocab remains the exploration path while operators tune a
 camera vocabulary. Once the scene vocabulary is saved for a production scene,
 compile scene-scoped YOLOE artifacts from the canonical `.pt` model and register
-the exported files against the camera. Compilation is a background/operator
-operation, not something the request path should block on. Real build time is
-captured per artifact in `build_duration_seconds`.
+the exported files against the camera. The normal path is Models -> Runtime
+artifacts after saving the vocabulary in Control -> Scenes. Compilation is a
+background/operator operation, not something the request path should block on.
+Real build time is captured per artifact in `build_duration_seconds`.
 
 ```bash
 cd /Users/yann.moren/vision/backend
@@ -867,10 +882,43 @@ window for every row:
 | Open-vocab compiled TensorRT | `selected_backend=tensorrt_engine`, artifact id present |
 | Vocabulary change fallback | `fallback_reason=vocabulary_changed`, dynamic `.pt` continues |
 
-Operations shows model runtime artifact counts and the best valid target. The
-Cameras setup flow shows whether the selected model has a compiled artifact,
-whether it is stale for the current vocabulary, or whether the worker will use
-the dynamic/fallback runtime.
+Operations shows model runtime artifact counts and the best valid target.
+Control -> Scenes setup shows whether the selected model has a compiled
+artifact, whether it is stale for the current vocabulary, or whether the worker
+will use the dynamic/fallback runtime.
+
+### Central Model And Edge Configuration Operations
+
+After a master or edge installer completes, finish configuration centrally:
+
+1. Register/download source models from Models -> Catalog.
+2. Assign models and start sync jobs from Models -> Edge distribution.
+3. Wait for deployment-node inventory to report the model as present.
+4. Queue TensorRT or open-vocab scene artifacts from Models -> Runtime
+   artifacts.
+5. Confirm Control -> Deployment shows current edge configuration revision,
+   active credential status, fresh hardware reports, and usable support bundle
+   posture.
+6. Return to Control -> Scenes and confirm readiness is Ready before running
+   the worker lifecycle from Control -> Operations.
+
+Troubleshooting:
+
+- Model import job failed hash check: verify the configured hash/source against
+  the mounted file before retrying the import job.
+- Model assigned but not synced: confirm the node credential is active, the
+  supervisor can poll jobs, and the sync job targets the intended node.
+- TensorRT build failed on Jetson: inspect the Runtime artifacts job error,
+  verify JetPack/CUDA/TensorRT/trtexec, confirm the source model is synced, and
+  rebuild for `linux-aarch64-nvidia-jetson`.
+- Open-vocab artifact stale after vocabulary edit: save the new vocabulary and
+  rebuild the scene-scoped artifact so the vocabulary hash matches.
+- Edge configuration revision failed to apply: read the apply error in Control
+  -> Deployment, remove unsupported or invalid fields, and wait for the next
+  supervisor report.
+- Node credential cannot poll jobs: verify credential status, rotate the
+  credential if needed, check API URL and clock skew, then restart the local
+  supervisor service.
 
 ### Runtime Artifact Soak Gate
 

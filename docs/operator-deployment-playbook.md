@@ -18,6 +18,8 @@ The current product includes the operator workflows needed for a serious pilot:
   link passports
 - first-run Deployment workbench at `/deployment` for install health, node
   pairing, credential status, and redacted support bundles
+- Models workspace for source model registration/download, edge assignment,
+  model sync, runtime artifact builds, and edge model inventory
 - Evidence Desk incident review queue at `/incidents`
 - central and edge worker configuration paths
 - model catalog presets and registration helper
@@ -644,6 +646,52 @@ For controlled benchmarking or mitigation, these environment variables can overr
 - `ARGUS_INFERENCE_SESSION_INTRA_OP_THREADS`
 
 Use the overrides sparingly. Prefer the automatic policy for normal deployment, and only force a provider when you are measuring performance or isolating a runtime-specific issue.
+
+### Central Model, Artifact, And Edge Configuration Workflow
+
+After the master and edge installers finish, the remaining edge configuration
+should be done from the control plane:
+
+1. Open Models -> Catalog to register or download the source model. Bundled
+   Linux master artifacts should appear as `/models/yolo26n.onnx` and
+   `/models/yolo26s.onnx`.
+2. Open Models -> Edge distribution, assign the model to each deployment node,
+   and start a model sync job.
+3. Wait for node inventory to report the model as present on the target edge.
+4. Open Models -> Runtime artifacts to queue TensorRT engine builds or
+   open-vocab scene artifact builds for the target profile.
+5. Open Control -> Deployment to verify edge configuration revision status,
+   node credential status, hardware reports, and support bundle posture.
+6. Open Control -> Scenes and confirm readiness is Ready before starting or
+   restarting the worker from Control -> Operations.
+
+The edge installer remains intentionally small: prerequisite checks, service
+installation, pairing claim, credential write, and supervisor startup. Model
+selection, model distribution, TensorRT/open-vocab artifact builds, stream
+profile choices, worker runtime/concurrency settings, and support bundle review
+belong to the UI after pairing.
+
+### Model And Edge Lifecycle Troubleshooting
+
+- Model import job failed hash check: compare the expected hash/source in
+  Models -> Catalog with the file in the mounted model directory before
+  retrying. Do not mark the bundle smoke as passing until the expected YOLO26n
+  and YOLO26s rows are registered.
+- Model assigned but not synced: confirm the deployment node credential is
+  active, the supervisor is polling lifecycle jobs, and the sync job is queued
+  for the correct node.
+- TensorRT build failed on Jetson: inspect the Runtime artifacts job error,
+  confirm JetPack/CUDA/TensorRT/trtexec on the Jetson, verify the source ONNX
+  model is synced locally, and rebuild for `linux-aarch64-nvidia-jetson`.
+- Open-vocab artifact stale after vocabulary edit: save the scene vocabulary,
+  rebuild the scene-scoped artifact, and only treat readiness as clear when the
+  vocabulary hash matches.
+- Edge configuration revision failed to apply: read the apply error in Control
+  -> Deployment, remove unsupported fields, and wait for a fresh supervisor
+  configuration report.
+- Node credential cannot poll jobs: confirm credential status, rotate the
+  credential if needed, verify the edge API URL and clock, then restart the
+  supervisor service so it reloads the corrected credential store.
 
 Current image packaging is narrower than the product model: `edge` remains a
 portable deployment role, but `infra/docker-compose.edge.yml` currently builds

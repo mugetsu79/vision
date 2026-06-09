@@ -53,9 +53,12 @@ sudo ./bin/vezor install edge \
 ```
 
 The master installer copies the bundled YOLO26n and YOLO26s ONNX artifacts into
-the installed model directory. Register `/models/yolo26n.onnx` and
-`/models/yolo26s.onnx` during smoke; use the manual model-export sections only
-for optional fallback, comparison, or open-vocab models.
+the installed model directory. After first-run, use Models -> Catalog to
+register `/models/yolo26n.onnx` and `/models/yolo26s.onnx`, then use Models ->
+Edge distribution and Models -> Runtime artifacts for node assignment, model
+sync, TensorRT builds, and open-vocab scene artifacts. Use the manual
+model-export sections only for local development, comparison, or break-glass
+recovery.
 
 The lower-level `installer/macos/install-master.sh`,
 `installer/linux/install-master.sh`, `installer/linux/install-edge.sh`, and
@@ -69,8 +72,10 @@ The installer path is for normal product operation:
 1. install a master appliance on macOS or Linux
 2. complete first-run from the UI
 3. pair central and edge nodes from Control -> Deployment
-4. operate cameras and workers from Control -> Scenes and Control -> Operations
-5. validate Live, History, Evidence, Sites, Configuration, Link Performance,
+4. manage model registration, model sync, runtime artifacts, stream settings,
+   worker runtime policy, and support bundle review from the UI
+5. operate cameras and workers from Control -> Scenes and Control -> Operations
+6. validate Live, History, Evidence, Sites, Configuration, Link Performance,
    FleetOps, and Deployment
 
 The browser and backend are a control plane. They must not become a remote
@@ -1128,6 +1133,14 @@ release channel is `dev`, it also builds the local Jetson edge image from
 `backend/Dockerfile.edge` before starting `vezor-edge.service`; this avoids
 depending on unpublished `ghcr.io/vezor/*:dev` images during branch testing.
 
+The edge installer scope is intentionally narrow: prerequisite checks, local
+service/config installation, pairing claim, credential write, and supervisor
+startup. It does not choose camera models, build TensorRT engines, set worker
+concurrency, choose runtime preference, or configure scenes. After the service
+is paired, finish all of that from Control -> Deployment, Models, and Control
+-> Scenes. `--model-dir` is the local storage root that the supervisor and
+worker mount; it is not a model selection or assignment flag.
+
 `--public-stream-host` should be the Jetson LAN IP or hostname that the master
 can reach. The edge supervisor reports `rtsp://HOST:8554` back to the master so
 Live can relay Jetson native and processed streams through the master MediaMTX
@@ -1170,6 +1183,9 @@ Back in Control -> Deployment, confirm:
 - service state is fresh
 - credential status is active
 - hardware report arrives
+- edge configuration revision is current or reports a clear apply error
+- Models -> Edge distribution can see the node inventory after a sync job
+- Models -> Runtime artifacts can queue target-profile builds for the node
 - model admission can evaluate the Jetson camera
 - `vezor-edge-nats-leaf` is running and does not log repeated master leaf
   connection failures
@@ -1180,7 +1196,14 @@ Skip this until the basic ONNX path is stable. The camera still selects the
 ONNX model row. The `.engine` is attached later as a target-specific runtime
 artifact and must never be selected as the primary scene model.
 
-Build the engine on the Jetson:
+Preferred path: open Models -> Runtime artifacts, select the source ONNX model,
+Jetson node, and `linux-aarch64-nvidia-jetson` target profile, then queue the
+TensorRT build from the UI. The supervisor builds on the Jetson and reports job
+status and artifact inventory back to the master. Use the command-line steps
+below only when debugging TensorRT tooling directly on the Jetson or importing a
+prebuilt artifact.
+
+Diagnostic command-line build on the Jetson:
 
 ```bash
 cd /var/lib/vezor/models
@@ -1240,12 +1263,15 @@ ls -lh /var/lib/vezor/models/yolo26n.jetson.fp16.engine
   --loadEngine=/var/lib/vezor/models/yolo26n.jetson.fp16.engine
 ```
 
-### Optional: Register Jetson Runtime Artifact And Soak Evidence
+### Optional: CLI Register Jetson Runtime Artifact And Soak Evidence
 
 Only do this after the basic ONNX path is stable through camera setup, Live,
 History, Evidence, and Operations.
 
-Attach the Jetson TensorRT engine to the ONNX model row:
+Normal installed operation should use Models -> Runtime artifacts to create and
+track the artifact. Attach a manually built Jetson TensorRT engine to the ONNX
+model row only for break-glass registration or when comparing a prebuilt engine
+against the UI-created artifact:
 
 The commands below are admin/control-plane scripts from the backend project.
 They use Python 3.12 because the backend project is pinned to Python 3.12.
@@ -1788,13 +1814,37 @@ credential store to be populated by first-run/pairing. If the health log says
 
 ### The Jetson says the TensorRT engine is invalid
 
-Rebuild the engine on the same Jetson and same JetPack/TensorRT stack. Then
-rerun `validate_runtime_artifact` and only record a soak pass after validation
-and runtime operation both succeed.
+In the normal UI path, open Models -> Runtime artifacts and read the failed
+build job error before retrying. Rebuild the engine on the same Jetson and same
+JetPack/TensorRT stack. If you manually registered a prebuilt artifact, rerun
+`validate_runtime_artifact` and only record a soak pass after validation and
+runtime operation both succeed.
 
 If `trtexec` fails with `Static model does not take explicit shapes`, remove
 the `--shapes=...` argument. The default Vezor `yolo26n.onnx` export is already
 static at 640x640.
+
+### Model or edge lifecycle setup fails after install
+
+Use these checks before rerunning the installer:
+
+- Model import job failed hash check: verify the expected SHA/source in Models
+  -> Catalog, confirm the file exists under the mounted model directory, and
+  retry the import only after the mismatch is understood.
+- Model assigned but not synced: open Models -> Edge distribution, confirm the
+  node credential is active in Control -> Deployment, start a new sync job, and
+  confirm the supervisor can poll lifecycle jobs.
+- TensorRT build failed on Jetson: inspect the Models -> Runtime artifacts job
+  error, verify TensorRT/CUDA/trtexec on the Jetson, confirm the source model is
+  synced locally, and rebuild for `linux-aarch64-nvidia-jetson`.
+- Open-vocab artifact stale after vocabulary edit: save the scene vocabulary,
+  then queue a new scene artifact from Models -> Runtime artifacts.
+- Edge configuration revision failed to apply: read the apply error in Control
+  -> Deployment, revert unsupported fields, and wait for the supervisor's next
+  configuration report.
+- Node credential cannot poll jobs: confirm credential status is active, rotate
+  the node credential if needed, check the edge clock and API URL, and restart
+  `vezor-edge.service` after the credential store is corrected.
 
 ### Live works centrally but not from the Jetson
 

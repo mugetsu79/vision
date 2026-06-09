@@ -10,7 +10,7 @@ The project supports three processing modes:
 
 Vezor separates **native ingest for analytics** from **browser delivery for operators**, which means you can keep high-quality inference while serving lower-resolution or lower-FPS viewing profiles such as `1080p15`, `720p10`, `540p5`, or `240p5`.
 
-The Operations workbench at `/settings` shows the current fleet model: desired camera workers, node/runtime state, delivery diagnostics, hardware/model admission, and edge bootstrap material. The Deployment workbench at `/deployment` shows install health, node pairing, credential status, service reports, and support bundles. Local development can still use copyable worker commands, but installed product operation should use paired central or edge supervisors with node-local credential stores.
+The Operations workbench at `/settings` shows the current fleet model: desired camera workers, node/runtime state, delivery diagnostics, hardware/model admission, and edge bootstrap material. The Deployment workbench at `/deployment` shows install health, node pairing, credential status, service reports, edge configuration revision state, and support bundles. The Models workspace centralizes source model registration/download, edge assignment, model sync, runtime artifact builds, and node inventory. Local development can still use copyable worker commands, but installed product operation should use paired central or edge supervisors with node-local credential stores.
 
 The current codebase has moved beyond a pure dev scaffold. The main operator workflows exist, including Live, History, Operations, Deployment, Link Performance, FleetOps, and the Evidence Desk incident review queue. The installer-managed path now includes local macOS master, Linux master, and Jetson edge package artifacts plus first-run bootstrap. The remaining production gap is field hardening: signed packages, backup/restore posture, TLS/OIDC production configuration, pinned production image manifests, edge-agent packaging/pairing, and deferred Task 24 DeepStream work are still outside the portable demo path.
 
@@ -75,6 +75,10 @@ sudo ./bin/vezor install edge \
 `bin/vezor` delegates to the host-appropriate macOS or Linux installer and to
 the existing local service tools. The lower-level scripts remain available for
 reference and break-glass support, but the wrapper is the documented happy path.
+After first-run and edge pairing, finish model registration, edge model
+assignment, model sync, TensorRT/open-vocab artifact builds, stream settings,
+and worker runtime policy from the UI instead of changing installer flags or
+running per-node model commands.
 
 For complete product-mode validation, start with
 [docs/product-installer-and-first-run-guide.md](/Users/yann.moren/vision/docs/product-installer-and-first-run-guide.md). It covers:

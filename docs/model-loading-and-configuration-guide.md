@@ -21,6 +21,24 @@ together the lab guide and runbook.
   artifacts to an ONNX model.
 - Compiled open-vocab ONNX/TensorRT exports are scene runtime artifacts tied to
   a camera vocabulary hash. They are not replacement primary camera models.
+- For installed master + Jetson operation, the UI is the canonical lifecycle:
+  install and pair the node locally, then manage model registration,
+  distribution, TensorRT/open-vocab artifacts, and edge configuration from the
+  master UI.
+
+## UI-Driven Model Lifecycle Checklist
+
+- Register or download the source model from Models > Catalog.
+- Assign the model to each deployment node that will run it.
+- Start a model sync job and wait for synced inventory.
+- Create TensorRT or open-vocab runtime artifacts from Models > Runtime artifacts.
+- Confirm the artifact is valid for the target profile.
+- Return to scene setup and confirm readiness is Ready.
+
+Use this checklist for normal installs after the master and edge node are
+paired. The CLI sections below remain useful for local development,
+break-glass registration, and comparing generated artifacts, but they should not
+be the normal operator path after an edge installer completes.
 
 ## Supported Model Catalog
 
@@ -72,10 +90,12 @@ Keep real camera URLs local and uncommitted. The local-only env var names are
 `VEZOR_SMOKE_REAL_RTSP_720P_URL` and
 `VEZOR_SMOKE_REAL_RTSP_1296P_URL`.
 
-## One-Time Setup
+## One-Time CLI Setup
 
 Run these from the MacBook Pro, iMac, or master machine unless a section
-explicitly says Jetson.
+explicitly says Jetson. This CLI setup is for local development and
+break-glass administration; normal installed operation should use the UI
+checklist above.
 
 ```bash
 cd /Users/yann.moren/vision
@@ -242,7 +262,7 @@ What good looks like:
 
 ## Configure A Fixed-Vocab Scene
 
-1. Open `Cameras`.
+1. Open Control -> Scenes.
 2. Click `Add scene` or edit an existing scene.
 3. Fill the Identity step: name, site, processing mode, and RTSP URL.
 4. In `Models & Tracking`, choose a fixed-vocab primary model, usually:
@@ -288,6 +308,21 @@ Do not register `yolo26n-coco-tensorrt-engine` or
 `yolo26s-coco-tensorrt-engine` as primary camera models. They are catalog
 signals for runtime artifacts.
 
+Preferred UI path:
+
+1. Open Models > Edge distribution.
+2. Select the Jetson deployment node and source ONNX model.
+3. Assign the model, then start model sync.
+4. Wait until inventory shows the source model on the edge node.
+5. Open Models > Runtime artifacts.
+6. Select the model, Jetson node, and target profile
+   `linux-aarch64-nvidia-jetson`.
+7. Click Build TensorRT artifact and wait for a valid artifact record.
+8. Return to Control -> Scenes and confirm the scene readiness no longer says
+   `No TensorRT artifact for linux-aarch64-nvidia-jetson`.
+
+CLI reference and break-glass path:
+
 Register a prebuilt TensorRT engine against the ONNX model row:
 
 ```bash
@@ -327,6 +362,18 @@ Selected inference runtime ... selected_backend=tensorrt_engine ... fallback=Fal
 
 Use this after an open-vocab scene has a stable runtime vocabulary. The artifact
 is scene-scoped and only selected when the camera vocabulary hash matches.
+
+Preferred UI path:
+
+1. Edit the scene in Control -> Scenes and save the runtime vocabulary.
+2. Open Models > Runtime artifacts.
+3. Select the open-vocab source model, the Jetson node, and the scene.
+4. Queue the open-vocab artifact build.
+5. Return to Control -> Scenes and confirm readiness is Ready. If readiness says
+   `Open-vocab artifact stale: vocabulary changed`, rebuild after saving the
+   new vocabulary.
+
+CLI reference and break-glass path:
 
 ```bash
 cd /Users/yann.moren/vision/backend
