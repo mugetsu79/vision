@@ -3,8 +3,9 @@
 ## Status
 
 Implemented in `codex/sceneops-pack-registry` for backend/API/UI automated
-coverage. Installed-stack live smoke remains pending until images are rebuilt
-from the committed branch and redeployed.
+coverage and tenant-admin installed-stack live smoke. Platform-superadmin
+first-account bootstrap from UI is tracked separately in
+`docs/superpowers/specs/2026-06-09-platform-superadmin-ui-bootstrap-design.md`.
 
 ## Problem
 
@@ -43,8 +44,8 @@ than a product workflow.
 ## Non-Goals
 
 - Replacing Keycloak as the identity provider.
-- Replacing the Keycloak administration console for platform-realm superadmin
-  account bootstrap.
+- Bootstrapping the first platform-realm superadmin account; see the dedicated
+  platform-superadmin UI bootstrap spec.
 - Assigning a single user account to multiple tenants.
 - Implementing self-service sign-up.
 

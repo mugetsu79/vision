@@ -27,13 +27,19 @@
 - [x] Verified with full backend and frontend test suites:
   `python3 -m uv run --project backend pytest backend/tests -q`
   (`1245 passed`) and `corepack pnpm --dir frontend test` (`493 passed`).
+- [x] Rebuilt installed central images from the committed branch and redeployed
+  backend/frontend/supervisor containers.
+- [x] Live-smoked tenant-admin Users API against real Keycloak on the installed
+  stack: created an additional tenant admin, reset password, and verified tenant
+  admins cannot list all tenants.
+- [x] Live-smoked tenant-admin Users UI with Playwright against the installed
+  stack.
 
-Pending live/product closure:
+Remaining product closure:
 
-- [ ] Rebuild and publish images from the committed branch.
-- [ ] Redeploy installed stack and smoke the Users UI/API against real Keycloak.
-- [ ] Keep platform-realm superadmin bootstrap documented; creating the first
-  platform superadmin remains an operator/bootstrap concern, not tenant UI.
+- [ ] Implement product-managed platform-superadmin first-account bootstrap and
+  platform sign-in from
+  `docs/superpowers/plans/2026-06-09-platform-superadmin-ui-bootstrap-implementation-plan.md`.
 
 ## File Structure
 
