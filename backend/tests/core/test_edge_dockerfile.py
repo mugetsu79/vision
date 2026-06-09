@@ -8,7 +8,7 @@ PYTHON_310_ASSERTION = (
     'python -c "import sys; assert sys.version_info[:2] == (3, 10), sys.version"'
 )
 JETSON_ORT_INSTALL_COMMAND = (
-    '"$UV_PROJECT_ENVIRONMENT/bin/pip" install --no-cache-dir "$JETSON_ORT_WHEEL_URL"'
+    '"$UV_PROJECT_ENVIRONMENT/bin/pip" install --no-cache-dir "$JETSON_ORT_WHEEL_PATH"'
 )
 CPU_ORT_INSTALL_COMMAND = (
     '"$UV_PROJECT_ENVIRONMENT/bin/pip" install --no-cache-dir "onnxruntime>=1.20"'
@@ -36,7 +36,7 @@ def test_edge_dockerfile_installs_jetson_onnxruntime_wheel_after_base_deps() -> 
     assert JETSON_ORT_INSTALL_COMMAND in dockerfile
     assert 'elif [ "$ALLOW_CPU_ONNX_RUNTIME" = "1" ]' in dockerfile
     assert CPU_ORT_INSTALL_COMMAND in dockerfile
-    assert "JETSON_ORT_WHEEL_URL is required" in dockerfile
+    assert "A verified Jetson GPU ONNX Runtime wheel is required" in dockerfile
     assert "exit 1" in dockerfile
 
 
@@ -44,8 +44,11 @@ def test_edge_dockerfile_verifies_gpu_ort_wheel_digest_and_probes_providers() ->
     dockerfile = EDGE_DOCKERFILE_PATH.read_text(encoding="utf-8")
 
     assert 'ARG JETSON_ORT_WHEEL_SHA256=""' in dockerfile
+    assert 'JETSON_ORT_WHEEL_BASENAME="${JETSON_ORT_WHEEL_URL##*/}"' in dockerfile
+    assert 'JETSON_ORT_WHEEL_PATH="/tmp/$JETSON_ORT_WHEEL_BASENAME"' in dockerfile
+    assert 'case "$JETSON_ORT_WHEEL_PATH" in' in dockerfile
     assert "sha256sum -c" in dockerfile
-    assert "/tmp/onnxruntime_gpu.whl" in dockerfile
+    assert "/tmp/onnxruntime_gpu.whl" not in dockerfile
     assert "import onnxruntime as ort" in dockerfile
     assert "ort.get_available_providers()" in dockerfile
     assert "A verified Jetson GPU ONNX Runtime wheel is required" in dockerfile

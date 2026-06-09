@@ -42,10 +42,15 @@ RUN python3 -m pip install --no-cache-dir uv \
             echo "A verified Jetson GPU ONNX Runtime wheel is required: JETSON_ORT_WHEEL_SHA256 is missing." >&2; \
             exit 1; \
         fi; \
-        curl -fsSL "$JETSON_ORT_WHEEL_URL" -o /tmp/onnxruntime_gpu.whl; \
-        echo "$JETSON_ORT_WHEEL_SHA256  /tmp/onnxruntime_gpu.whl" | sha256sum -c -; \
-        "$UV_PROJECT_ENVIRONMENT/bin/pip" install --no-cache-dir /tmp/onnxruntime_gpu.whl; \
-        rm -f /tmp/onnxruntime_gpu.whl; \
+        JETSON_ORT_WHEEL_BASENAME="${JETSON_ORT_WHEEL_URL##*/}"; \
+        JETSON_ORT_WHEEL_BASENAME="${JETSON_ORT_WHEEL_BASENAME%%\?*}"; \
+        JETSON_ORT_WHEEL_BASENAME="${JETSON_ORT_WHEEL_BASENAME%%#*}"; \
+        JETSON_ORT_WHEEL_PATH="/tmp/$JETSON_ORT_WHEEL_BASENAME"; \
+        case "$JETSON_ORT_WHEEL_PATH" in *.whl) ;; *) echo "Jetson GPU ONNX Runtime URL must end with a .whl filename." >&2; exit 1 ;; esac; \
+        curl -fsSL "$JETSON_ORT_WHEEL_URL" -o "$JETSON_ORT_WHEEL_PATH"; \
+        echo "$JETSON_ORT_WHEEL_SHA256  $JETSON_ORT_WHEEL_PATH" | sha256sum -c -; \
+        "$UV_PROJECT_ENVIRONMENT/bin/pip" install --no-cache-dir "$JETSON_ORT_WHEEL_PATH"; \
+        rm -f "$JETSON_ORT_WHEEL_PATH"; \
         "$UV_PROJECT_ENVIRONMENT/bin/python" -c "import onnxruntime as ort; providers=set(ort.get_available_providers()); required={'CUDAExecutionProvider','TensorrtExecutionProvider'}; assert providers.intersection(required), f'Jetson GPU ONNX Runtime providers unavailable: {sorted(providers)}'"; \
     elif [ "$ALLOW_CPU_ONNX_RUNTIME" = "1" ]; then \
         "$UV_PROJECT_ENVIRONMENT/bin/pip" install --no-cache-dir "onnxruntime>=1.20"; \
