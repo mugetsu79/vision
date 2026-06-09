@@ -7,6 +7,7 @@ from argus.link.edge_agent import (
     PingStatistics,
     build_edge_sample_payload,
     build_udp_sequence_edge_sample_payload,
+    fetch_edge_agent_config,
     parse_args,
     parse_ping_output,
     post_edge_sample,
@@ -117,6 +118,50 @@ def test_parse_args_accepts_udp_sequence_reflector_options() -> None:
     assert args.reflector_secret == "reflector-secret"
     assert args.packet_spacing_ms == 10
     assert args.loss_timeout_ms == 250
+
+
+def test_parse_args_accepts_config_url_without_probe_details() -> None:
+    args = parse_args(
+        [
+            "--api-base-url",
+            "http://api.local",
+            "--bearer-token",
+            "secret-token",
+            "--config-url",
+            "http://api.local/api/v1/link/sites/site-1/control-targets/master/edge-agent-config",
+            "--once",
+        ]
+    )
+
+    assert args.config_url.endswith("/edge-agent-config")
+    assert args.site_id is None
+    assert args.target_id is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_edge_agent_config_sends_bearer_token() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "site_id": "site-1",
+                "target_id": "vezor-master-udp-reflector",
+                "method": "udp_sequence",
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        result = await fetch_edge_agent_config(
+            config_url="http://api.local/config",
+            bearer_token="secret-token",
+            http_client=http_client,
+        )
+
+    assert result["site_id"] == "site-1"
+    assert seen[0].headers["authorization"] == "Bearer secret-token"
 
 
 @pytest.mark.asyncio

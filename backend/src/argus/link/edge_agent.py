@@ -154,6 +154,28 @@ async def post_edge_sample(
             await client.aclose()
 
 
+async def fetch_edge_agent_config(
+    *,
+    config_url: str,
+    bearer_token: str,
+    http_client: httpx.AsyncClient | None = None,
+) -> dict[str, object]:
+    client = http_client or httpx.AsyncClient()
+    owns_client = http_client is None
+    try:
+        response = await client.get(
+            config_url,
+            headers={"Authorization": f"Bearer {bearer_token}"},
+        )
+        if response.status_code < 200 or response.status_code >= 300:
+            raise RuntimeError(f"Edge-agent config fetch failed with HTTP {response.status_code}")
+        body: Any = response.json()
+        return dict(body) if isinstance(body, Mapping) else {}
+    finally:
+        if owns_client:
+            await client.aclose()
+
+
 def run_ping_probe(
     *,
     target: str,
@@ -300,6 +322,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run Vezor Core Link edge-agent probes.")
     parser.add_argument("--api-base-url", default=os.getenv("ARGUS_API_BASE_URL"))
     parser.add_argument("--bearer-token", default=os.getenv("ARGUS_API_BEARER_TOKEN"))
+    parser.add_argument("--config-url", default=os.getenv("ARGUS_LINK_EDGE_AGENT_CONFIG_URL"))
     parser.add_argument("--site-id", default=os.getenv("ARGUS_LINK_SITE_ID"))
     parser.add_argument("--target-id", default=os.getenv("ARGUS_LINK_TARGET_ID"))
     parser.add_argument("--target", default=os.getenv("ARGUS_LINK_TARGET"))
@@ -334,11 +357,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--api-base-url or ARGUS_API_BASE_URL is required")
     if not args.bearer_token:
         parser.error("--bearer-token or ARGUS_API_BEARER_TOKEN is required")
-    if not args.site_id:
+    if not args.site_id and not args.config_url:
         parser.error("--site-id or ARGUS_LINK_SITE_ID is required")
-    if not args.target_id:
+    if not args.target_id and not args.config_url:
         parser.error("--target-id or ARGUS_LINK_TARGET_ID is required")
-    if not args.target:
+    if not args.target and not args.config_url:
         parser.error("--target or ARGUS_LINK_TARGET is required")
     if args.packet_count <= 0 or args.packet_count > 10_000:
         parser.error("--packet-count must be between 1 and 10000")
@@ -348,7 +371,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--loss-timeout-ms must be positive")
     if args.dscp is not None and (args.dscp < 0 or args.dscp > 63):
         parser.error("--dscp must be between 0 and 63")
-    if args.method == "udp_sequence":
+    if args.method == "udp_sequence" and not args.config_url:
         if not args.reflector:
             parser.error("--reflector or ARGUS_LINK_REFLECTOR is required for udp_sequence")
         if args.reflector_port <= 0 or args.reflector_port > 65_535:
@@ -362,6 +385,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 async def async_main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    if args.config_url:
+        config = await fetch_edge_agent_config(
+            config_url=args.config_url,
+            bearer_token=args.bearer_token,
+        )
+        _apply_edge_agent_config(args, config)
+        _validate_resolved_args(args)
     while True:
         if args.method == "udp_sequence":
             stats = await run_udp_sequence_probe(
@@ -403,6 +433,59 @@ async def async_main(argv: list[str] | None = None) -> int:
         if args.once:
             return 0
         await asyncio.sleep(args.interval_seconds)
+
+
+def _apply_edge_agent_config(args: argparse.Namespace, config: Mapping[str, object]) -> None:
+    args.site_id = args.site_id or _config_string(config, "site_id")
+    args.target_id = args.target_id or _config_string(config, "target_id")
+    args.method = _config_string(config, "method") or args.method
+    args.reflector = args.reflector or _config_string(config, "reflector_address")
+    args.target = args.target or args.reflector
+    args.reflector_port = _config_int(config, "reflector_port") or args.reflector_port
+    args.reflector_key_id = args.reflector_key_id or _config_string(config, "reflector_key_id")
+    args.reflector_secret = args.reflector_secret or _config_string(config, "reflector_secret")
+    args.packet_count = _config_int(config, "packet_count") or args.packet_count
+    args.packet_spacing_ms = _config_int(config, "packet_spacing_ms") or args.packet_spacing_ms
+    args.loss_timeout_ms = _config_int(config, "loss_timeout_ms") or args.loss_timeout_ms
+    args.dscp = _config_int(config, "dscp") if config.get("dscp") is not None else args.dscp
+
+
+def _validate_resolved_args(args: argparse.Namespace) -> None:
+    missing = [
+        name
+        for name in ("site_id", "target_id", "target")
+        if not getattr(args, name, None)
+    ]
+    if missing:
+        raise RuntimeError(f"Edge-agent config missing required field(s): {', '.join(missing)}")
+    if args.method == "udp_sequence":
+        missing_udp = [
+            name
+            for name in ("reflector", "reflector_key_id", "reflector_secret")
+            if not getattr(args, name, None)
+        ]
+        if missing_udp:
+            raise RuntimeError(
+                "Edge-agent config missing required UDP field(s): "
+                f"{', '.join(missing_udp)}"
+            )
+        if args.reflector_port <= 0 or args.reflector_port > 65_535:
+            raise RuntimeError("Edge-agent config reflector_port must be between 1 and 65535")
+
+
+def _config_string(config: Mapping[str, object], key: str) -> str | None:
+    value = config.get(key)
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _config_int(config: Mapping[str, object], key: str) -> int | None:
+    value = config.get(key)
+    if value is None:
+        return None
+    return int(value)
 
 
 def main() -> None:

@@ -622,7 +622,7 @@ prepare_config_for_docker_desktop "$MASTER_CONFIG"
 
 SUPERVISOR_CONFIG="$CONFIG_DIR/supervisor.json"
 CENTRAL_SUPERVISOR_ID="$(read_existing_supervisor_id "$SUPERVISOR_CONFIG")"
-CENTRAL_SUPERVISOR_ID="${CENTRAL_SUPERVISOR_ID:-central-master-1}"
+CENTRAL_SUPERVISOR_ID="${CENTRAL_SUPERVISOR_ID:-100}"
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "[dry-run] write $SUPERVISOR_CONFIG"
 else

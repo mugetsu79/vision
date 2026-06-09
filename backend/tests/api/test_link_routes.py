@@ -866,6 +866,19 @@ async def test_master_reflector_profile_api_defaults_disabled(client: AsyncClien
 
 
 @pytest.mark.asyncio
+async def test_master_reflector_profile_never_returns_secret(client: AsyncClient) -> None:
+    response = await client.post("/api/v1/link/reflectors/master/rotate-key")
+    profile = await client.get("/api/v1/link/reflectors/master")
+
+    assert response.status_code == 200
+    assert profile.status_code == 200
+    payload = profile.json()
+    assert payload["secret_state"] == "present"
+    assert "reflector_secret" not in payload
+    assert "encrypted_secret" not in payload
+
+
+@pytest.mark.asyncio
 async def test_master_reflector_profile_api_repairs_missing_control_plane_site() -> None:
     app = _create_app(_user(RoleEnum.ADMIN), include_master_site=False)
     async with AsyncClient(
@@ -1110,6 +1123,69 @@ async def test_control_target_helper_creates_udp_reflector_target_when_enabled(
     assert targets[0]["loss_packet_spacing_ms"] == 100
     assert targets[0]["loss_timeout_ms"] == 1000
     assert targets[0]["loss_dscp"] == 46
+
+
+@pytest.mark.asyncio
+async def test_supervisor_can_fetch_master_reflector_edge_agent_config() -> None:
+    app = _create_app(
+        _supervisor_user(SUPERVISOR_DEPLOYMENT_NODE_ID),
+        include_deployment=True,
+        invalid_bearer_tokens={"node-credential"},
+        supervisor_node_edge_id=KNOWN_EDGE_NODE_ID,
+    )
+    await app.state.services.link.aenable_master_reflector_profile(
+        tenant_id=TENANT_ID,
+        site_id=MASTER_SITE_ID,
+        public_address="192.168.1.166",
+        udp_port=8622,
+    )
+    app.state.services.link.upsert_connection(
+        tenant_id=TENANT_ID,
+        site_id=KNOWN_SITE_ID,
+        label="Office edge",
+        transport_kind="ethernet",
+        status="online",
+        metadata={
+            "monitoring_targets": [
+                {
+                    "id": "vezor-master-udp-reflector",
+                    "label": "Vezor Master reflector",
+                    "address": "192.168.1.166",
+                    "target_site_id": str(MASTER_SITE_ID),
+                    "probe_type": "udp",
+                    "loss_method": "udp_sequence",
+                    "loss_packet_count": 20,
+                    "loss_packet_spacing_ms": 100,
+                    "loss_timeout_ms": 1000,
+                    "reflector_key_id": "master-reflector-test",
+                }
+            ]
+        },
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        headers={"Authorization": "Bearer node-credential"},
+    ) as http_client:
+        config = await http_client.get(
+            f"/api/v1/link/sites/{KNOWN_SITE_ID}"
+            "/control-targets/master/edge-agent-config"
+        )
+
+    assert config.status_code == 200
+    payload = config.json()
+    assert payload["method"] == "udp_sequence"
+    assert payload["site_id"] == str(KNOWN_SITE_ID)
+    assert payload["target_id"] == "vezor-master-udp-reflector"
+    assert payload["target_site_id"] == str(MASTER_SITE_ID)
+    assert payload["reflector_address"] == "192.168.1.166"
+    assert payload["reflector_port"] == 8622
+    assert payload["reflector_key_id"].startswith("master-reflector-")
+    assert payload["reflector_secret"].startswith("vzref_")
+    assert payload["packet_count"] == 20
+    assert payload["packet_spacing_ms"] == 100
+    assert payload["loss_timeout_ms"] == 1000
 
 
 @pytest.mark.asyncio

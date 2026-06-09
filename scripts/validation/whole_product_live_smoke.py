@@ -23,6 +23,22 @@ class SmokeCheck:
     evidence: list[str] = field(default_factory=list)
 
 
+REQUIRED_CLOSURE_LANES: tuple[str, ...] = (
+    "Fresh destructive reset proof",
+    "First-run auth and tenant claims",
+    "Central supervisor credential binding",
+    "Real Jetson supervisor API",
+    "Jetson model sync inventory",
+    "Jetson TensorRT artifact build",
+    "Office RTSP live native annotated",
+    "Deterministic history incident evidence",
+    "Billing usage invoice FleetOps",
+    "Master reflector secret distribution",
+    "UDP edge-agent probe",
+    "Core Link master target-only behavior",
+)
+
+
 _RTSP_CREDENTIALS_RE = re.compile(r"\b([Rr][Tt][Ss][Pp]://)([^/@\s]+@)")
 _URL_CREDENTIALS_RE = re.compile(r"\b([A-Za-z][A-Za-z0-9+.-]*://)([^/@\s]+@)")
 
@@ -117,6 +133,46 @@ def status_taxonomy_check() -> SmokeCheck:
     )
 
 
+def default_closure_checks() -> list[SmokeCheck]:
+    return [
+        SmokeCheck(
+            name=name,
+            status=SmokeStatus.NOT_RUN,
+            evidence=["Live validation has not executed this lane in this harness run."],
+        )
+        for name in REQUIRED_CLOSURE_LANES
+    ]
+
+
+def build_central_credential_check(proof: Mapping[str, object]) -> SmokeCheck:
+    config_hash = str(proof.get("config_secret_sha256") or "")
+    runtime_hash = str(proof.get("runtime_credential_sha256") or "")
+    status_value = str(proof.get("central_node_credential_status") or "")
+    manual_repair_used = bool(proof.get("manual_repair_used"))
+    evidence = [
+        f"config credential sha256={config_hash or 'missing'}",
+        f"runtime credential sha256={runtime_hash or 'missing'}",
+        f"central node credential_status={status_value or 'missing'}",
+    ]
+    if manual_repair_used:
+        return SmokeCheck(
+            name="Central supervisor credential binding",
+            status=SmokeStatus.FAIL,
+            evidence=[*evidence, "Manual repair was required after first-run."],
+        )
+    if config_hash and runtime_hash and config_hash == runtime_hash and status_value == "active":
+        return SmokeCheck(
+            name="Central supervisor credential binding",
+            status=SmokeStatus.PASS,
+            evidence=evidence,
+        )
+    return SmokeCheck(
+        name="Central supervisor credential binding",
+        status=SmokeStatus.BLOCKED,
+        evidence=evidence,
+    )
+
+
 def build_checks(
     api_url: str,
     real_rtsp: str,
@@ -131,6 +187,7 @@ def build_checks(
             evidence=["Live API orchestration deferred; --api-url accepted for future checks"],
         )
     )
+    checks.extend(default_closure_checks())
     return checks
 
 
@@ -139,6 +196,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--api-url", default="http://127.0.0.1:8000")
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--real-rtsp", choices=["none", "720p", "1296p"], default="none")
+    parser.add_argument("--token-env", default="VEZOR_SMOKE_TOKEN")
+    parser.add_argument("--jetson-node-id")
+    parser.add_argument("--office-site-id")
+    parser.add_argument("--office-camera-id")
+    parser.add_argument("--smoke-run-id")
+    parser.add_argument("--reflector-config-url")
     return parser.parse_args(argv)
 
 
@@ -151,6 +214,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         metadata={
             "api_url": _redact_url_credentials(args.api_url),
             "real_rtsp": args.real_rtsp,
+            "token_env": args.token_env,
         },
     )
     return 0

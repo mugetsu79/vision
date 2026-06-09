@@ -41,6 +41,7 @@ from argus.supervisor.operations_client import (
 from argus.supervisor.process_adapter import LocalWorkerProcessAdapter, WorkerLaunchConfig
 from argus.supervisor.reconciler import SupervisorReconciler
 from argus.supervisor.stream_provisioner import SupervisorStreamProvisioner
+from argus.supervisor.tensorrt_builder import TrtExecTensorRTEngineBuilder
 
 LOGGER = logging.getLogger(__name__)
 _NIL_TENANT_ID = UUID(int=0)
@@ -376,6 +377,12 @@ def build_runner(config: RunnerConfig) -> SupervisorRunner:
     )
     stream_provisioner = _build_stream_provisioner(config, operations=operations)
     worker_token_provider = token_provider or _credential_store_token_provider(credential_store)
+    tensorrt_builder = TrtExecTensorRTEngineBuilder()
+    model_job_executor = SupervisorModelJobExecutor(
+        operations_client=operations,
+        tensorrt_engine_builder=tensorrt_builder if tensorrt_builder.available() else None,
+        runtime_versions={"tensorrt_builder": "trtexec"},
+    )
     return SupervisorRunner(
         supervisor_id=config.supervisor_id,
         edge_node_id=config.edge_node_id,
@@ -399,7 +406,7 @@ def build_runner(config: RunnerConfig) -> SupervisorRunner:
         auth_mode=config.auth_mode,
         stream_provisioner=stream_provisioner,
         edge_configuration_applier=EdgeConfigurationApplier(),
-        model_job_executor=SupervisorModelJobExecutor(operations_client=operations),
+        model_job_executor=model_job_executor,
     )
 
 

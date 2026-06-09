@@ -157,6 +157,21 @@ class LinkMasterControlTargetCreate(BaseModel):
     dscp: int | None = Field(default=None, ge=0, le=63)
 
 
+class LinkMasterReflectorEdgeAgentConfigResponse(BaseModel):
+    site_id: UUID
+    target_id: str
+    target_site_id: UUID
+    method: Literal["udp_sequence"]
+    reflector_address: str
+    reflector_port: int
+    reflector_key_id: str
+    reflector_secret: str
+    packet_count: int
+    packet_spacing_ms: int
+    loss_timeout_ms: int
+    dscp: int | None = None
+
+
 class LinkConnectionCreate(BaseModel):
     label: str = Field(min_length=1, max_length=160)
     transport_kind: LinkTransportKind
@@ -540,6 +555,54 @@ async def post_master_control_target(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return _connection_payload(updated)
+
+
+@router.get(
+    "/sites/{site_id}/control-targets/master/edge-agent-config",
+    response_model=LinkMasterReflectorEdgeAgentConfigResponse,
+)
+async def get_master_reflector_edge_agent_config(
+    site_id: UUID,
+    tenant_context: SupervisorOrAdminTenantDependency,
+    services: ServicesDependency,
+) -> LinkMasterReflectorEdgeAgentConfigResponse:
+    site = await _ensure_link_edge_site(services, tenant_context, site_id)
+    await services.operations.assert_supervisor_edge_site_scope(tenant_context, site_id)
+    master_site = await _master_control_plane_site(services, tenant_context)
+    profile = await services.link.aget_master_reflector_profile(
+        tenant_id=tenant_context.tenant_id,
+        site_id=master_site.id,
+    )
+    if profile is None or not profile.enabled or profile.encrypted_secret is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Master reflector secret is not ready.",
+        )
+    target = await services.link.atarget_for_connection_metadata(
+        tenant_id=tenant_context.tenant_id,
+        site_id=site.id,
+        target_id="vezor-master-udp-reflector",
+    )
+    if target is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Master UDP reflector target not found.",
+        )
+    secret = decrypt_reflector_secret(profile.encrypted_secret, settings=services.link.settings)
+    return LinkMasterReflectorEdgeAgentConfigResponse(
+        site_id=site.id,
+        target_id="vezor-master-udp-reflector",
+        target_site_id=master_site.id,
+        method="udp_sequence",
+        reflector_address=profile.public_address or profile.bind_address,
+        reflector_port=profile.udp_port,
+        reflector_key_id=profile.key_id,
+        reflector_secret=secret,
+        packet_count=_target_positive_int(target, "loss_packet_count", default=20),
+        packet_spacing_ms=_target_positive_int(target, "loss_packet_spacing_ms", default=100),
+        loss_timeout_ms=_target_positive_int(target, "loss_timeout_ms", default=1000),
+        dscp=_target_optional_dscp(target),
+    )
 
 
 @router.get("/sites/{site_id}/connections/selection")
@@ -1056,10 +1119,11 @@ async def _ensure_link_edge_site(
     site_id: UUID,
     *,
     detail: str = "Core Link can only be configured for edge sites.",
-) -> None:
-    await _ensure_link_site(services, tenant_context, site_id)
+) -> SiteResponse:
+    site = await _ensure_link_site(services, tenant_context, site_id)
     if not await services.sites.is_edge_site(tenant_context, site_id):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+    return site
 
 
 async def _master_control_plane_site(
@@ -1456,6 +1520,44 @@ def _probe_payload(probe: LinkHealthProbeRecord) -> JsonObject:
 def _target_text(target: JsonObject, field: str) -> str | None:
     value = target.get(field)
     return value if isinstance(value, str) else None
+
+
+def _target_positive_int(target: JsonObject, field: str, *, default: int) -> int:
+    value = target.get(field)
+    if value is None:
+        return default
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=HTTP_422_UNPROCESSABLE,
+            detail=f"Probe target {field} must be a positive integer.",
+        ) from exc
+    if parsed <= 0:
+        raise HTTPException(
+            status_code=HTTP_422_UNPROCESSABLE,
+            detail=f"Probe target {field} must be a positive integer.",
+        )
+    return parsed
+
+
+def _target_optional_dscp(target: JsonObject) -> int | None:
+    value = target.get("loss_dscp")
+    if value is None:
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=HTTP_422_UNPROCESSABLE,
+            detail="Probe target loss_dscp must be between 0 and 63.",
+        ) from exc
+    if parsed < 0 or parsed > 63:
+        raise HTTPException(
+            status_code=HTTP_422_UNPROCESSABLE,
+            detail="Probe target loss_dscp must be between 0 and 63.",
+        )
+    return parsed
 
 
 async def _target_site_id_from_metadata(

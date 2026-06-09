@@ -89,6 +89,29 @@ python -m argus.link.edge_agent \
   --once
 ```
 
+When the target is the Vezor master reflector, prefer the scoped config endpoint
+instead of passing reflector secret material on the command line. The endpoint
+is available to an authorized admin or supervisor credential for the edge site
+after the master reflector is enabled and the edge site has a
+`vezor-master-udp-reflector` target:
+
+```bash
+export ARGUS_API_BASE_URL=https://vezor.example.com
+export ARGUS_LINK_EDGE_AGENT_CONFIG_URL="$ARGUS_API_BASE_URL/api/v1/link/sites/$EDGE_SITE_ID/control-targets/master/edge-agent-config"
+python -m argus.link.edge_agent \
+  --bearer-token "$EDGE_OR_ADMIN_TOKEN" \
+  --config-url "$ARGUS_LINK_EDGE_AGENT_CONFIG_URL" \
+  --agent-id "$EDGE_AGENT_ID" \
+  --agent-label "$EDGE_AGENT_LABEL" \
+  --once
+```
+
+The normal reflector profile response exposes only `secret_state`; it never
+returns the raw reflector secret. The edge-agent config response intentionally
+contains the reflector secret for the scoped edge agent. Treat that response as
+credential material: store only in owner-only local files or process memory,
+redact `reflector_secret` from logs and support bundles, and do not commit it.
+
 For installed edge nodes, use `./bin/vezor install edge` from the release
 checkout after creating the one-time pairing session in Control -> Deployment.
 The direct `python -m argus.link.edge_agent ... --bearer-token ...` examples in
@@ -179,11 +202,14 @@ profile with enable, disable, and rotate-key actions. Deployment settings still
 control whether the reflector may bind at backend startup, and profile changes
 are reconciled into the running backend listener so enable, disable, endpoint,
 rate-limit, and key rotation changes take effect without a process restart.
-Paired edge-agent secret distribution remains a product-hardening task.
+Edge agents retrieve the master reflector secret through the scoped
+`/api/v1/link/sites/{site_id}/control-targets/master/edge-agent-config`
+endpoint after the edge site has a master UDP reflector target. Profile APIs and
+Link Performance summaries expose only secret presence.
 
 For an edge-to-master measurement, select the edge site, add a link path, use
 the `Vezor Master` preset, choose UDP sequence fields, and run the edge agent
-against the master reflector endpoint.
+with `--config-url` pointed at the scoped edge-agent config endpoint.
 
 ## Throughput
 
@@ -214,6 +240,5 @@ UDP sequence samples also preserve:
 ## Current Gaps
 
 - Edge-agent pairing credentials and service installation are not packaged yet.
-- Reflector secrets are not distributed through a polished admin UI.
 - STAMP/TWAMP/provider SD-WAN responder modes are not operational yet.
 - Continuous throughput measurement is intentionally out of scope.

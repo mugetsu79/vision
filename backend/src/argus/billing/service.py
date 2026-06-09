@@ -700,6 +700,7 @@ class BillingService:
                 created_at=invoice.created_at,
             )
             session.add(invoice_row)
+            await session.flush()
             for line in invoice.line_items:
                 session.add(_line_item_row(line))
             await session.commit()

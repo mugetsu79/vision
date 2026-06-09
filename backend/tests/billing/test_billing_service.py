@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 
 from argus.billing.service import BillingNotFoundError, BillingService
+from argus.billing.tables import BillingAccount, InvoiceLineItem, InvoiceRun, PriceBook
+from argus.billing.tables import UsageRecord as UsageRecordRow
+from argus.compat import UTC
 
 
 def test_packless_billing_node_account_entitlement_usage_invoice_flow(
@@ -292,3 +295,123 @@ def test_billing_node_parent_must_belong_to_tenant(
             label="Invalid child",
             kind="deployment",
         )
+
+
+@pytest.mark.asyncio
+async def test_async_invoice_flushes_invoice_run_before_line_items() -> None:
+    tenant_id = UUID("00000000-0000-4000-8000-000000000001")
+    account_id = UUID("00000000-0000-4000-8000-000000000010")
+    session_factory = _InvoiceOrderingSessionFactory(
+        tenant_id=tenant_id,
+        account_id=account_id,
+    )
+    billing = BillingService(session_factory)
+
+    invoice = await billing.arun_invoice(
+        tenant_id=tenant_id,
+        account_id=account_id,
+        period_start=date(2026, 6, 1),
+        period_end=date(2026, 7, 1),
+    )
+
+    assert invoice.line_items[0].meter_key == "support_session_hour"
+    assert session_factory.invoice_flush_count == 1
+
+
+class _InvoiceOrderingSessionFactory:
+    def __init__(self, *, tenant_id: UUID, account_id: UUID) -> None:
+        now = datetime(2026, 6, 9, 12, 0, tzinfo=UTC)
+        self.account = BillingAccount(
+            id=account_id,
+            tenant_id=tenant_id,
+            name="Smoke account",
+            node_ids=[],
+            pack_id=None,
+            attributes={},
+        )
+        self.account.created_at = now
+        self.account.updated_at = now
+        self.price_book = PriceBook(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            currency="USD",
+            effective_from=date(2026, 6, 1),
+            effective_to=None,
+            meter_prices={"support_session_hour": "25.00"},
+        )
+        self.price_book.created_at = now
+        self.price_book.updated_at = now
+        self.usage = UsageRecordRow(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            meter_key="support_session_hour",
+            quantity=Decimal("2"),
+            account_id=account_id,
+            node_id=None,
+            source_object_type="support_session",
+            source_object_id=UUID("00000000-0000-4000-8000-000000000020"),
+            occurred_on=date(2026, 6, 15),
+            source_started_on=None,
+            source_ended_on=None,
+            pack_id=None,
+            attributes={},
+        )
+        self.usage.created_at = now
+        self.invoice_flush_count = 0
+
+    def __call__(self) -> _InvoiceOrderingSession:
+        return _InvoiceOrderingSession(self)
+
+
+class _InvoiceOrderingSession:
+    def __init__(self, factory: _InvoiceOrderingSessionFactory) -> None:
+        self.factory = factory
+        self.invoice_row_added = False
+        self.invoice_row_flushed = False
+
+    async def __aenter__(self) -> _InvoiceOrderingSession:
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:  # noqa: ANN001
+        return None
+
+    async def get(self, entity: type[object], row_id: object) -> object | None:
+        if entity is BillingAccount and row_id == self.factory.account.id:
+            return self.factory.account
+        return None
+
+    async def execute(self, statement):  # noqa: ANN001
+        entity = statement.column_descriptions[0]["entity"]
+        if entity is PriceBook:
+            return _InvoiceOrderingResult([self.factory.price_book])
+        if entity is UsageRecordRow:
+            return _InvoiceOrderingResult([self.factory.usage])
+        return _InvoiceOrderingResult([])
+
+    def add(self, row: object) -> None:
+        if isinstance(row, InvoiceRun):
+            self.invoice_row_added = True
+            return
+        if isinstance(row, InvoiceLineItem):
+            if not self.invoice_row_flushed:
+                raise AssertionError("invoice line item added before invoice run flush")
+            return
+
+    async def flush(self) -> None:
+        if self.invoice_row_added:
+            self.invoice_row_flushed = True
+            self.factory.invoice_flush_count += 1
+
+    async def commit(self) -> None:
+        return None
+
+
+class _InvoiceOrderingResult:
+    def __init__(self, rows: list[object]) -> None:
+        self.rows = rows
+
+    def scalars(self) -> _InvoiceOrderingResult:
+        return self
+
+    def all(self) -> list[object]:
+        return list(self.rows)

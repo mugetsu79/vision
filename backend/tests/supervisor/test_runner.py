@@ -129,6 +129,37 @@ def test_parse_args_labels_password_grant_as_dev_only() -> None:
     assert config.auth_mode == "password_grant_dev"
 
 
+def test_build_runner_wires_tensorrt_builder_when_available(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    class _AvailableTensorRTBuilder:
+        def available(self) -> bool:
+            return True
+
+        def build(self, source_path, output_path, input_shape, precision):  # noqa: ANN001
+            return output_path
+
+    monkeypatch.setattr(
+        runner_module,
+        "TrtExecTensorRTEngineBuilder",
+        lambda: _AvailableTensorRTBuilder(),
+    )
+
+    built = runner_module.build_runner(
+        runner_module.RunnerConfig(
+            supervisor_id="central-imac",
+            role="central",
+            api_base_url="http://127.0.0.1:8000",
+            bearer_token="dev-token",
+            credential_store_path=tmp_path / "supervisor.credential",
+        )
+    )
+
+    assert built.model_job_executor is not None
+    assert built.model_job_executor.tensorrt_engine_builder is not None
+
+
 @pytest.mark.asyncio
 async def test_runner_posts_service_and_hardware_reports_before_polling() -> None:
     operations = _FakeOperations(requests=[])

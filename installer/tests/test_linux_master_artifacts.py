@@ -73,6 +73,8 @@ def test_linux_master_compose_profile_contains_required_product_services() -> No
 
     assert "${VEZOR_DATA_DIR:-/var/lib/vezor}/postgres:/var/lib/postgresql/data" in compose
     assert "${VEZOR_DATA_DIR:-/var/lib/vezor}/minio:/data" in compose
+    assert "${VEZOR_DATA_DIR:-/var/lib/vezor}/evidence:/var/lib/vezor/evidence" in compose
+    assert "ARGUS_INCIDENT_LOCAL_STORAGE_ROOT: /var/lib/vezor/evidence" in compose
     assert '"${VEZOR_MEDIAMTX_WEBRTC_UDP_BIND:-0.0.0.0}:8189:8189/udp"' in compose
     assert "${VEZOR_CONFIG_DIR:-/etc/vezor}/master.json:/etc/vezor/master.json:ro" in compose
     assert "${VEZOR_CONFIG_DIR:-/etc/vezor}/supervisor.json:/etc/vezor/supervisor.json:ro" in compose
@@ -320,7 +322,7 @@ def test_linux_master_installer_preserves_existing_central_supervisor_identity()
 
     assert "read_existing_supervisor_id" in script
     assert 'CENTRAL_SUPERVISOR_ID="$(read_existing_supervisor_id "$SUPERVISOR_CONFIG")"' in script
-    assert 'CENTRAL_SUPERVISOR_ID="${CENTRAL_SUPERVISOR_ID:-central-master-1}"' in script
+    assert 'CENTRAL_SUPERVISOR_ID="${CENTRAL_SUPERVISOR_ID:-100}"' in script
     assert '"supervisor_id": "$CENTRAL_SUPERVISOR_ID"' in script
 
 

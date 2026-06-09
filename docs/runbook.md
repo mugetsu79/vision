@@ -160,12 +160,30 @@ Master reflector operations:
 3. On an edge site, add a link path and a monitoring target. Use the Vezor
    Master preset for edge-to-master checks, or custom UDP sequence fields for a
    third-party/customer reflector.
-4. Run `python -m argus.link.edge_agent` from the edge site with the configured
-   target id and reflector secret.
+4. For the Vezor master reflector, run `python -m argus.link.edge_agent` from
+   the edge site with the scoped config endpoint instead of passing the
+   reflector secret on the command line:
+
+   ```bash
+   export ARGUS_API_BASE_URL=https://vezor.example.com
+   export ARGUS_LINK_EDGE_AGENT_CONFIG_URL="$ARGUS_API_BASE_URL/api/v1/link/sites/$EDGE_SITE_ID/control-targets/master/edge-agent-config"
+   python -m argus.link.edge_agent \
+     --bearer-token "$EDGE_OR_ADMIN_TOKEN" \
+     --config-url "$ARGUS_LINK_EDGE_AGENT_CONFIG_URL" \
+     --agent-id "$EDGE_AGENT_ID" \
+     --agent-label "$EDGE_AGENT_LABEL" \
+     --once
+   ```
+
+   Profile and summary APIs expose only `secret_state`; the scoped edge-agent
+   config response intentionally includes `reflector_secret`. Treat that
+   response as credential material: keep it in process memory or owner-only
+   local files, redact it from logs/support bundles, and never commit it.
+5. For third-party/customer reflectors, use the configured target id and the
+   reflector secret from the operator's local secret store.
 
 Open gaps: edge-agent service packaging, paired edge-agent credentials,
-polished reflector secret distribution, and STAMP/TWAMP/provider responder
-modes.
+and STAMP/TWAMP/provider responder modes.
 
 Before publishing or field-testing an installer build, run:
 

@@ -129,6 +129,7 @@ def test_main_writes_report_file(tmp_path: Path) -> None:
     assert report["metadata"] == {
         "api_url": "http://api.local.test:8000",
         "real_rtsp": "none",
+        "token_env": "VEZOR_SMOKE_TOKEN",
     }
     assert report["checks"][0]["name"] == "status taxonomy"
     assert report["checks"][0]["status"] == "PASS"
@@ -196,3 +197,106 @@ def test_main_reports_selected_real_rtsp_lane_when_env_missing(
     evidence = " ".join(real_rtsp_check["evidence"])
     assert "VEZOR_SMOKE_REAL_RTSP_1296P_URL" in evidence
     assert "rtsp://" not in evidence.lower()
+
+
+def test_closure_report_contains_all_required_lanes(tmp_path: Path) -> None:
+    module = _load_module()
+    report_path = tmp_path / "closure-smoke.json"
+
+    result = module.main(
+        [
+            "--api-url",
+            "http://api.local.test:8000",
+            "--report",
+            str(report_path),
+            "--real-rtsp",
+            "none",
+        ]
+    )
+
+    assert result == 0
+    report = _read_json(report_path)
+    names = {check["name"] for check in report["checks"]}
+    assert names >= {
+        "Fresh destructive reset proof",
+        "First-run auth and tenant claims",
+        "Central supervisor credential binding",
+        "Real Jetson supervisor API",
+        "Jetson model sync inventory",
+        "Jetson TensorRT artifact build",
+        "Office RTSP live native annotated",
+        "Deterministic history incident evidence",
+        "Billing usage invoice FleetOps",
+        "Master reflector secret distribution",
+        "UDP edge-agent probe",
+        "Core Link master target-only behavior",
+    }
+
+
+def test_missing_live_inputs_are_blocked_or_not_run_not_pass(tmp_path: Path) -> None:
+    module = _load_module()
+    report_path = tmp_path / "closure-smoke.json"
+
+    module.main(["--report", str(report_path), "--real-rtsp", "720p"])
+
+    report = _read_json(report_path)
+    forbidden_pass_names = {
+        "Real RTSP source",
+        "Real Jetson supervisor API",
+        "Jetson model sync inventory",
+        "Jetson TensorRT artifact build",
+        "Master reflector secret distribution",
+        "UDP edge-agent probe",
+    }
+    for check in report["checks"]:
+        if check["name"] in forbidden_pass_names:
+            assert check["status"] in {"BLOCKED", "NOT RUN"}
+
+
+def test_central_credential_proof_uses_hashes_not_secret_material() -> None:
+    module = _load_module()
+
+    check = module.build_central_credential_check(
+        {
+            "config_secret_sha256": "a" * 64,
+            "runtime_credential_sha256": "a" * 64,
+            "central_node_credential_status": "active",
+            "manual_repair_used": False,
+        }
+    )
+
+    assert check.status.value == "PASS"
+    evidence = " ".join(check.evidence)
+    assert "secret" not in evidence.lower()
+    assert "a" * 64 in evidence
+
+
+def test_central_credential_proof_blocks_manual_repair() -> None:
+    module = _load_module()
+
+    check = module.build_central_credential_check(
+        {
+            "config_secret_sha256": "a" * 64,
+            "runtime_credential_sha256": "a" * 64,
+            "central_node_credential_status": "active",
+            "manual_repair_used": True,
+        }
+    )
+
+    assert check.status.value == "FAIL"
+    assert "manual repair" in " ".join(check.evidence).lower()
+
+
+def test_report_metadata_redacts_token_env_not_token_value(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    module = _load_module()
+    report_path = tmp_path / "closure.json"
+    monkeypatch.setenv("VEZOR_SMOKE_TOKEN", "secret-token-value")
+
+    module.main(["--report", str(report_path), "--token-env", "VEZOR_SMOKE_TOKEN"])
+
+    text = report_path.read_text(encoding="utf-8")
+    assert "VEZOR_SMOKE_TOKEN" in text
+    assert "secret-token-value" not in text
