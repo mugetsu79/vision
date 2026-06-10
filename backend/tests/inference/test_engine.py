@@ -1722,6 +1722,44 @@ async def test_engine_reports_runtime_report_media_capture_backend_and_encoder_m
 
 
 @pytest.mark.asyncio
+async def test_engine_omits_runtime_artifact_when_selected_provider_falls_back() -> None:
+    camera_id = uuid4()
+    runtime_artifact = _runtime_artifact_settings(
+        target_profile=ExecutionProfile.LINUX_AARCH64_NVIDIA_JETSON.value,
+    )
+    runtime_reporter = _RecordingRuntimeReporter()
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=_RuntimeModeFrameSource(
+            [np.zeros((64, 64, 3), dtype=np.uint8)],
+            media_pipeline_mode="ffmpeg_software",
+            media_capture_backend="opencv_ffmpeg",
+        ),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+        runtime_reporter=runtime_reporter,
+    )
+    engine.runtime_selection = RuntimeSelection(
+        selected_backend="onnxruntime",
+        artifact=runtime_artifact,
+        fallback=True,
+        fallback_reason="runtime artifact does not match host profile",
+    )
+
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, tzinfo=UTC))
+
+    assert len(runtime_reporter.reports) == 1
+    report = runtime_reporter.reports[0]
+    assert report.selected_provider == "onnxruntime"
+    assert report.runtime_artifact_id is None
+
+
+@pytest.mark.asyncio
 async def test_engine_uses_detector_captured_frame_fast_path_before_bgr_materialization() -> None:
     camera_id = uuid4()
     frame = _GpuOnlyFrame()

@@ -1042,6 +1042,7 @@ class InferenceEngine:
         ):
             return
         self._last_runtime_report_at = loop_time
+        selected_provider = self._selected_runtime_provider()
         payload = SupervisorRuntimeReportCreate(
             camera_id=self.config.camera_id,
             edge_node_id=self._edge_node_id,
@@ -1049,10 +1050,12 @@ class InferenceEngine:
             runtime_state=WorkerRuntimeState.RUNNING,
             restart_count=0,
             last_error=None,
-            runtime_artifact_id=self._runtime_artifact_id(),
+            runtime_artifact_id=self._runtime_artifact_id(
+                selected_provider=selected_provider
+            ),
             scene_contract_hash=self.config.scene_contract_hash,
             source_profile_hash=self.config.source_profile_hash,
-            selected_provider=self._selected_runtime_provider(),
+            selected_provider=selected_provider,
             media_pipeline_mode=self._media_pipeline_mode(),
             media_capture_backend=self._media_capture_backend(),
             encoder_mode=self._encoder_mode(),
@@ -1066,9 +1069,27 @@ class InferenceEngine:
                 exc,
             )
 
-    def _runtime_artifact_id(self) -> UUID | None:
+    def _runtime_artifact_id(self, *, selected_provider: str | None = None) -> UUID | None:
         artifact = self.runtime_selection.artifact
-        return artifact.id if artifact is not None else None
+        if artifact is None:
+            return None
+        artifact_backend = self._normalize_runtime_backend(artifact.runtime_backend)
+        selected_backend = self._normalize_runtime_backend(selected_provider)
+        if (
+            artifact_backend is not None
+            and selected_backend is not None
+            and artifact_backend != selected_backend
+        ):
+            return None
+        return artifact.id
+
+    @staticmethod
+    def _normalize_runtime_backend(value: object | None) -> str | None:
+        if value is None:
+            return None
+        normalized = getattr(value, "value", value)
+        text = str(normalized).strip().lower()
+        return text or None
 
     def _selected_runtime_provider(self) -> str | None:
         selected_backend = self.runtime_selection.selected_backend
