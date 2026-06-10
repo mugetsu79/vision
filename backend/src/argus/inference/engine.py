@@ -325,6 +325,16 @@ class FrameSource(Protocol):
     def close(self) -> None: ...
 
 
+class ReconfigurableFrameSource(Protocol):
+    def reconfigure(
+        self,
+        *,
+        target_width: int | None,
+        target_height: int | None,
+        fps_cap: int,
+    ) -> None: ...
+
+
 class Detector(Protocol):
     capability: DetectorCapability
 
@@ -852,6 +862,14 @@ def _canonical_model_backend(model: ModelSettings) -> str:
     return "onnxruntime"
 
 
+def _capture_fps_cap(camera_fps_cap: int, stream_fps: int) -> int:
+    if stream_fps <= 0:
+        return camera_fps_cap
+    if camera_fps_cap <= 0:
+        return stream_fps
+    return min(camera_fps_cap, stream_fps)
+
+
 class InferenceEngine:
     def __init__(
         self,
@@ -1029,6 +1047,7 @@ class InferenceEngine:
             scene_contract_hash=self.config.scene_contract_hash,
             selected_provider=self._selected_runtime_provider(),
             media_pipeline_mode=self._media_pipeline_mode(),
+            media_capture_backend=self._media_capture_backend(),
             encoder_mode=self._encoder_mode(),
         )
         try:
@@ -1060,6 +1079,13 @@ class InferenceEngine:
         if not callable(media_pipeline_mode):
             return None
         value = media_pipeline_mode()
+        return str(value) if value is not None else None
+
+    def _media_capture_backend(self) -> str | None:
+        media_capture_backend = getattr(self.frame_source, "media_capture_backend", None)
+        if not callable(media_capture_backend):
+            return None
+        value = media_capture_backend()
         return str(value) if value is not None else None
 
     def _encoder_mode(self) -> str | None:
@@ -1299,6 +1325,7 @@ class InferenceEngine:
 
     async def apply_command(self, command: CameraCommand) -> None:
         should_register_stream = False
+        stream_changed = False
         visible_classes_before = self._visible_class_key()
         if command.active_classes is not None:
             self._state.active_classes = list(command.active_classes)
@@ -1371,6 +1398,7 @@ class InferenceEngine:
         if command.stream is not None and command.stream != self.config.stream:
             self.config.stream = command.stream
             should_register_stream = True
+            stream_changed = True
         if command.privacy is not None and command.privacy != self._state.privacy:
             self._state.privacy = command.privacy
             self.privacy_filter = PrivacyFilter(
@@ -1394,6 +1422,8 @@ class InferenceEngine:
                 target_width=self.config.stream.width,
                 target_height=self.config.stream.height,
             )
+            if stream_changed:
+                self._reconfigure_frame_source_for_stream()
         if command.attribute_rules is not None:
             self._state.attribute_rules = list(command.attribute_rules)
         if command.incident_rules is not None:
@@ -1482,6 +1512,24 @@ class InferenceEngine:
         for stage_name, duration in last_stage_timings().items():
             if isinstance(stage_name, str) and isinstance(duration, int | float):
                 stage_timer.record_duration(f"capture_{stage_name}", float(duration))
+
+    def _reconfigure_frame_source_for_stream(self) -> None:
+        reconfigure = getattr(self.frame_source, "reconfigure", None)
+        if not callable(reconfigure):
+            return
+        registration = self._stream_registration
+        target_width = (
+            registration.target_width if registration is not None else self.config.stream.width
+        )
+        target_height = (
+            registration.target_height if registration is not None else self.config.stream.height
+        )
+        target_fps = registration.target_fps if registration is not None else self.config.stream.fps
+        reconfigure(
+            target_width=target_width,
+            target_height=target_height,
+            fps_cap=_capture_fps_cap(self.config.camera.fps_cap, target_fps),
+        )
 
     def _face_privacy_classes(self) -> list[str]:
         if self.config.model.capability is DetectorCapability.OPEN_VOCAB:
@@ -2040,7 +2088,7 @@ async def build_runtime_engine(
             target_width=registration.target_width,
             target_height=registration.target_height,
             frame_skip=config.camera.frame_skip,
-            fps_cap=config.camera.fps_cap,
+            fps_cap=_capture_fps_cap(config.camera.fps_cap, registration.target_fps),
         )
     )
     runtime = import_onnxruntime()

@@ -7111,7 +7111,7 @@ def _capture_setup_preview_snapshot(
     camera: Camera,
     settings: Settings,
 ) -> _SetupPreviewSnapshot:
-    rtsp_url = decrypt_rtsp_url(camera.rtsp_url_encrypted, settings)
+    rtsp_url = _camera_rtsp_capture_uri(camera, settings)
     image_bytes, width, height = capture_still_image(rtsp_url)
     return _SetupPreviewSnapshot(
         image_bytes=image_bytes,
@@ -7145,7 +7145,7 @@ async def _camera_setup_frame_size(camera: Camera, settings: Settings) -> FrameS
 
 def _probe_camera_frame_size(camera: Camera, settings: Settings) -> FrameSize | None:
     try:
-        rtsp_url = decrypt_rtsp_url(camera.rtsp_url_encrypted, settings)
+        rtsp_url = _camera_rtsp_capture_uri(camera, settings)
         width, height = _probe_video_dimensions(rtsp_url)
     except Exception:
         logger.warning(
@@ -7158,6 +7158,15 @@ def _probe_camera_frame_size(camera: Camera, settings: Settings) -> FrameSize | 
         return None
 
     return FrameSize(width=width, height=height)
+
+
+def _camera_rtsp_capture_uri(camera: Camera, settings: Settings) -> str:
+    if _source_kind_from_camera(camera) is CameraSourceKind.RTSP:
+        source_config = dict(camera.source_config or {})
+        capture_uri = source_config.get("capture_uri")
+        if isinstance(capture_uri, str) and capture_uri.startswith(("rtsp://", "rtsps://")):
+            return capture_uri
+    return decrypt_rtsp_url(camera.rtsp_url_encrypted, settings)
 
 
 def _validate_points_within_frame(

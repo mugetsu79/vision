@@ -336,6 +336,9 @@ def _runtime_report_payload_from_worker(worker: FleetCameraWorkerSummary) -> dic
         "scene_contract_hash": report.scene_contract_hash if report is not None else None,
         "selected_provider": selected_provider,
         "media_pipeline_mode": report.media_pipeline_mode if report is not None else None,
+        "media_capture_backend": (
+            report.media_capture_backend if report is not None else None
+        ),
         "encoder_mode": report.encoder_mode if report is not None else None,
     }
 

@@ -10,7 +10,7 @@ import threading
 import time
 from collections import deque
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from logging import getLogger
 from time import perf_counter
 from typing import Any, Protocol, cast
@@ -31,16 +31,35 @@ from argus.vision.capture_options import (
     _OPENCV_CAPTURE_READ_TIMEOUT_MS,
     _OPENCV_FFMPEG_CAPTURE_OPTIONS,
 )
+from argus.vision.gstreamer_appsink import (
+    AppSinkPipelineMode,
+    GStreamerAppSinkCapture,
+    PyGObjectAppSinkRuntime,
+    build_rtsp_appsink_pipeline,
+    probe_appsink_capabilities,
+)
 
 LOGGER = getLogger(__name__)
 
 _JETSON_RTSP_PROTOCOLS_ENV = "ARGUS_JETSON_RTSP_PROTOCOLS"
 _JETSON_RTSP_LATENCY_MS_ENV = "ARGUS_JETSON_RTSP_LATENCY_MS"
 _JETSON_RTSP_DROP_ON_LATENCY_ENV = "ARGUS_JETSON_RTSP_DROP_ON_LATENCY"
+_JETSON_CAPTURE_BACKEND_ENV = "ARGUS_JETSON_CAPTURE_BACKEND"
+_JETSON_CAPTURE_BACKEND_AUTO = "auto"
+_JETSON_CAPTURE_BACKEND_APPSINK = "appsink"
+_JETSON_CAPTURE_BACKEND_RAWVIDEO = "rawvideo"
 _JETSON_RTSP_DEFAULT_PROTOCOLS = "tcp"
 _JETSON_RTSP_DEFAULT_LATENCY_MS = 200
 _JETSON_RTSP_DEFAULT_DROP_ON_LATENCY = True
 _GST_FLAG_VALUE_PATTERN = re.compile(r"^[A-Za-z0-9_+,-]+$")
+_GST_LOCATION_PROPERTY_PATTERN = re.compile(
+    r"\blocation=(?P<value>\"(?:\\.|[^\"\\])*\"|\S+)",
+)
+_RTSP_URL_SUBSTRING_PATTERN = re.compile(r"\brtsps?://[^\s\"'<>]+")
+_MEDIA_CAPTURE_BACKEND_GSTREAMER_RAWVIDEO_PIPE = "gstreamer_rawvideo_pipe"
+_MEDIA_CAPTURE_BACKEND_FFMPEG_RAWVIDEO = "ffmpeg_rawvideo"
+_MEDIA_CAPTURE_BACKEND_OPENCV_FFMPEG = "opencv_ffmpeg"
+_MEDIA_CAPTURE_BACKEND_OPENCV_GSTREAMER = "opencv_gstreamer"
 
 Frame = NDArray[np.uint8]
 MonotonicClock = Callable[[], float]
@@ -81,6 +100,9 @@ class _PrefetchedFrameCapture:
             return None
         return media_pipeline_mode()
 
+    def media_capture_backend(self) -> str | None:
+        return _delegated_media_capture_backend(self._capture)
+
     def release(self) -> None:
         self._capture.release()
 
@@ -88,6 +110,7 @@ class _PrefetchedFrameCapture:
 @dataclass(slots=True)
 class _LatestFrameCapture:
     _capture: CaptureHandle
+    _media_capture_backend: str | None = None
     _read_timeout_s: float = _FFMPEG_FRAME_WAIT_TIMEOUT_S
     _release_join_timeout_s: float = 1.0
     _latest_frame: deque[Frame] = field(default_factory=lambda: deque(maxlen=1))
@@ -104,11 +127,13 @@ class _LatestFrameCapture:
         cls,
         capture: CaptureHandle,
         *,
+        media_capture_backend: str | None = None,
         read_timeout_s: float = _FFMPEG_FRAME_WAIT_TIMEOUT_S,
         release_join_timeout_s: float = 1.0,
     ) -> _LatestFrameCapture:
         instance = cls(
             _capture=capture,
+            _media_capture_backend=media_capture_backend,
             _read_timeout_s=read_timeout_s,
             _release_join_timeout_s=release_join_timeout_s,
         )
@@ -163,6 +188,12 @@ class _LatestFrameCapture:
             return None
         return media_pipeline_mode()
 
+    def media_capture_backend(self) -> str | None:
+        return (
+            _delegated_media_capture_backend(self._capture)
+            or self._media_capture_backend
+        )
+
     def release(self) -> None:
         self._closed = True
         self._new_frame_event.set()
@@ -181,6 +212,36 @@ class _LatestFrameCapture:
             if self._capture_released:
                 return
             self._capture_released = True
+        self._capture.release()
+
+
+@dataclass(slots=True)
+class _MediaCaptureBackendCapture:
+    _capture: CaptureHandle
+    _media_capture_backend: str
+
+    def read(self) -> tuple[bool, Frame | None]:
+        return self._capture.read()
+
+    def last_stage_timings(self) -> dict[str, float]:
+        last_stage_timings = getattr(self._capture, "last_stage_timings", None)
+        if not callable(last_stage_timings):
+            return {}
+        return dict(last_stage_timings())
+
+    def media_pipeline_mode(self) -> str | None:
+        media_pipeline_mode = getattr(self._capture, "media_pipeline_mode", None)
+        if not callable(media_pipeline_mode):
+            return None
+        return media_pipeline_mode()
+
+    def media_capture_backend(self) -> str:
+        return (
+            _delegated_media_capture_backend(self._capture)
+            or self._media_capture_backend
+        )
+
+    def release(self) -> None:
         self._capture.release()
 
 
@@ -295,8 +356,48 @@ class CameraSource:
             return MediaPipelineMode.FFMPEG_SOFTWARE.value
         return None
 
+    def media_capture_backend(self) -> str | None:
+        value = _delegated_media_capture_backend(self._capture)
+        if value is not None:
+            return value
+        if self.mode is CameraSourceMode.X86_RTSP or self._backend == cv2.CAP_FFMPEG:
+            return _MEDIA_CAPTURE_BACKEND_OPENCV_FFMPEG
+        return None
+
     def close(self) -> None:
         self._capture.release()
+
+    def reconfigure(
+        self,
+        *,
+        target_width: int | None,
+        target_height: int | None,
+        fps_cap: int,
+    ) -> None:
+        next_config = replace(
+            self.config,
+            target_width=target_width,
+            target_height=target_height,
+            fps_cap=fps_cap,
+        )
+        if next_config == self.config:
+            return
+
+        previous_capture = self._capture
+        previous_config = self.config
+        try:
+            self.config = next_config
+            self._capture = self._open_capture()
+        except Exception:
+            self.config = previous_config
+            self._capture = previous_capture
+            raise
+
+        previous_capture.release()
+        self._raw_frame_index = 0
+        self._last_yield_at = None
+        self._reconnect_attempts = 0
+        self._last_stage_timings = {}
 
     def _open_capture(self) -> CaptureHandle:
         source_uri = self._resolve_source_uri()
@@ -363,6 +464,14 @@ class CameraSource:
                 and isinstance(duration, int | float)
             ):
                 timings[stage_name] = timings.get(stage_name, 0.0) + float(duration)
+
+
+def _delegated_media_capture_backend(capture: object) -> str | None:
+    media_capture_backend = getattr(capture, "media_capture_backend", None)
+    if not callable(media_capture_backend):
+        return None
+    value = media_capture_backend()
+    return str(value) if value is not None else None
 
 
 def create_camera_source(
@@ -468,6 +577,26 @@ def _jetson_rtsp_options_from_environment() -> _JetsonRtspOptions:
     )
 
 
+def _jetson_capture_backend_preference() -> str:
+    raw_value = os.environ.get(
+        _JETSON_CAPTURE_BACKEND_ENV,
+        _JETSON_CAPTURE_BACKEND_AUTO,
+    )
+    value = raw_value.strip().lower()
+    if value in {
+        _JETSON_CAPTURE_BACKEND_AUTO,
+        _JETSON_CAPTURE_BACKEND_APPSINK,
+        _JETSON_CAPTURE_BACKEND_RAWVIDEO,
+    }:
+        return value
+    LOGGER.warning(
+        "Ignoring invalid %s value %r; using auto",
+        _JETSON_CAPTURE_BACKEND_ENV,
+        raw_value,
+    )
+    return _JETSON_CAPTURE_BACKEND_AUTO
+
+
 def _parse_jetson_rtsp_protocols(raw_value: str | None) -> str:
     if raw_value is None or raw_value.strip() == "":
         return _JETSON_RTSP_DEFAULT_PROTOCOLS
@@ -551,6 +680,22 @@ def _open_jetson_gstreamer_capture_with_fallback(
     source: str,
     backend: int | None,
 ) -> CaptureHandle:
+    backend_preference = _jetson_capture_backend_preference()
+    if backend_preference != _JETSON_CAPTURE_BACKEND_RAWVIDEO:
+        try:
+            return _open_gstreamer_appsink_capture(
+                source,
+                media_pipeline_mode=MediaPipelineMode.JETSON_GSTREAMER_NATIVE.value,
+            )
+        except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
+            if backend_preference == _JETSON_CAPTURE_BACKEND_APPSINK:
+                raise
+            LOGGER.warning(
+                "Jetson appsink capture unavailable; falling back to rawvideo pipe: %s",
+                _redact_gstreamer_capture_exception_message(exc, source=source),
+                extra={"source_uri": _redact_gstreamer_source_uri(source)},
+            )
+
     try:
         return _open_gstreamer_rawvideo_capture(
             source,
@@ -559,11 +704,25 @@ def _open_jetson_gstreamer_capture_with_fallback(
     except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
         LOGGER.warning(
             "Jetson native GStreamer capture unavailable; falling back to software decode: %s",
-            _redact_capture_exception_message(exc, source=source),
+            _redact_gstreamer_capture_exception_message(exc, source=source),
             extra={"source_uri": _redact_gstreamer_source_uri(source)},
         )
 
     fallback_source = _jetson_software_decode_pipeline(source)
+    if backend_preference != _JETSON_CAPTURE_BACKEND_RAWVIDEO:
+        try:
+            return _open_gstreamer_appsink_capture(
+                fallback_source,
+                media_pipeline_mode=MediaPipelineMode.JETSON_GSTREAMER_SOFTWARE.value,
+            )
+        except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
+            LOGGER.warning(
+                "Jetson software GStreamer appsink capture unavailable; "
+                "falling back to rawvideo pipe: %s",
+                _redact_gstreamer_capture_exception_message(exc, source=fallback_source),
+                extra={"source_uri": _redact_gstreamer_source_uri(fallback_source)},
+            )
+
     try:
         return _open_gstreamer_rawvideo_capture(
             fallback_source,
@@ -572,14 +731,80 @@ def _open_jetson_gstreamer_capture_with_fallback(
     except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
         LOGGER.warning(
             "Jetson software GStreamer capture unavailable; falling back to ffmpeg rawvideo: %s",
-            _redact_capture_exception_message(exc, source=fallback_source),
+            _redact_gstreamer_capture_exception_message(exc, source=fallback_source),
             extra={"source_uri": _redact_gstreamer_source_uri(fallback_source)},
         )
 
     rawvideo_capture = _try_open_rawvideo_capture_from_gstreamer_source(fallback_source)
     if rawvideo_capture is not None:
         return rawvideo_capture
-    return cast(CaptureHandle, _open_opencv_capture(fallback_source, backend))
+    capture = cast(CaptureHandle, _open_opencv_capture(fallback_source, backend))
+    if backend == cv2.CAP_GSTREAMER:
+        return _MediaCaptureBackendCapture(
+            capture,
+            _MEDIA_CAPTURE_BACKEND_OPENCV_GSTREAMER,
+        )
+    return capture
+
+
+def _open_gstreamer_appsink_capture(
+    source: str,
+    *,
+    media_pipeline_mode: str,
+) -> CaptureHandle:
+    source_uri = _extract_gstreamer_source_uri(source)
+    if source_uri is None:
+        raise RuntimeError("GStreamer pipeline does not include an rtspsrc location.")
+    width, height = _extract_gstreamer_output_dimensions(source) or _probe_video_dimensions(
+        source_uri
+    )
+    appsink_mode = (
+        AppSinkPipelineMode.GSTREAMER_SOFTWARE
+        if media_pipeline_mode == MediaPipelineMode.JETSON_GSTREAMER_SOFTWARE.value
+        else AppSinkPipelineMode.JETSON_NATIVE
+    )
+    capabilities = probe_appsink_capabilities(mode=appsink_mode)
+    if not capabilities.available:
+        raise RuntimeError(capabilities.reason or "GStreamer appsink is unavailable.")
+
+    options = _jetson_rtsp_options_from_environment()
+    pipeline = build_rtsp_appsink_pipeline(
+        source_uri,
+        mode=appsink_mode,
+        target_width=width,
+        target_height=height,
+        protocols=options.protocols,
+        latency_ms=options.latency_ms,
+        drop_on_latency=options.drop_on_latency,
+        appsink_supports_leaky_type=capabilities.appsink_supports_leaky_type,
+        decoder_supports_disable_dpb=capabilities.decoder_supports_disable_dpb,
+    )
+    capture = GStreamerAppSinkCapture.create(
+        pipeline=pipeline,
+        runtime=PyGObjectAppSinkRuntime(),
+        width=width,
+        height=height,
+        media_pipeline_mode=media_pipeline_mode,
+        read_timeout_s=_FFMPEG_FRAME_WAIT_TIMEOUT_S,
+    )
+    try:
+        success, frame = capture.read()
+    except Exception:
+        capture.release()
+        raise
+    if success and frame is not None:
+        label = (
+            "Jetson software GStreamer appsink capture is active"
+            if media_pipeline_mode == MediaPipelineMode.JETSON_GSTREAMER_SOFTWARE.value
+            else "Jetson native GStreamer appsink capture is active"
+        )
+        LOGGER.warning(
+            label,
+            extra={"source_uri": redact_url_secrets(source_uri)},
+        )
+        return _PrefetchedFrameCapture(capture, frame)
+    capture.release()
+    raise RuntimeError("GStreamer appsink capture produced no first frame.")
 
 
 def _open_gstreamer_rawvideo_capture(
@@ -658,17 +883,62 @@ def _jetson_software_decode_pipeline(source: str) -> str:
 
 
 def _redact_gstreamer_source_uri(source: str) -> str:
-    source_uri = _extract_gstreamer_source_uri(source)
-    if source_uri is None:
-        return source
-    return source.replace(source_uri, redact_url_secrets(source_uri))
+    def replace(match: re.Match[str]) -> str:
+        value = match.group("value")
+        source_uri = _unquote_gstreamer_string(value)
+        redacted_source_uri = redact_url_secrets(source_uri)
+        if redacted_source_uri == source_uri:
+            return match.group(0)
+        if value.startswith('"') and value.endswith('"'):
+            return f"location={_quote_gstreamer_string(redacted_source_uri)}"
+        return f"location={redacted_source_uri}"
+
+    return _GST_LOCATION_PROPERTY_PATTERN.sub(replace, source)
 
 
 def _extract_gstreamer_source_uri(source: str) -> str | None:
-    match = re.search(r"\blocation=([^\s]+)", source)
+    match = _GST_LOCATION_PROPERTY_PATTERN.search(source)
     if match is None:
         return None
-    return match.group(1)
+    return _unquote_gstreamer_string(match.group("value"))
+
+
+def _quote_gstreamer_string(value: str) -> str:
+    if "\x00" in value:
+        raise ValueError("GStreamer location value must not contain NUL bytes.")
+    replacements = {
+        "\\": "\\\\",
+        '"': '\\"',
+        "\n": "\\n",
+        "\r": "\\r",
+        "\t": "\\t",
+    }
+    escaped = "".join(replacements.get(character, character) for character in value)
+    return f'"{escaped}"'
+
+
+def _unquote_gstreamer_string(value: str) -> str:
+    if not (value.startswith('"') and value.endswith('"')):
+        return value
+    replacements = {
+        "n": "\n",
+        "r": "\r",
+        "t": "\t",
+    }
+    result: list[str] = []
+    escaped = False
+    for character in value[1:-1]:
+        if escaped:
+            result.append(replacements.get(character, character))
+            escaped = False
+            continue
+        if character == "\\":
+            escaped = True
+            continue
+        result.append(character)
+    if escaped:
+        result.append("\\")
+    return "".join(result)
 
 
 def _open_opencv_capture(source: str | int, backend: int | None) -> cv2.VideoCapture:
@@ -681,7 +951,14 @@ def _open_opencv_capture(source: str | int, backend: int | None) -> cv2.VideoCap
 
 
 def _open_buffered_opencv_capture(source: str | int, backend: int | None) -> CaptureHandle:
-    return _LatestFrameCapture.create(cast(CaptureHandle, _open_opencv_capture(source, backend)))
+    return _LatestFrameCapture.create(
+        cast(CaptureHandle, _open_opencv_capture(source, backend)),
+        media_capture_backend=(
+            _MEDIA_CAPTURE_BACKEND_OPENCV_FFMPEG
+            if backend == cv2.CAP_FFMPEG
+            else None
+        ),
+    )
 
 
 def _configure_opencv_capture(capture: cv2.VideoCapture) -> None:
@@ -831,6 +1108,9 @@ class _GStreamerRawVideoCapture:
 
     def media_pipeline_mode(self) -> str:
         return self._media_pipeline_mode
+
+    def media_capture_backend(self) -> str:
+        return _MEDIA_CAPTURE_BACKEND_GSTREAMER_RAWVIDEO_PIPE
 
     def _report_stderr(self, reason: str) -> None:
         if self._stderr_reported:
@@ -1036,6 +1316,9 @@ class _FFmpegRawVideoCapture:
 
     def media_pipeline_mode(self) -> str:
         return MediaPipelineMode.FFMPEG_SOFTWARE.value
+
+    def media_capture_backend(self) -> str:
+        return _MEDIA_CAPTURE_BACKEND_FFMPEG_RAWVIDEO
 
     def _report_stderr(self, reason: str) -> None:
         if self._stderr_reported:
@@ -1273,6 +1556,31 @@ def _redact_capture_exception_message(
     if redacted_source == source:
         return message
     return message.replace(source, redacted_source)
+
+
+def _redact_gstreamer_capture_exception_message(
+    exc: BaseException,
+    *,
+    source: str,
+) -> str:
+    message = _redact_capture_exception_message(exc, source=source)
+    redacted_source = _redact_gstreamer_source_uri(source)
+    if redacted_source != source:
+        message = message.replace(source, redacted_source)
+    source_uri = _extract_gstreamer_source_uri(source)
+    if source_uri is not None:
+        redacted_source_uri = redact_url_secrets(source_uri)
+        if redacted_source_uri != source_uri:
+            message = message.replace(source_uri, redacted_source_uri)
+    message = _redact_gstreamer_source_uri(message)
+    return _redact_rtsp_url_substrings(message)
+
+
+def _redact_rtsp_url_substrings(message: str) -> str:
+    return _RTSP_URL_SUBSTRING_PATTERN.sub(
+        lambda match: redact_url_secrets(match.group(0)),
+        message,
+    )
 
 
 def capture_still_image(source_uri: str) -> tuple[bytes, int, int]:

@@ -13165,6 +13165,18 @@
             ],
             "title": "Last Error"
           },
+          "media_capture_backend": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Capture Backend"
+          },
           "media_pipeline_mode": {
             "anyOf": [
               {
@@ -13300,6 +13312,18 @@
               }
             ],
             "title": "Last Error"
+          },
+          "media_capture_backend": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Capture Backend"
           },
           "media_pipeline_mode": {
             "anyOf": [

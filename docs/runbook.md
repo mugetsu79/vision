@@ -709,6 +709,43 @@ as not yet hardened: run a host worker from the central/backend Python 3.12
 environment for lab experiments, or create a hardware-specific edge image before
 production use.
 
+### Jetson Media Pipeline Smoke
+
+Before calling a Jetson media optimization a pass, verify a fresh per-camera
+runtime report instead of inferring worker state from supervisor node health.
+The expected no-DeepStream Python worker values for the appsink path are:
+
+```text
+runtime_status=running
+media_pipeline_mode=jetson_gstreamer_native
+media_capture_backend=gstreamer_appsink
+encoder_mode=software
+```
+
+`encoder_mode=software` is truthful on Orin Nano when NVIDIA decode/resize is
+active but hardware H.264 encode is unavailable. Do not mark missing RTSP,
+missing model files, missing runtime artifacts, stale heartbeats, or missing
+deterministic evidence as pass.
+
+Use sanitized commands for live checks. These commands avoid process arguments
+that may contain RTSP URLs, bearer tokens, or JWTs:
+
+```bash
+ssh ai-user@192.168.1.203 'docker top vezor-supervisor -eo pid,ppid,pcpu,pmem,rss,etime,comm'
+ssh ai-user@192.168.1.203 'docker stats --no-stream vezor-supervisor vezor-edge-mediamtx'
+ssh ai-user@192.168.1.203 "docker exec vezor-supervisor sh -lc 'gst-inspect-1.0 nvv4l2decoder >/dev/null && gst-inspect-1.0 nvvidconv >/dev/null'"
+```
+
+When reports or screenshots mention RTSP sources, redact them as:
+
+```text
+rtsp://***:***@<host>:8554/<path>
+```
+
+The optional `jetson_nvmm_native` backend is a future native NVMM/CUDA lane and
+must remain opt-in until it passes a separate live comparison. DeepStream is a
+later optional runtime family, not part of this Python worker media path.
+
 ## Edge Bring-Up
 
 For a single-node edge deployment:

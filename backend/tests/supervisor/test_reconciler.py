@@ -193,6 +193,7 @@ async def test_reconciler_recovers_desired_worker_from_running_report_after_rest
         scene_contract_hash=None,
         selected_provider=admission.selected_backend,
         media_pipeline_mode="jetson_gstreamer_native",
+        media_capture_backend="gstreamer_rawvideo_pipe",
         encoder_mode="software",
         created_at=datetime(2026, 5, 13, 11, 50, tzinfo=UTC),
     )
@@ -216,6 +217,9 @@ async def test_reconciler_recovers_desired_worker_from_running_report_after_rest
     assert adapter.calls == [("start", worker.camera_id)]
     assert operations.admission_evaluations == [worker.camera_id]
     assert operations.runtime_reports[0]["camera_id"] == worker.camera_id
+    assert operations.runtime_reports[0]["request_payload"]["media_capture_backend"] == (
+        "gstreamer_rawvideo_pipe"
+    )
 
 
 @pytest.mark.asyncio
@@ -528,6 +532,7 @@ class _FakeSupervisorOperations:
                 "camera_id": request.camera_id,
                 "runtime_state": runtime_state,
                 "last_error": last_error,
+                "request_payload": request.request_payload,
             }
         )
 

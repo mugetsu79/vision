@@ -452,6 +452,46 @@ to the camera or Jetson site, then check Operations or
 should show the expected runtime-selection profile hash and the selected
 backend/artifact before you compare model performance.
 
+## Jetson Media Runtime Reporting
+
+Jetson runtime reports distinguish the model backend from the media pipeline.
+For a healthy no-DeepStream Python worker using NVIDIA decode and resize, expect
+the fresh per-camera runtime report to include:
+
+```text
+media_pipeline_mode=jetson_gstreamer_native
+media_capture_backend=gstreamer_appsink
+```
+
+`media_pipeline_mode` is the broad acceleration family. It should be
+`jetson_gstreamer_native` when the worker is using NVIDIA GStreamer decode and
+resize elements, `jetson_gstreamer_software` when it is still in GStreamer but
+using software decode, and `ffmpeg_software` when it has fallen back to FFmpeg.
+
+`media_capture_backend` is the precise capture implementation. New Jetson
+reports should use `gstreamer_appsink` for the in-process GStreamer path,
+`gstreamer_rawvideo_pipe` for the compatibility rawvideo pipe, `ffmpeg_rawvideo`
+for FFmpeg subprocess capture, or `opencv_gstreamer` for the final OpenCV
+GStreamer fallback. `jetson_nvmm_native` is reserved for the future opt-in
+native NVMM/CUDA lane and must not become the default until it has separate
+live pass evidence.
+
+On Jetson Orin Nano, processed stream publishing can still report:
+
+```text
+encoder_mode=software
+```
+
+That is truthful when NVIDIA decode is active but hardware H.264 encode is not
+available on the device. Do not treat software encode as a failure by itself;
+judge it against FPS, CPU, stream readiness, and fresh per-camera heartbeat
+evidence.
+
+DeepStream remains a separate optional runtime family. Do not describe
+`gstreamer_appsink` or `jetson_nvmm_native` as DeepStream, and do not claim
+central Dockerized GPU acceleration for macOS. Central Apple Silicon
+acceleration stays a native macOS/CoreML lane.
+
 ## Runtime Artifact Soak Records
 
 Validated runtime artifacts are not fleet-safe until their target hardware run

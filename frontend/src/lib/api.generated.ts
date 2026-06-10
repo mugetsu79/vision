@@ -7704,6 +7704,8 @@ export interface components {
             heartbeat_at: string;
             /** Last Error */
             last_error?: string | null;
+            /** Media Capture Backend */
+            media_capture_backend?: string | null;
             /** Media Pipeline Mode */
             media_pipeline_mode?: string | null;
             /**
@@ -7750,6 +7752,8 @@ export interface components {
             id: string;
             /** Last Error */
             last_error?: string | null;
+            /** Media Capture Backend */
+            media_capture_backend?: string | null;
             /** Media Pipeline Mode */
             media_pipeline_mode?: string | null;
             /** Restart Count */

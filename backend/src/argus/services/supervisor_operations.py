@@ -218,6 +218,7 @@ class SupervisorOperationsService:
             scene_contract_hash=payload.scene_contract_hash,
             selected_provider=payload.selected_provider,
             media_pipeline_mode=payload.media_pipeline_mode,
+            media_capture_backend=payload.media_capture_backend,
             encoder_mode=payload.encoder_mode,
         )
         async with self.session_factory() as session:
@@ -766,6 +767,7 @@ def supervisor_runtime_report_response(
         scene_contract_hash=row.scene_contract_hash,
         selected_provider=row.selected_provider,
         media_pipeline_mode=row.media_pipeline_mode,
+        media_capture_backend=row.media_capture_backend,
         encoder_mode=row.encoder_mode,
         created_at=row.created_at,
     )

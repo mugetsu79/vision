@@ -103,6 +103,27 @@ class _FakeFrameSource:
         return None
 
 
+class _ReconfigurableFrameSource(_FakeFrameSource):
+    def __init__(self, frames: list[np.ndarray]) -> None:
+        super().__init__(frames)
+        self.reconfigure_calls: list[dict[str, object]] = []
+
+    def reconfigure(
+        self,
+        *,
+        target_width: int | None,
+        target_height: int | None,
+        fps_cap: int,
+    ) -> None:
+        self.reconfigure_calls.append(
+            {
+                "target_width": target_width,
+                "target_height": target_height,
+                "fps_cap": fps_cap,
+            }
+        )
+
+
 class _TimedFrameSource(_FakeFrameSource):
     def last_stage_timings(self) -> dict[str, float]:
         return {
@@ -115,12 +136,22 @@ class _TimedFrameSource(_FakeFrameSource):
 
 
 class _RuntimeModeFrameSource(_FakeFrameSource):
-    def __init__(self, frames: list[np.ndarray], *, media_pipeline_mode: str) -> None:
+    def __init__(
+        self,
+        frames: list[np.ndarray],
+        *,
+        media_pipeline_mode: str,
+        media_capture_backend: str | None = None,
+    ) -> None:
         super().__init__(frames)
         self._media_pipeline_mode = media_pipeline_mode
+        self._media_capture_backend = media_capture_backend
 
     def media_pipeline_mode(self) -> str:
         return self._media_pipeline_mode
+
+    def media_capture_backend(self) -> str | None:
+        return self._media_capture_backend
 
 
 class _CaptureWaitSequenceFrameSource(_FakeFrameSource):
@@ -468,6 +499,9 @@ class _FakeStreamClient:
             mode=mode,
             read_path=f"rtsp://mediamtx.internal/{camera_id}/{mode.value}",
             publish_path=f"rtsp://mediamtx.internal/{camera_id}/{mode.value}",
+            target_fps=target_fps,
+            target_width=target_width,
+            target_height=target_height,
         )
 
     async def push_frame(
@@ -1535,7 +1569,7 @@ async def test_engine_draws_annotations_for_central_stream_frames() -> None:
 
 
 @pytest.mark.asyncio
-async def test_engine_reports_runtime_media_and_encoder_modes() -> None:
+async def test_engine_reports_runtime_report_media_capture_backend_and_encoder_modes() -> None:
     camera_id = uuid4()
     edge_node_id = uuid4()
     runtime_artifact = _runtime_artifact_settings(
@@ -1561,6 +1595,7 @@ async def test_engine_reports_runtime_media_and_encoder_modes() -> None:
         frame_source=_RuntimeModeFrameSource(
             [np.zeros((64, 64, 3), dtype=np.uint8)],
             media_pipeline_mode="jetson_gstreamer_native",
+            media_capture_backend="gstreamer_appsink",
         ),
         detector=_FakeDetector(),
         tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
@@ -1590,6 +1625,7 @@ async def test_engine_reports_runtime_media_and_encoder_modes() -> None:
     assert report.scene_contract_hash == "c" * 64
     assert report.selected_provider == "tensorrt_engine"
     assert report.media_pipeline_mode == "jetson_gstreamer_native"
+    assert report.media_capture_backend == "gstreamer_appsink"
     assert report.encoder_mode == "software"
 
 
@@ -2289,6 +2325,46 @@ async def test_engine_applies_stream_profile_command_without_restart() -> None:
     assert [frame.stream_mode for frame in publisher.frames] == [
         StreamMode.ANNOTATED_WHIP,
         StreamMode.PASSTHROUGH,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_engine_reconfigures_capture_source_when_stream_profile_changes() -> None:
+    camera_id = uuid4()
+    stream_client = _FakeStreamClient()
+    frame_source = _ReconfigurableFrameSource([np.zeros((64, 64, 3), dtype=np.uint8)])
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=frame_source,
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=stream_client,
+    )
+
+    await engine.start()
+    await engine.apply_command(
+        CameraCommand(
+            stream=StreamSettings(
+                profile_id="1080p20",
+                kind="transcode",
+                width=1920,
+                height=1080,
+                fps=20,
+            )
+        )
+    )
+    await engine.close()
+
+    assert frame_source.reconfigure_calls == [
+        {
+            "target_width": 1920,
+            "target_height": 1080,
+            "fps_cap": 20,
+        }
     ]
 
 

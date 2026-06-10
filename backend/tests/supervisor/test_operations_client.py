@@ -153,6 +153,7 @@ async def test_client_calls_lifecycle_runtime_and_admission_routes() -> None:
                     "scene_contract_hash": "a" * 64,
                     "selected_provider": "TensorrtExecutionProvider",
                     "media_pipeline_mode": "jetson_gstreamer_native",
+                    "media_capture_backend": "gstreamer_appsink",
                     "encoder_mode": "hardware",
                     "created_at": "2026-05-13T12:00:00Z",
                 },
@@ -248,6 +249,7 @@ async def test_client_calls_lifecycle_runtime_and_admission_routes() -> None:
     assert runtime_body["scene_contract_hash"] == "a" * 64
     assert runtime_body["selected_provider"] == "TensorrtExecutionProvider"
     assert runtime_body["media_pipeline_mode"] == "jetson_gstreamer_native"
+    assert runtime_body["media_capture_backend"] == "gstreamer_appsink"
     assert runtime_body["encoder_mode"] == "hardware"
     admission_body = json.loads(seen[4].content)
     assert admission_body["camera_id"] == str(camera_id)
@@ -656,6 +658,7 @@ def _lifecycle_request_json(
             "scene_contract_hash": "a" * 64,
             "selected_provider": "TensorrtExecutionProvider",
             "media_pipeline_mode": "jetson_gstreamer_native",
+            "media_capture_backend": "gstreamer_appsink",
             "encoder_mode": "hardware",
         },
         created_at=datetime(2026, 5, 13, 12, 0, tzinfo=UTC),

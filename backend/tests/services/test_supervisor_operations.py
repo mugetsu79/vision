@@ -105,6 +105,7 @@ async def test_records_worker_runtime_report_with_heartbeat_and_runtime_truth() 
             scene_contract_hash=scene_contract_hash,
             selected_provider="TensorrtExecutionProvider",
             media_pipeline_mode="jetson_gstreamer_native",
+            media_capture_backend="gstreamer_rawvideo_pipe",
             encoder_mode="hardware",
         ),
     )
@@ -121,8 +122,10 @@ async def test_records_worker_runtime_report_with_heartbeat_and_runtime_truth() 
     assert report.scene_contract_hash == scene_contract_hash
     assert report.selected_provider == "TensorrtExecutionProvider"
     assert report.media_pipeline_mode == "jetson_gstreamer_native"
+    assert report.media_capture_backend == "gstreamer_rawvideo_pipe"
     assert report.encoder_mode == "hardware"
     assert latest[camera_id].id == report.id
+    assert latest[camera_id].media_capture_backend == "gstreamer_rawvideo_pipe"
 
 
 @pytest.mark.asyncio

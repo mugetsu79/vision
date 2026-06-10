@@ -2165,6 +2165,7 @@ class SupervisorRuntimeReportCreate(BaseModel):
     scene_contract_hash: str | None = Field(default=None, min_length=64, max_length=64)
     selected_provider: str | None = Field(default=None, max_length=128)
     media_pipeline_mode: str | None = Field(default=None, max_length=64)
+    media_capture_backend: str | None = Field(default=None, max_length=64)
     encoder_mode: str | None = Field(default=None, max_length=32)
 
 
@@ -2182,6 +2183,7 @@ class SupervisorRuntimeReportResponse(BaseModel):
     scene_contract_hash: str | None = Field(default=None, min_length=64, max_length=64)
     selected_provider: str | None = Field(default=None, max_length=128)
     media_pipeline_mode: str | None = Field(default=None, max_length=64)
+    media_capture_backend: str | None = Field(default=None, max_length=64)
     encoder_mode: str | None = Field(default=None, max_length=32)
     created_at: datetime
 

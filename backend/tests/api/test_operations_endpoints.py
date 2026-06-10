@@ -298,6 +298,7 @@ class _FakeOperationsService:
             scene_contract_hash=payload.scene_contract_hash,
             selected_provider=payload.selected_provider,
             media_pipeline_mode=payload.media_pipeline_mode,
+            media_capture_backend=payload.media_capture_backend,
             encoder_mode=payload.encoder_mode,
             created_at=datetime(2026, 5, 13, 8, 1, tzinfo=UTC),
         )
@@ -732,6 +733,7 @@ async def test_runtime_report_route_records_supervisor_truth() -> None:
                 "scene_contract_hash": "a" * 64,
                 "selected_provider": "TensorrtExecutionProvider",
                 "media_pipeline_mode": "jetson_gstreamer_native",
+                "media_capture_backend": "gstreamer_rawvideo_pipe",
                 "encoder_mode": "hardware",
             },
         )
@@ -745,10 +747,12 @@ async def test_runtime_report_route_records_supervisor_truth() -> None:
     assert body["scene_contract_hash"] == "a" * 64
     assert body["selected_provider"] == "TensorrtExecutionProvider"
     assert body["media_pipeline_mode"] == "jetson_gstreamer_native"
+    assert body["media_capture_backend"] == "gstreamer_rawvideo_pipe"
     assert body["encoder_mode"] == "hardware"
     assert operations.runtime_report_payload is not None
     assert operations.runtime_report_payload.camera_id == camera_id
     assert operations.runtime_report_payload.selected_provider == "TensorrtExecutionProvider"
+    assert operations.runtime_report_payload.media_capture_backend == "gstreamer_rawvideo_pipe"
 
 
 @pytest.mark.asyncio

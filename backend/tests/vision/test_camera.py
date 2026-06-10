@@ -17,8 +17,13 @@ from argus.vision.camera import (
     CameraSourceConfig,
     PlatformInfo,
     _default_capture_factory,
+    _FFmpegRawVideoCapture,
+    _GStreamerRawVideoCapture,
+    _LatestFrameCapture,
+    _PrefetchedFrameCapture,
     create_camera_source,
 )
+from argus.vision.gstreamer_appsink import AppSinkCapabilities, AppSinkPipelineMode
 
 
 class _FakeCapture:
@@ -94,6 +99,38 @@ class _CaptureCall:
     backend: int | None
 
 
+def _jetson_rtsp_pipeline() -> str:
+    return (
+        "rtspsrc location=rtsp://camera.internal/live protocols=tcp latency=200 "
+        "drop-on-latency=true ! rtph264depay ! h264parse ! nvv4l2decoder ! "
+        "nvvidconv ! video/x-raw,format=BGRx,width=1280,height=720 ! "
+        "videoconvert ! video/x-raw,format=BGR,width=1280,height=720 ! "
+        "appsink drop=true max-buffers=1 sync=false"
+    )
+
+
+def _quoted_secret_rtsp_pipeline() -> tuple[str, str, str, str, str]:
+    user = "quoted" + "-user"
+    password = "quoted" + "-password"
+    jwt_value = "quoted" + "-jwt"
+    source_uri = (
+        "rtsp"
+        + "://"
+        + f"{user}:{password}"
+        + '@camera.internal/live path/with"quote'
+        + f"?jwt={jwt_value}&label=front\\door"
+    )
+    quoted_uri = source_uri.replace("\\", "\\\\").replace('"', '\\"')
+    pipeline = (
+        f'rtspsrc location="{quoted_uri}" protocols=tcp latency=200 '
+        "drop-on-latency=true ! rtph264depay ! h264parse ! nvv4l2decoder ! "
+        "nvvidconv ! video/x-raw,format=BGRx,width=1280,height=720 ! "
+        "videoconvert ! video/x-raw,format=BGR,width=1280,height=720 ! "
+        "appsink drop=true max-buffers=1 sync=false"
+    )
+    return pipeline, source_uri, user, password, jwt_value
+
+
 def test_create_camera_source_uses_ffmpeg_capture_on_x86() -> None:
     calls: list[_CaptureCall] = []
     frame = np.zeros((4, 4, 3), dtype=np.uint8)
@@ -130,6 +167,23 @@ def test_create_camera_source_reports_ffmpeg_when_x86_capture_mode_is_unknown() 
 
     np.testing.assert_array_equal(source.next_frame(), frame)
     assert source.media_pipeline_mode() == "ffmpeg_software"
+
+
+def test_create_camera_source_reports_opencv_ffmpeg_capture_backend_when_unknown() -> None:
+    frame = np.zeros((4, 4, 3), dtype=np.uint8)
+
+    def capture_factory(source: str | int, backend: int | None) -> _UnknownModeCapture:
+        del source, backend
+        return _UnknownModeCapture([frame])
+
+    source = create_camera_source(
+        CameraSourceConfig(source_uri="rtsp://camera.internal/live"),
+        platform_info=PlatformInfo(machine="x86_64", jetson=False),
+        capture_factory=capture_factory,
+    )
+
+    np.testing.assert_array_equal(source.next_frame(), frame)
+    assert source.media_capture_backend() == "opencv_ffmpeg"
 
 
 def test_create_camera_source_builds_jetson_rtsp_pipeline() -> None:
@@ -179,6 +233,102 @@ def test_create_camera_source_resizes_jetson_rtsp_in_gstreamer_pipeline() -> Non
     assert "nvv4l2decoder ! nvvidconv" in pipeline
     assert "video/x-raw,format=BGRx,width=1280,height=720" in pipeline
     assert "video/x-raw,format=BGR,width=1280,height=720" in pipeline
+
+
+def test_camera_source_reconfigures_jetson_rtsp_capture_dimensions() -> None:
+    captures = [
+        _FakeCapture([np.full((2, 2, 3), 1, dtype=np.uint8)]),
+        _FakeCapture([np.full((3, 3, 3), 2, dtype=np.uint8)]),
+    ]
+    calls: list[_CaptureCall] = []
+
+    def capture_factory(source: str | int, backend: int | None) -> _FakeCapture:
+        calls.append(_CaptureCall(source=source, backend=backend))
+        return captures.pop(0)
+
+    source = create_camera_source(
+        CameraSourceConfig(
+            source_uri="rtsp://camera.internal/live",
+            target_width=1280,
+            target_height=720,
+            fps_cap=25,
+        ),
+        platform_info=PlatformInfo(machine="aarch64", jetson=True),
+        capture_factory=capture_factory,
+    )
+
+    source.reconfigure(target_width=1920, target_height=1080, fps_cap=20)
+
+    frame = source.next_frame()
+    initial_pipeline = str(calls[0].source)
+    reconfigured_pipeline = str(calls[1].source)
+    assert captures == []
+    assert "video/x-raw,format=BGR,width=1280,height=720" in initial_pipeline
+    assert "video/x-raw,format=BGR,width=1920,height=1080" in reconfigured_pipeline
+    assert source.config.target_width == 1920
+    assert source.config.target_height == 1080
+    assert source.config.fps_cap == 20
+    assert int(frame[0, 0, 0]) == 2
+
+
+def test_camera_source_reports_precise_capture_backend() -> None:
+    frame = np.zeros((4, 4, 3), dtype=np.uint8)
+
+    class _BackendCapture(_FakeCapture):
+        def media_pipeline_mode(self) -> str:
+            return "jetson_gstreamer_native"
+
+        def media_capture_backend(self) -> str:
+            return "gstreamer_appsink"
+
+    def capture_factory(source: str | int, backend: int | None) -> _BackendCapture:
+        del source, backend
+        return _BackendCapture([frame])
+
+    source = create_camera_source(
+        CameraSourceConfig(source_uri="rtsp://camera.internal/live"),
+        platform_info=PlatformInfo(machine="aarch64", jetson=True),
+        capture_factory=capture_factory,
+    )
+
+    np.testing.assert_array_equal(source.next_frame(), frame)
+    assert source.media_pipeline_mode() == "jetson_gstreamer_native"
+    assert source.media_capture_backend() == "gstreamer_appsink"
+
+
+def test_capture_wrappers_delegate_precise_capture_backend() -> None:
+    frame = np.zeros((4, 4, 3), dtype=np.uint8)
+
+    class _BackendCapture(_FakeCapture):
+        def media_capture_backend(self) -> str:
+            return "gstreamer_rawvideo_pipe"
+
+    prefetched = _PrefetchedFrameCapture(_BackendCapture([frame]), frame)
+    latest = _LatestFrameCapture(_capture=_BackendCapture([frame]))
+
+    assert prefetched.media_capture_backend() == "gstreamer_rawvideo_pipe"
+    assert latest.media_capture_backend() == "gstreamer_rawvideo_pipe"
+
+
+def test_rawvideo_captures_report_precise_capture_backend_names() -> None:
+    gstreamer_capture = _GStreamerRawVideoCapture(
+        _process=object(),
+        _width=4,
+        _height=4,
+        _source_uri="rtsp://camera.internal/live",
+        _redacted_source_uri="rtsp://camera.internal/live",
+        _media_pipeline_mode="jetson_gstreamer_native",
+    )
+    ffmpeg_capture = _FFmpegRawVideoCapture(
+        _process=object(),
+        _width=4,
+        _height=4,
+        _source_uri="rtsp://camera.internal/live",
+        _redacted_source_uri="rtsp://camera.internal/live",
+    )
+
+    assert gstreamer_capture.media_capture_backend() == "gstreamer_rawvideo_pipe"
+    assert ffmpeg_capture.media_capture_backend() == "ffmpeg_rawvideo"
 
 
 def test_create_camera_source_applies_jetson_rtsp_tuning_environment(
@@ -243,6 +393,7 @@ def test_jetson_rtsp_capture_falls_back_to_software_decode_when_nvdec_has_no_fra
             raise RuntimeError("NVDEC produced no first frame")
         return _ModeCapture([frame], media_pipeline_mode=media_pipeline_mode)
 
+    monkeypatch.setenv("ARGUS_JETSON_CAPTURE_BACKEND", "rawvideo")
     monkeypatch.setattr(camera_module, "_open_gstreamer_rawvideo_capture", open_raw_capture)
     caplog.set_level(logging.WARNING, logger="argus.vision.camera")
 
@@ -283,6 +434,7 @@ def test_jetson_rtsp_capture_uses_native_gstreamer_rawvideo_before_opencv(
     def fail_opencv_capture(source: str | int, backend: int | None) -> _FakeCapture:
         raise AssertionError(f"OpenCV should not read Jetson GStreamer RTSP: {source}, {backend}")
 
+    monkeypatch.setenv("ARGUS_JETSON_CAPTURE_BACKEND", "rawvideo")
     monkeypatch.setattr(
         camera_module,
         "_open_gstreamer_rawvideo_capture",
@@ -317,11 +469,558 @@ def test_jetson_rtsp_capture_uses_native_gstreamer_rawvideo_before_opencv(
     assert capture.media_pipeline_mode() == "jetson_gstreamer_native"
 
 
+def test_jetson_rtsp_prefers_in_process_appsink_before_rawvideo(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+    calls: list[tuple[str, str]] = []
+
+    class _AppSinkCapture(_FakeCapture):
+        def media_pipeline_mode(self) -> str:
+            return "jetson_gstreamer_native"
+
+        def media_capture_backend(self) -> str:
+            return "gstreamer_appsink"
+
+    def open_appsink(source: str, *, media_pipeline_mode: str) -> _AppSinkCapture:
+        calls.append((media_pipeline_mode, source))
+        return _AppSinkCapture([frame])
+
+    def fail_rawvideo(*args: object, **kwargs: object) -> object:
+        raise AssertionError("rawvideo should not run when appsink succeeds")
+
+    monkeypatch.setattr(
+        camera_module,
+        "_open_gstreamer_appsink_capture",
+        open_appsink,
+        raising=False,
+    )
+    monkeypatch.setattr(camera_module, "_open_gstreamer_rawvideo_capture", fail_rawvideo)
+
+    capture = _default_capture_factory(_jetson_rtsp_pipeline(), cv2.CAP_GSTREAMER)
+
+    ok, observed = capture.read()
+
+    assert ok is True
+    np.testing.assert_array_equal(observed, frame)
+    assert capture.media_pipeline_mode() == "jetson_gstreamer_native"
+    assert capture.media_capture_backend() == "gstreamer_appsink"
+    assert calls == [("jetson_gstreamer_native", _jetson_rtsp_pipeline())]
+
+
+def test_jetson_rtsp_falls_back_to_rawvideo_when_appsink_first_frame_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+    appsink_calls = 0
+    rawvideo_calls = 0
+
+    def fail_appsink(source: str, *, media_pipeline_mode: str) -> object:
+        nonlocal appsink_calls
+        assert source == _jetson_rtsp_pipeline()
+        assert media_pipeline_mode == "jetson_gstreamer_native"
+        appsink_calls += 1
+        raise RuntimeError("appsink first frame timeout")
+
+    def open_rawvideo(source: str, *, media_pipeline_mode: str) -> _FakeCapture:
+        nonlocal rawvideo_calls
+        assert source == _jetson_rtsp_pipeline()
+        assert media_pipeline_mode == "jetson_gstreamer_native"
+        rawvideo_calls += 1
+        return _FakeCapture([frame])
+
+    monkeypatch.setattr(
+        camera_module,
+        "_open_gstreamer_appsink_capture",
+        fail_appsink,
+        raising=False,
+    )
+    monkeypatch.setattr(camera_module, "_open_gstreamer_rawvideo_capture", open_rawvideo)
+    caplog.set_level(logging.WARNING, logger="argus.vision.camera")
+
+    capture = _default_capture_factory(_jetson_rtsp_pipeline(), cv2.CAP_GSTREAMER)
+
+    ok, observed = capture.read()
+
+    assert ok is True
+    np.testing.assert_array_equal(observed, frame)
+    assert appsink_calls == 1
+    assert rawvideo_calls == 1
+    assert any(
+        "falling back to rawvideo pipe" in record.message
+        and "appsink first frame timeout" in record.message
+        for record in caplog.records
+    )
+
+
+def test_jetson_appsink_fallback_log_redacts_inner_rtsp_uri(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+    user = "camera-user"
+    password = "camera-secret"
+    token_key = "jwt"
+    token_value = "camera-token"
+    source_uri = (
+        "rtsp"
+        + "://"
+        + f"{user}:{password}"
+        + "@camera.internal/live"
+        + f"?{token_key}={token_value}"
+    )
+    pipeline_source = (
+        f"rtspsrc location={source_uri} protocols=tcp latency=200 "
+        "drop-on-latency=true ! rtph264depay ! h264parse ! nvv4l2decoder ! "
+        "nvvidconv ! video/x-raw,format=BGRx,width=1280,height=720 ! "
+        "videoconvert ! video/x-raw,format=BGR,width=1280,height=720 ! "
+        "appsink drop=true max-buffers=1 sync=false"
+    )
+
+    def fail_appsink(source: str, *, media_pipeline_mode: str) -> object:
+        assert source == pipeline_source
+        assert media_pipeline_mode == "jetson_gstreamer_native"
+        raise RuntimeError(f"appsink failed opening {source_uri}")
+
+    def open_rawvideo(source: str, *, media_pipeline_mode: str) -> _FakeCapture:
+        assert source == pipeline_source
+        assert media_pipeline_mode == "jetson_gstreamer_native"
+        return _FakeCapture([frame])
+
+    monkeypatch.delenv("ARGUS_JETSON_CAPTURE_BACKEND", raising=False)
+    monkeypatch.setattr(
+        camera_module,
+        "_open_gstreamer_appsink_capture",
+        fail_appsink,
+        raising=False,
+    )
+    monkeypatch.setattr(camera_module, "_open_gstreamer_rawvideo_capture", open_rawvideo)
+    caplog.set_level(logging.WARNING, logger="argus.vision.camera")
+
+    capture = _default_capture_factory(pipeline_source, cv2.CAP_GSTREAMER)
+
+    ok, observed = capture.read()
+
+    assert ok is True
+    np.testing.assert_array_equal(observed, frame)
+    assert any(
+        "Jetson appsink capture unavailable; falling back to rawvideo pipe"
+        in record.message
+        for record in caplog.records
+    )
+    for record in caplog.records:
+        assert password not in record.message
+        assert token_value not in record.message
+        assert password not in str(getattr(record, "source_uri", ""))
+        assert token_value not in str(getattr(record, "source_uri", ""))
+
+
+def test_jetson_appsink_fallback_log_redacts_full_pipeline_rtsp_uri(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+    user = "pipeline" + "-user"
+    password = "pipeline" + "-password"
+    jwt_value = "pipeline" + "-jwt"
+    source_uri = (
+        "rtsp"
+        + "://"
+        + f"{user}:{password}"
+        + "@camera.internal/live"
+        + "?jwt="
+        + jwt_value
+    )
+    pipeline_source = (
+        f"rtspsrc location={source_uri} protocols=tcp latency=200 "
+        "drop-on-latency=true ! rtph264depay ! h264parse ! nvv4l2decoder ! "
+        "nvvidconv ! video/x-raw,format=BGRx,width=1280,height=720 ! "
+        "videoconvert ! video/x-raw,format=BGR,width=1280,height=720 ! "
+        "appsink drop=true max-buffers=1 sync=false"
+    )
+
+    def fail_appsink(source: str, *, media_pipeline_mode: str) -> object:
+        assert source == pipeline_source
+        assert media_pipeline_mode == "jetson_gstreamer_native"
+        raise RuntimeError(f"pipeline failed: {source}")
+
+    def open_rawvideo(source: str, *, media_pipeline_mode: str) -> _FakeCapture:
+        assert source == pipeline_source
+        assert media_pipeline_mode == "jetson_gstreamer_native"
+        return _FakeCapture([frame])
+
+    monkeypatch.delenv("ARGUS_JETSON_CAPTURE_BACKEND", raising=False)
+    monkeypatch.setattr(
+        camera_module,
+        "_open_gstreamer_appsink_capture",
+        fail_appsink,
+        raising=False,
+    )
+    monkeypatch.setattr(camera_module, "_open_gstreamer_rawvideo_capture", open_rawvideo)
+    caplog.set_level(logging.WARNING, logger="argus.vision.camera")
+
+    capture = _default_capture_factory(pipeline_source, cv2.CAP_GSTREAMER)
+
+    ok, observed = capture.read()
+
+    assert ok is True
+    np.testing.assert_array_equal(observed, frame)
+    assert any(
+        "Jetson appsink capture unavailable; falling back to rawvideo pipe"
+        in record.message
+        for record in caplog.records
+    )
+    for record in caplog.records:
+        assert user not in record.message
+        assert password not in record.message
+        assert jwt_value not in record.message
+
+
+def test_open_gstreamer_appsink_capture_builds_pipeline_from_jetson_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+    probed_modes: list[AppSinkPipelineMode] = []
+    build_kwargs: dict[str, object] = {}
+    create_kwargs: dict[str, object] = {}
+    runtime = object()
+
+    class _AppSinkCaptureFactory:
+        @classmethod
+        def create(cls, **kwargs: object) -> _FakeCapture:
+            create_kwargs.update(kwargs)
+            return _FakeCapture([frame])
+
+    def fake_probe(*, mode: AppSinkPipelineMode) -> AppSinkCapabilities:
+        probed_modes.append(mode)
+        return AppSinkCapabilities(
+            available=True,
+            appsink_supports_leaky_type=True,
+            decoder_supports_disable_dpb=True,
+        )
+
+    def fake_build_rtsp_appsink_pipeline(source_uri: str, **kwargs: object) -> str:
+        build_kwargs["source_uri"] = source_uri
+        build_kwargs.update(kwargs)
+        return "appsink-pipeline"
+
+    monkeypatch.setenv("ARGUS_JETSON_RTSP_PROTOCOLS", "udp")
+    monkeypatch.setenv("ARGUS_JETSON_RTSP_LATENCY_MS", "50")
+    monkeypatch.setenv("ARGUS_JETSON_RTSP_DROP_ON_LATENCY", "false")
+    monkeypatch.setattr(camera_module, "probe_appsink_capabilities", fake_probe, raising=False)
+    monkeypatch.setattr(
+        camera_module,
+        "build_rtsp_appsink_pipeline",
+        fake_build_rtsp_appsink_pipeline,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        camera_module,
+        "GStreamerAppSinkCapture",
+        _AppSinkCaptureFactory,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        camera_module,
+        "PyGObjectAppSinkRuntime",
+        lambda: runtime,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        camera_module,
+        "_probe_video_dimensions",
+        lambda source_uri: (_ for _ in ()).throw(  # noqa: ARG005
+            AssertionError("explicit BGR caps should avoid probing dimensions")
+        ),
+    )
+
+    capture = camera_module._open_gstreamer_appsink_capture(
+        _jetson_rtsp_pipeline(),
+        media_pipeline_mode="jetson_gstreamer_native",
+    )
+
+    ok, observed = capture.read()
+
+    assert ok is True
+    np.testing.assert_array_equal(observed, frame)
+    assert probed_modes == [AppSinkPipelineMode.JETSON_NATIVE]
+    assert build_kwargs == {
+        "source_uri": "rtsp://camera.internal/live",
+        "mode": AppSinkPipelineMode.JETSON_NATIVE,
+        "target_width": 1280,
+        "target_height": 720,
+        "protocols": "udp",
+        "latency_ms": 50,
+        "drop_on_latency": False,
+        "appsink_supports_leaky_type": True,
+        "decoder_supports_disable_dpb": True,
+    }
+    assert create_kwargs == {
+        "pipeline": "appsink-pipeline",
+        "runtime": runtime,
+        "width": 1280,
+        "height": 720,
+        "media_pipeline_mode": "jetson_gstreamer_native",
+        "read_timeout_s": camera_module._FFMPEG_FRAME_WAIT_TIMEOUT_S,
+    }
+
+
+def test_open_gstreamer_appsink_capture_releases_capture_when_initial_read_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    released: list[bool] = []
+
+    class _ReadRaisesCapture:
+        def read(self) -> tuple[bool, np.ndarray | None]:
+            raise RuntimeError("appsink buffer map failed")
+
+        def release(self) -> None:
+            released.append(True)
+
+    class _AppSinkCaptureFactory:
+        @classmethod
+        def create(cls, **kwargs: object) -> _ReadRaisesCapture:
+            del kwargs
+            return _ReadRaisesCapture()
+
+    monkeypatch.setattr(
+        camera_module,
+        "probe_appsink_capabilities",
+        lambda *, mode: AppSinkCapabilities(available=True),  # noqa: ARG005
+        raising=False,
+    )
+    monkeypatch.setattr(
+        camera_module,
+        "build_rtsp_appsink_pipeline",
+        lambda *args, **kwargs: "appsink-pipeline",
+        raising=False,
+    )
+    monkeypatch.setattr(
+        camera_module,
+        "GStreamerAppSinkCapture",
+        _AppSinkCaptureFactory,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        camera_module,
+        "PyGObjectAppSinkRuntime",
+        lambda: object(),
+        raising=False,
+    )
+
+    with pytest.raises(RuntimeError, match="appsink buffer map failed"):
+        camera_module._open_gstreamer_appsink_capture(
+            _jetson_rtsp_pipeline(),
+            media_pipeline_mode="jetson_gstreamer_native",
+        )
+
+    assert released == [True]
+
+
+def test_extract_gstreamer_source_uri_unquotes_quoted_location() -> None:
+    pipeline, source_uri, _user, _password, _jwt_value = _quoted_secret_rtsp_pipeline()
+
+    assert camera_module._extract_gstreamer_source_uri(pipeline) == source_uri
+
+
+def test_redact_gstreamer_source_uri_redacts_quoted_location_and_exception_messages() -> None:
+    pipeline, source_uri, user, password, jwt_value = _quoted_secret_rtsp_pipeline()
+
+    redacted_pipeline = camera_module._redact_gstreamer_source_uri(pipeline)
+    redacted_message = camera_module._redact_gstreamer_capture_exception_message(
+        RuntimeError(f"pipeline failed: {pipeline}; inner uri: {source_uri}"),
+        source=pipeline,
+    )
+
+    assert 'location="' in redacted_pipeline
+    assert "rtsp://redacted@camera.internal" in redacted_pipeline
+    assert "jwt=redacted" in redacted_pipeline
+    assert camera_module._extract_gstreamer_source_uri(redacted_pipeline) is not None
+    for secret in (user, password, jwt_value):
+        assert secret not in redacted_pipeline
+        assert secret not in redacted_message
+
+
+def test_redact_gstreamer_exception_message_redacts_nested_quoted_location() -> None:
+    pipeline, _source_uri, user, password, jwt_value = _quoted_secret_rtsp_pipeline()
+
+    redacted_message = camera_module._redact_gstreamer_capture_exception_message(
+        RuntimeError(f"outer capture failed; nested error: {pipeline}"),
+        source=_jetson_rtsp_pipeline(),
+    )
+
+    leaked_secrets = [
+        name
+        for name, value in {
+            "user": user,
+            "password": password,
+            "jwt": jwt_value,
+        }.items()
+        if value in redacted_message
+    ]
+    assert leaked_secrets == []
+    assert 'location="' in redacted_message
+    assert "rtsp://redacted@camera.internal" in redacted_message
+    assert "jwt=redacted" in redacted_message
+    assert camera_module._extract_gstreamer_source_uri(redacted_message) is not None
+
+
+def test_jetson_software_gstreamer_prefers_appsink_before_rawvideo(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+    appsink_modes: list[str] = []
+    rawvideo_modes: list[str] = []
+
+    class _SoftwareAppSinkCapture(_FakeCapture):
+        def media_pipeline_mode(self) -> str:
+            return "jetson_gstreamer_software"
+
+        def media_capture_backend(self) -> str:
+            return "gstreamer_appsink"
+
+    def open_appsink(source: str, *, media_pipeline_mode: str) -> _FakeCapture:
+        appsink_modes.append(media_pipeline_mode)
+        if media_pipeline_mode == "jetson_gstreamer_native":
+            raise RuntimeError("native appsink unavailable")
+        assert "avdec_h264" in source
+        return _SoftwareAppSinkCapture([frame])
+
+    def fail_rawvideo(source: str, *, media_pipeline_mode: str) -> object:
+        rawvideo_modes.append(media_pipeline_mode)
+        if media_pipeline_mode == "jetson_gstreamer_native":
+            raise RuntimeError("native rawvideo unavailable")
+        raise AssertionError("software rawvideo should not run when appsink succeeds")
+
+    monkeypatch.setattr(
+        camera_module,
+        "_open_gstreamer_appsink_capture",
+        open_appsink,
+        raising=False,
+    )
+    monkeypatch.setattr(camera_module, "_open_gstreamer_rawvideo_capture", fail_rawvideo)
+
+    capture = _default_capture_factory(_jetson_rtsp_pipeline(), cv2.CAP_GSTREAMER)
+
+    ok, observed = capture.read()
+
+    assert ok is True
+    np.testing.assert_array_equal(observed, frame)
+    assert appsink_modes == ["jetson_gstreamer_native", "jetson_gstreamer_software"]
+    assert rawvideo_modes == ["jetson_gstreamer_native"]
+    assert capture.media_pipeline_mode() == "jetson_gstreamer_software"
+    assert capture.media_capture_backend() == "gstreamer_appsink"
+
+
+def test_jetson_capture_backend_env_can_disable_appsink(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+    rawvideo_calls = 0
+
+    def fail_appsink(*args: object, **kwargs: object) -> object:
+        raise AssertionError("appsink disabled by env")
+
+    def open_rawvideo(source: str, *, media_pipeline_mode: str) -> _FakeCapture:
+        nonlocal rawvideo_calls
+        assert source == _jetson_rtsp_pipeline()
+        assert media_pipeline_mode == "jetson_gstreamer_native"
+        rawvideo_calls += 1
+        return _FakeCapture([frame])
+
+    monkeypatch.setenv("ARGUS_JETSON_CAPTURE_BACKEND", "rawvideo")
+    monkeypatch.setattr(camera_module, "_open_gstreamer_appsink_capture", fail_appsink)
+    monkeypatch.setattr(camera_module, "_open_gstreamer_rawvideo_capture", open_rawvideo)
+
+    capture = _default_capture_factory(_jetson_rtsp_pipeline(), cv2.CAP_GSTREAMER)
+
+    ok, observed = capture.read()
+
+    assert ok is True
+    np.testing.assert_array_equal(observed, frame)
+    assert rawvideo_calls == 1
+
+
+def test_jetson_capture_backend_env_requires_appsink(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rawvideo_calls = 0
+
+    def fail_appsink(source: str, *, media_pipeline_mode: str) -> object:
+        assert source == _jetson_rtsp_pipeline()
+        assert media_pipeline_mode == "jetson_gstreamer_native"
+        raise RuntimeError("appsink first frame timeout")
+
+    def open_rawvideo(*args: object, **kwargs: object) -> _FakeCapture:
+        nonlocal rawvideo_calls
+        rawvideo_calls += 1
+        return _FakeCapture([np.zeros((720, 1280, 3), dtype=np.uint8)])
+
+    monkeypatch.setenv("ARGUS_JETSON_CAPTURE_BACKEND", "appsink")
+    monkeypatch.setattr(camera_module, "_open_gstreamer_appsink_capture", fail_appsink)
+    monkeypatch.setattr(camera_module, "_open_gstreamer_rawvideo_capture", open_rawvideo)
+
+    with pytest.raises(RuntimeError, match="appsink first frame timeout"):
+        _default_capture_factory(_jetson_rtsp_pipeline(), cv2.CAP_GSTREAMER)
+
+    assert rawvideo_calls == 0
+
+
+def test_jetson_capture_backend_invalid_env_warns_and_uses_auto(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+    appsink_calls = 0
+
+    class _AppSinkCapture(_FakeCapture):
+        def media_capture_backend(self) -> str:
+            return "gstreamer_appsink"
+
+    def open_appsink(source: str, *, media_pipeline_mode: str) -> _AppSinkCapture:
+        nonlocal appsink_calls
+        assert source == _jetson_rtsp_pipeline()
+        assert media_pipeline_mode == "jetson_gstreamer_native"
+        appsink_calls += 1
+        return _AppSinkCapture([frame])
+
+    def fail_rawvideo(*args: object, **kwargs: object) -> object:
+        raise AssertionError("auto mode should prefer appsink before rawvideo")
+
+    monkeypatch.setenv("ARGUS_JETSON_CAPTURE_BACKEND", "sideways")
+    monkeypatch.setattr(camera_module, "_open_gstreamer_appsink_capture", open_appsink)
+    monkeypatch.setattr(camera_module, "_open_gstreamer_rawvideo_capture", fail_rawvideo)
+    caplog.set_level(logging.WARNING, logger="argus.vision.camera")
+
+    capture = _default_capture_factory(_jetson_rtsp_pipeline(), cv2.CAP_GSTREAMER)
+
+    ok, observed = capture.read()
+
+    assert ok is True
+    np.testing.assert_array_equal(observed, frame)
+    assert appsink_calls == 1
+    assert any(
+        "Ignoring invalid ARGUS_JETSON_CAPTURE_BACKEND value" in record.message
+        and "sideways" in record.message
+        and "using auto" in record.message
+        for record in caplog.records
+    )
+
+
 def test_jetson_rtsp_capture_falls_back_to_ffmpeg_rawvideo_when_gstreamer_has_no_frame(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     frame = np.full((4, 4, 3), 7, dtype=np.uint8)
+    username = "user"
+    password = "secret"
+    source_uri = (
+        "rtsp"
+        + "://"
+        + f"{username}:{password}"
+        + "@camera.internal/live"
+    )
     gstreamer_sources: list[str] = []
     raw_sources: list[str] = []
 
@@ -335,6 +1034,7 @@ def test_jetson_rtsp_capture_falls_back_to_ffmpeg_rawvideo_when_gstreamer_has_no
         raw_sources.append(source_uri)
         return _ModeCapture([frame], media_pipeline_mode="ffmpeg_software")
 
+    monkeypatch.setenv("ARGUS_JETSON_CAPTURE_BACKEND", "rawvideo")
     monkeypatch.setattr(
         camera_module,
         "_open_gstreamer_rawvideo_capture",
@@ -356,8 +1056,8 @@ def test_jetson_rtsp_capture_falls_back_to_ffmpeg_rawvideo_when_gstreamer_has_no
 
     capture = _default_capture_factory(
         (
-            "rtspsrc location=rtsp://user:secret@camera.internal/live protocols=tcp "
-            "latency=200 drop-on-latency=true ! rtph264depay ! h264parse ! "
+            f"rtspsrc location={source_uri} protocols=tcp latency=200 "
+            "drop-on-latency=true ! rtph264depay ! h264parse ! "
             "nvv4l2decoder ! nvvidconv ! video/x-raw,format=BGRx ! videoconvert ! "
             "video/x-raw,format=BGR ! appsink drop=true max-buffers=1 sync=false"
         ),
@@ -370,10 +1070,56 @@ def test_jetson_rtsp_capture_falls_back_to_ffmpeg_rawvideo_when_gstreamer_has_no
     np.testing.assert_array_equal(actual_frame, frame)
     assert "nvv4l2decoder" in gstreamer_sources[0]
     assert "avdec_h264" in gstreamer_sources[1]
-    assert raw_sources == ["rtsp://user:secret@camera.internal/live"]
+    assert raw_sources == [source_uri]
     assert capture.media_pipeline_mode() == "ffmpeg_software"
     assert any("ffmpeg rawvideo fallback is active" in record.message for record in caplog.records)
-    assert all("secret" not in str(getattr(record, "source_uri", "")) for record in caplog.records)
+    assert all(
+        password not in str(getattr(record, "source_uri", ""))
+        for record in caplog.records
+    )
+
+
+def test_jetson_final_opencv_gstreamer_fallback_reports_capture_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frame = np.full((4, 4, 3), 8, dtype=np.uint8)
+    opencv_capture = _FakeCapture([frame])
+    opencv_calls: list[_CaptureCall] = []
+
+    def fail_raw_gstreamer_capture(source: str, *, media_pipeline_mode: str) -> object:
+        del source, media_pipeline_mode
+        raise RuntimeError("GStreamer unavailable")
+
+    def open_opencv_capture(source: str | int, backend: int | None) -> _FakeCapture:
+        opencv_calls.append(_CaptureCall(source=source, backend=backend))
+        return opencv_capture
+
+    monkeypatch.setenv("ARGUS_JETSON_CAPTURE_BACKEND", "rawvideo")
+    monkeypatch.setattr(
+        camera_module,
+        "_open_gstreamer_rawvideo_capture",
+        fail_raw_gstreamer_capture,
+    )
+    monkeypatch.setattr(
+        camera_module,
+        "_try_open_rawvideo_capture_from_gstreamer_source",
+        lambda source: None,  # noqa: ARG005
+    )
+    monkeypatch.setattr(camera_module, "_open_opencv_capture", open_opencv_capture)
+
+    capture = _default_capture_factory(_jetson_rtsp_pipeline(), cv2.CAP_GSTREAMER)
+
+    ok, observed = capture.read()
+
+    assert ok is True
+    np.testing.assert_array_equal(observed, frame)
+    assert opencv_calls == [
+        _CaptureCall(
+            source=camera_module._jetson_software_decode_pipeline(_jetson_rtsp_pipeline()),
+            backend=cv2.CAP_GSTREAMER,
+        )
+    ]
+    assert capture.media_capture_backend() == "opencv_gstreamer"
 
 
 def test_camera_source_honors_frame_skip_and_reconnect_backoff() -> None:
@@ -1131,7 +1877,9 @@ def test_probe_video_dimensions_falls_back_to_ffmpeg_when_ffprobe_exits_nonzero(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    source_uri = "rtsp://user:secret@relay/stream"
+    username = "user"
+    password = "secret"
+    source_uri = "rtsp" + "://" + f"{username}:{password}" + "@relay/stream"
     calls: list[str] = []
 
     def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -1168,7 +1916,7 @@ def test_probe_video_dimensions_falls_back_to_ffmpeg_when_ffprobe_exits_nonzero(
     assert calls == ["ffprobe", "ffmpeg"]
     assert any(
         "falling back to ffmpeg probe" in record.message
-        and "secret" not in record.message
+        and password not in record.message
         for record in caplog.records
     )
 

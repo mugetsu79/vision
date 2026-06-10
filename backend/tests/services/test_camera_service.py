@@ -1940,6 +1940,61 @@ async def test_get_setup_preview_returns_frame_size_and_preview_url(
     assert response.captured_at == now
 
 
+def test_capture_setup_preview_snapshot_uses_normalized_rtsp_source_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=False,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    now = datetime.now(tz=UTC)
+    camera = Camera(
+        id=uuid4(),
+        site_id=uuid4(),
+        edge_node_id=None,
+        name="Dock Camera",
+        rtsp_url_encrypted=app_services.encrypt_rtsp_url("rtsp://old-camera/live", settings),
+        processing_mode=ProcessingMode.CENTRAL,
+        primary_model_id=uuid4(),
+        secondary_model_id=None,
+        tracker_type=TrackerType.BOTSORT,
+        active_classes=[],
+        attribute_rules=[],
+        zones=[],
+        homography=None,
+        privacy={
+            "blur_faces": True,
+            "blur_plates": True,
+            "method": "gaussian",
+            "strength": 7,
+        },
+        browser_delivery=BrowserDeliverySettings().model_dump(mode="python"),
+        source_kind="rtsp",
+        source_config={
+            "kind": "rtsp",
+            "capture_uri": "rtsp://new-camera/live",
+            "redacted_uri": "rtsp://redacted@new-camera/live",
+        },
+        frame_skip=1,
+        fps_cap=25,
+        created_at=now,
+        updated_at=now,
+    )
+    captured_urls: list[str] = []
+
+    def fake_capture_still_image(rtsp_url: str) -> tuple[bytes, int, int]:
+        captured_urls.append(rtsp_url)
+        return b"preview-jpeg", 1280, 720
+
+    monkeypatch.setattr(app_services, "capture_still_image", fake_capture_still_image)
+
+    snapshot = app_services._capture_setup_preview_snapshot(camera, settings)
+
+    assert captured_urls == ["rtsp://new-camera/live"]
+    assert snapshot.frame_size == FrameSize(width=1280, height=720)
+
+
 @pytest.mark.asyncio
 async def test_get_setup_preview_returns_503_when_capture_fails_without_cached_still(
     monkeypatch: pytest.MonkeyPatch,

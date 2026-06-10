@@ -651,6 +651,38 @@ For controlled benchmarking or mitigation, these environment variables can overr
 
 Use the overrides sparingly. Prefer the automatic policy for normal deployment, and only force a provider when you are measuring performance or isolating a runtime-specific issue.
 
+### Jetson Media Capture Backends
+
+For Jetson RTSP cameras in the current no-DeepStream Python runtime, the normal
+hardware-assisted media path is NVIDIA GStreamer decode/resize through an
+in-process `appsink` capture backend. A fresh per-camera runtime report should
+show:
+
+```text
+media_pipeline_mode=jetson_gstreamer_native
+media_capture_backend=gstreamer_appsink
+```
+
+Fallback values are intentionally explicit:
+
+- `media_capture_backend=gstreamer_rawvideo_pipe`: compatibility rawvideo pipe
+  after appsink could not start or produce a first frame.
+- `media_pipeline_mode=jetson_gstreamer_software`: GStreamer remained active
+  but decode used the software path.
+- `media_capture_backend=ffmpeg_rawvideo` or
+  `media_pipeline_mode=ffmpeg_software`: FFmpeg software fallback.
+- `media_capture_backend=jetson_nvmm_native`: future opt-in native NVMM/CUDA
+  lane only. It is not a default and is not DeepStream.
+
+Use `ARGUS_JETSON_CAPTURE_BACKEND=rawvideo` only as a rollback or A/B
+comparison gate. Use `ARGUS_JETSON_CAPTURE_BACKEND=appsink` only when you want
+strict appsink validation and prefer a hard failure over compatibility fallback.
+Leave it unset, or set `auto`, for normal operation.
+
+On Orin Nano, `encoder_mode=software` is expected for processed H.264 output
+because the device has NVDEC but no NVENC. The runtime can still be using NVIDIA
+decode and resize while publishing with software encode.
+
 ### Central Model, Artifact, And Edge Configuration Workflow
 
 After the master and edge installers finish, the remaining edge configuration

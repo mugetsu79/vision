@@ -363,6 +363,7 @@ class SupervisorOperationsClient:
                 or _string(request_payload.get("selected_backend"))
             ),
             media_pipeline_mode=_string(request_payload.get("media_pipeline_mode")),
+            media_capture_backend=_string(request_payload.get("media_capture_backend")),
             encoder_mode=_string(request_payload.get("encoder_mode")),
         )
         body = await self._request(
