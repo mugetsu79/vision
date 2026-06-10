@@ -114,6 +114,15 @@ class _TimedFrameSource(_FakeFrameSource):
         }
 
 
+class _RuntimeModeFrameSource(_FakeFrameSource):
+    def __init__(self, frames: list[np.ndarray], *, media_pipeline_mode: str) -> None:
+        super().__init__(frames)
+        self._media_pipeline_mode = media_pipeline_mode
+
+    def media_pipeline_mode(self) -> str:
+        return self._media_pipeline_mode
+
+
 class _CaptureWaitSequenceFrameSource(_FakeFrameSource):
     def __init__(
         self,
@@ -422,6 +431,7 @@ class _FakeStreamClient:
         self.pushed_modes: list[StreamMode] = []
         self.pushed_frames: list[np.ndarray] = []
         self.register_stream_calls: list[dict[str, object]] = []
+        self.encoder_mode_value: str | None = "software"
 
     async def register_stream(
         self,
@@ -470,6 +480,10 @@ class _FakeStreamClient:
         self.pushed_frames.append(frame.copy())
         self.pushed_modes.append(registration.mode)
 
+    def encoder_mode(self, camera_id: UUID) -> str | None:
+        del camera_id
+        return self.encoder_mode_value if self.pushed_frames else None
+
 
 class _FailingStreamClient(_FakeStreamClient):
     async def push_frame(
@@ -481,6 +495,14 @@ class _FailingStreamClient(_FakeStreamClient):
     ) -> None:
         await super().push_frame(registration, frame, ts=ts)
         raise RuntimeError("annotated publisher unavailable")
+
+
+class _RecordingRuntimeReporter:
+    def __init__(self) -> None:
+        self.reports: list[object] = []
+
+    async def record_runtime_report(self, payload: object) -> None:
+        self.reports.append(payload)
 
 
 class _RuleIncidentEngine:
@@ -1510,6 +1532,65 @@ async def test_engine_draws_annotations_for_central_stream_frames() -> None:
 
     assert stream_client.pushed_modes == [StreamMode.ANNOTATED_WHIP]
     assert np.any(stream_client.pushed_frames[0] != 0)
+
+
+@pytest.mark.asyncio
+async def test_engine_reports_runtime_media_and_encoder_modes() -> None:
+    camera_id = uuid4()
+    edge_node_id = uuid4()
+    runtime_artifact = _runtime_artifact_settings(
+        target_profile=ExecutionProfile.LINUX_AARCH64_NVIDIA_JETSON.value,
+    )
+    stream_client = _FakeStreamClient()
+    runtime_reporter = _RecordingRuntimeReporter()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "mode": ProcessingMode.EDGE,
+            "scene_contract_hash": "c" * 64,
+            "stream": StreamSettings(
+                profile_id="720p20",
+                kind="transcode",
+                width=1280,
+                height=720,
+                fps=20,
+            ),
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_RuntimeModeFrameSource(
+            [np.zeros((64, 64, 3), dtype=np.uint8)],
+            media_pipeline_mode="jetson_gstreamer_native",
+        ),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=stream_client,
+        runtime_reporter=runtime_reporter,
+        edge_node_id=edge_node_id,
+    )
+    engine.runtime_selection = RuntimeSelection(
+        selected_backend="tensorrt_engine",
+        artifact=runtime_artifact,
+        fallback=False,
+        fallback_reason=None,
+    )
+
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, tzinfo=UTC))
+
+    assert len(runtime_reporter.reports) == 1
+    report = runtime_reporter.reports[0]
+    assert report.camera_id == camera_id
+    assert report.edge_node_id == edge_node_id
+    assert report.runtime_state.value == "running"
+    assert report.runtime_artifact_id == runtime_artifact.id
+    assert report.scene_contract_hash == "c" * 64
+    assert report.selected_provider == "tensorrt_engine"
+    assert report.media_pipeline_mode == "jetson_gstreamer_native"
+    assert report.encoder_mode == "software"
 
 
 def test_annotated_stream_frame_reports_drawn_pixels(

@@ -2087,6 +2087,15 @@ class OperationsService:
                     and controls.supervisor_mode is not SupervisorMode.DISABLED
                 ):
                     desired = WorkerDesiredState.SUPERVISED
+                if (
+                    controls.lifecycle_owner == "central_supervisor"
+                    and runtime_report is None
+                    and runtime is WorkerRuntimeStatus.NOT_REPORTED
+                ):
+                    detail = (
+                        "Central supervisor owns this worker process; "
+                        "awaiting first per-camera heartbeat."
+                    )
             runtime_passport_summary = (
                 _runtime_passport_summary(runtime_passport)
                 if (runtime_passport := runtime_passports_by_camera.get(camera.id)) is not None

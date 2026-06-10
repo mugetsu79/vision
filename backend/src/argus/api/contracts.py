@@ -2163,6 +2163,9 @@ class SupervisorRuntimeReportCreate(BaseModel):
     last_error: str | None = None
     runtime_artifact_id: UUID | None = None
     scene_contract_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    selected_provider: str | None = Field(default=None, max_length=128)
+    media_pipeline_mode: str | None = Field(default=None, max_length=64)
+    encoder_mode: str | None = Field(default=None, max_length=32)
 
 
 class SupervisorRuntimeReportResponse(BaseModel):
@@ -2177,6 +2180,9 @@ class SupervisorRuntimeReportResponse(BaseModel):
     last_error: str | None = None
     runtime_artifact_id: UUID | None = None
     scene_contract_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    selected_provider: str | None = Field(default=None, max_length=128)
+    media_pipeline_mode: str | None = Field(default=None, max_length=64)
+    encoder_mode: str | None = Field(default=None, max_length=32)
     created_at: datetime
 
 

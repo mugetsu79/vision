@@ -57,6 +57,20 @@ class _TimedFakeCapture(_FakeCapture):
         return dict(self._stage_timings)
 
 
+class _ModeCapture(_FakeCapture):
+    def __init__(self, frames: list[np.ndarray | None], *, media_pipeline_mode: str) -> None:
+        super().__init__(frames)
+        self._media_pipeline_mode = media_pipeline_mode
+
+    def media_pipeline_mode(self) -> str:
+        return self._media_pipeline_mode
+
+
+class _UnknownModeCapture(_FakeCapture):
+    def media_pipeline_mode(self) -> None:
+        return None
+
+
 class _BlockingReadCapture:
     def __init__(self) -> None:
         self.read_started = threading.Event()
@@ -98,6 +112,24 @@ def test_create_camera_source_uses_ffmpeg_capture_on_x86() -> None:
     assert calls[0].source == "rtsp://camera.internal/live"
     assert calls[0].backend is not None
     assert source.mode.value == "x86-rtsp"
+    assert source.media_pipeline_mode() == "ffmpeg_software"
+
+
+def test_create_camera_source_reports_ffmpeg_when_x86_capture_mode_is_unknown() -> None:
+    frame = np.zeros((4, 4, 3), dtype=np.uint8)
+
+    def capture_factory(source: str | int, backend: int | None) -> _UnknownModeCapture:
+        del source, backend
+        return _UnknownModeCapture([frame])
+
+    source = create_camera_source(
+        CameraSourceConfig(source_uri="rtsp://camera.internal/live"),
+        platform_info=PlatformInfo(machine="x86_64", jetson=False),
+        capture_factory=capture_factory,
+    )
+
+    np.testing.assert_array_equal(source.next_frame(), frame)
+    assert source.media_pipeline_mode() == "ffmpeg_software"
 
 
 def test_create_camera_source_builds_jetson_rtsp_pipeline() -> None:
@@ -122,6 +154,31 @@ def test_create_camera_source_builds_jetson_rtsp_pipeline() -> None:
     assert "nvv4l2decoder" in pipeline
     assert "appsink drop=true max-buffers=1 sync=false" in pipeline
     assert source.mode.value == "jetson-rtsp"
+
+
+def test_create_camera_source_resizes_jetson_rtsp_in_gstreamer_pipeline() -> None:
+    calls: list[_CaptureCall] = []
+    frame = np.zeros((4, 4, 3), dtype=np.uint8)
+
+    def capture_factory(source: str | int, backend: int | None) -> _FakeCapture:
+        calls.append(_CaptureCall(source=source, backend=backend))
+        return _FakeCapture([frame])
+
+    source = create_camera_source(
+        CameraSourceConfig(
+            source_uri="rtsp://camera.internal/live",
+            target_width=1280,
+            target_height=720,
+        ),
+        platform_info=PlatformInfo(machine="aarch64", jetson=True),
+        capture_factory=capture_factory,
+    )
+
+    np.testing.assert_array_equal(source.next_frame(), frame)
+    pipeline = str(calls[0].source)
+    assert "nvv4l2decoder ! nvvidconv" in pipeline
+    assert "video/x-raw,format=BGRx,width=1280,height=720" in pipeline
+    assert "video/x-raw,format=BGR,width=1280,height=720" in pipeline
 
 
 def test_create_camera_source_applies_jetson_rtsp_tuning_environment(
@@ -177,12 +234,14 @@ def test_jetson_rtsp_capture_falls_back_to_software_decode_when_nvdec_has_no_fra
 ) -> None:
     frame = np.full((4, 4, 3), 5, dtype=np.uint8)
     opened_sources: list[str] = []
+    opened_modes: list[str] = []
 
-    def open_raw_capture(source: str) -> _FakeCapture:
+    def open_raw_capture(source: str, *, media_pipeline_mode: str) -> _FakeCapture:
         opened_sources.append(source)
+        opened_modes.append(media_pipeline_mode)
         if len(opened_sources) == 1:
             raise RuntimeError("NVDEC produced no first frame")
-        return _FakeCapture([frame])
+        return _ModeCapture([frame], media_pipeline_mode=media_pipeline_mode)
 
     monkeypatch.setattr(camera_module, "_open_gstreamer_rawvideo_capture", open_raw_capture)
     caplog.set_level(logging.WARNING, logger="argus.vision.camera")
@@ -204,6 +263,8 @@ def test_jetson_rtsp_capture_falls_back_to_software_decode_when_nvdec_has_no_fra
     assert "nvv4l2decoder" in str(opened_sources[0])
     assert "avdec_h264" in str(opened_sources[1])
     assert "nvv4l2decoder" not in str(opened_sources[1])
+    assert opened_modes == ["jetson_gstreamer_native", "jetson_gstreamer_software"]
+    assert capture.media_pipeline_mode() == "jetson_gstreamer_software"
     assert any("falling back to software decode" in record.message for record in caplog.records)
 
 
@@ -212,10 +273,12 @@ def test_jetson_rtsp_capture_uses_native_gstreamer_rawvideo_before_opencv(
 ) -> None:
     frame = np.full((4, 4, 3), 6, dtype=np.uint8)
     opened_sources: list[str] = []
+    opened_modes: list[str] = []
 
-    def open_raw_capture(source: str) -> _FakeCapture:
+    def open_raw_capture(source: str, *, media_pipeline_mode: str) -> _FakeCapture:
         opened_sources.append(source)
-        return _FakeCapture([frame])
+        opened_modes.append(media_pipeline_mode)
+        return _ModeCapture([frame], media_pipeline_mode=media_pipeline_mode)
 
     def fail_opencv_capture(source: str | int, backend: int | None) -> _FakeCapture:
         raise AssertionError(f"OpenCV should not read Jetson GStreamer RTSP: {source}, {backend}")
@@ -250,6 +313,8 @@ def test_jetson_rtsp_capture_uses_native_gstreamer_rawvideo_before_opencv(
             "video/x-raw,format=BGR ! appsink drop=true max-buffers=1 sync=false"
         )
     ]
+    assert opened_modes == ["jetson_gstreamer_native"]
+    assert capture.media_pipeline_mode() == "jetson_gstreamer_native"
 
 
 def test_jetson_rtsp_capture_falls_back_to_ffmpeg_rawvideo_when_gstreamer_has_no_frame(
@@ -257,18 +322,18 @@ def test_jetson_rtsp_capture_falls_back_to_ffmpeg_rawvideo_when_gstreamer_has_no
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     frame = np.full((4, 4, 3), 7, dtype=np.uint8)
-    raw_capture = _FakeCapture([frame])
     gstreamer_sources: list[str] = []
     raw_sources: list[str] = []
 
-    def open_raw_gstreamer_capture(source: str) -> _FakeCapture:
+    def open_raw_gstreamer_capture(source: str, *, media_pipeline_mode: str) -> _FakeCapture:
+        del media_pipeline_mode
         gstreamer_sources.append(source)
         raise RuntimeError("GStreamer produced no first frame")
 
     def create_raw_capture(cls: type[object], source_uri: str) -> _FakeCapture:
         del cls
         raw_sources.append(source_uri)
-        return raw_capture
+        return _ModeCapture([frame], media_pipeline_mode="ffmpeg_software")
 
     monkeypatch.setattr(
         camera_module,
@@ -306,6 +371,7 @@ def test_jetson_rtsp_capture_falls_back_to_ffmpeg_rawvideo_when_gstreamer_has_no
     assert "nvv4l2decoder" in gstreamer_sources[0]
     assert "avdec_h264" in gstreamer_sources[1]
     assert raw_sources == ["rtsp://user:secret@camera.internal/live"]
+    assert capture.media_pipeline_mode() == "ffmpeg_software"
     assert any("ffmpeg rawvideo fallback is active" in record.message for record in caplog.records)
     assert all("secret" not in str(getattr(record, "source_uri", "")) for record in caplog.records)
 

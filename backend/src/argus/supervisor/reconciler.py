@@ -273,7 +273,7 @@ class SupervisorReconciler:
                 worker.latest_model_admission.id if worker.latest_model_admission else None
             ),
             error=None,
-            request_payload={"source": "desired_state_recovery"},
+            request_payload=_runtime_report_payload_from_worker(worker),
             created_at=now,
             updated_at=now,
         )
@@ -306,6 +306,40 @@ def _worker_owner_matches_supervisor(
     return worker.lifecycle_owner == "edge_supervisor" and worker.node_id == edge_node_id
 
 
+def _runtime_report_payload_from_worker(worker: FleetCameraWorkerSummary) -> dict[str, str | None]:
+    passport = worker.runtime_passport
+    latest = worker.latest_model_admission
+    report = worker.runtime_report
+    runtime_artifact_id = (
+        passport.runtime_artifact_id
+        if passport is not None and passport.runtime_artifact_id is not None
+        else latest.runtime_artifact_id
+        if latest is not None and latest.runtime_artifact_id is not None
+        else report.runtime_artifact_id
+        if report is not None
+        else None
+    )
+    selected_provider = (
+        passport.selected_backend
+        if passport is not None and passport.selected_backend is not None
+        else latest.selected_backend
+        if latest is not None and latest.selected_backend is not None
+        else report.selected_provider
+        if report is not None
+        else None
+    )
+    return {
+        "source": "desired_state_recovery",
+        "runtime_artifact_id": (
+            str(runtime_artifact_id) if runtime_artifact_id is not None else None
+        ),
+        "scene_contract_hash": report.scene_contract_hash if report is not None else None,
+        "selected_provider": selected_provider,
+        "media_pipeline_mode": report.media_pipeline_mode if report is not None else None,
+        "encoder_mode": report.encoder_mode if report is not None else None,
+    }
+
+
 def _restart_policy_allows_recovery(worker: FleetCameraWorkerSummary) -> bool:
     runtime_report = worker.runtime_report
     if runtime_report is None:
@@ -319,6 +353,11 @@ def _restart_policy_allows_recovery(worker: FleetCameraWorkerSummary) -> bool:
             WorkerRuntimeStatus.STALE,
             WorkerRuntimeStatus.UNKNOWN,
         }:
+            return True
+        if (
+            worker.runtime_status is WorkerRuntimeStatus.RUNNING
+            and runtime_report.runtime_state is WorkerRuntimeState.RUNNING
+        ):
             return True
         return (
             runtime_report.runtime_state is WorkerRuntimeState.ERROR

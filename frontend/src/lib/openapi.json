@@ -13137,6 +13137,18 @@
             ],
             "title": "Edge Node Id"
           },
+          "encoder_mode": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Encoder Mode"
+          },
           "heartbeat_at": {
             "format": "date-time",
             "title": "Heartbeat At",
@@ -13152,6 +13164,18 @@
               }
             ],
             "title": "Last Error"
+          },
+          "media_pipeline_mode": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Pipeline Mode"
           },
           "restart_count": {
             "default": 0,
@@ -13187,6 +13211,18 @@
               }
             ],
             "title": "Scene Contract Hash"
+          },
+          "selected_provider": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Provider"
           }
         },
         "required": [
@@ -13232,6 +13268,18 @@
             ],
             "title": "Edge Node Id"
           },
+          "encoder_mode": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Encoder Mode"
+          },
           "heartbeat_at": {
             "format": "date-time",
             "title": "Heartbeat At",
@@ -13252,6 +13300,18 @@
               }
             ],
             "title": "Last Error"
+          },
+          "media_pipeline_mode": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Pipeline Mode"
           },
           "restart_count": {
             "minimum": 0.0,
@@ -13285,6 +13345,18 @@
               }
             ],
             "title": "Scene Contract Hash"
+          },
+          "selected_provider": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected Provider"
           },
           "tenant_id": {
             "format": "uuid",

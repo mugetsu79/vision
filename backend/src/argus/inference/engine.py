@@ -25,6 +25,7 @@ from argus.api.contracts import (
     DetectionRegion,
     EvidenceRecordingPolicy,
     SceneVisionProfile,
+    SupervisorRuntimeReportCreate,
     TriggerRuleSummary,
     WorkerEvidenceStorageSettings,
     WorkerIncidentRule,
@@ -71,6 +72,7 @@ from argus.models.enums import (
     RuntimeArtifactScope,
     RuntimeVocabularySource,
     TrackerType,
+    WorkerRuntimeState,
 )
 from argus.services.evidence_storage import ResolvedEvidenceStorageResolver, build_evidence_store
 from argus.services.incident_capture import (
@@ -598,6 +600,40 @@ class StreamClient(Protocol):
     ) -> None: ...
 
 
+class RuntimeReporter(Protocol):
+    async def record_runtime_report(self, payload: SupervisorRuntimeReportCreate) -> None: ...
+
+
+class HttpRuntimeReporter:
+    def __init__(
+        self,
+        *,
+        api_base_url: str,
+        bearer_token: str | None,
+        timeout_seconds: float = 5.0,
+    ) -> None:
+        self._api_base_url = api_base_url.rstrip("/")
+        self._bearer_token = bearer_token
+        self._timeout_seconds = timeout_seconds
+
+    async def record_runtime_report(self, payload: SupervisorRuntimeReportCreate) -> None:
+        headers = (
+            {"Authorization": f"Bearer {self._bearer_token}"}
+            if self._bearer_token
+            else None
+        )
+        async with httpx.AsyncClient(
+            base_url=self._api_base_url,
+            headers=headers,
+            timeout=self._timeout_seconds,
+        ) as client:
+            response = await client.post(
+                "/api/v1/operations/runtime-reports",
+                json=payload.model_dump(mode="json"),
+            )
+            response.raise_for_status()
+
+
 def build_detector(
     *,
     model: ModelSettings,
@@ -839,6 +875,9 @@ class InferenceEngine:
         preprocessor: Preprocessor | None = None,
         runtime: Any | None = None,
         runtime_policy: RuntimeExecutionPolicy | None = None,
+        runtime_reporter: RuntimeReporter | None = None,
+        edge_node_id: UUID | None = None,
+        runtime_report_interval_seconds: float = 10.0,
         diagnostics_enabled: bool = False,
         timing_summary_interval_frames: int = 120,
     ) -> None:
@@ -860,6 +899,10 @@ class InferenceEngine:
         self.preprocessor = preprocessor or _identity_preprocessor
         self._runtime = runtime
         self._runtime_policy = runtime_policy
+        self._runtime_reporter = runtime_reporter
+        self._edge_node_id = edge_node_id
+        self._runtime_report_interval_seconds = max(0.0, runtime_report_interval_seconds)
+        self._last_runtime_report_at: float | None = None
         self._diagnostics_enabled = diagnostics_enabled
         self._timing_summary_interval_frames = max(0, timing_summary_interval_frames)
         self.privacy_filter = privacy_filter or PrivacyFilter(
@@ -959,6 +1002,72 @@ class InferenceEngine:
                 await close_result
         await self.publisher.close()
         self.frame_source.close()
+
+    async def _maybe_record_runtime_report(
+        self,
+        *,
+        heartbeat_at: datetime,
+        loop_time: float,
+    ) -> None:
+        if self._runtime_reporter is None:
+            return
+        if (
+            self._last_runtime_report_at is not None
+            and loop_time - self._last_runtime_report_at
+            < self._runtime_report_interval_seconds
+        ):
+            return
+        self._last_runtime_report_at = loop_time
+        payload = SupervisorRuntimeReportCreate(
+            camera_id=self.config.camera_id,
+            edge_node_id=self._edge_node_id,
+            heartbeat_at=heartbeat_at,
+            runtime_state=WorkerRuntimeState.RUNNING,
+            restart_count=0,
+            last_error=None,
+            runtime_artifact_id=self._runtime_artifact_id(),
+            scene_contract_hash=self.config.scene_contract_hash,
+            selected_provider=self._selected_runtime_provider(),
+            media_pipeline_mode=self._media_pipeline_mode(),
+            encoder_mode=self._encoder_mode(),
+        )
+        try:
+            await self._runtime_reporter.record_runtime_report(payload)
+        except Exception as exc:
+            logger.warning(
+                "Worker runtime report failed for camera %s: %s",
+                self.config.camera_id,
+                exc,
+            )
+
+    def _runtime_artifact_id(self) -> UUID | None:
+        artifact = self.runtime_selection.artifact
+        return artifact.id if artifact is not None else None
+
+    def _selected_runtime_provider(self) -> str | None:
+        selected_backend = self.runtime_selection.selected_backend
+        if selected_backend:
+            return selected_backend
+        detector_provider = getattr(self.detector, "selected_provider", None)
+        if detector_provider is not None:
+            return str(detector_provider)
+        if self._runtime_policy is not None and self._runtime_policy.provider:
+            return self._runtime_policy.provider
+        return None
+
+    def _media_pipeline_mode(self) -> str | None:
+        media_pipeline_mode = getattr(self.frame_source, "media_pipeline_mode", None)
+        if not callable(media_pipeline_mode):
+            return None
+        value = media_pipeline_mode()
+        return str(value) if value is not None else None
+
+    def _encoder_mode(self) -> str | None:
+        encoder_mode = getattr(self.stream_client, "encoder_mode", None)
+        if not callable(encoder_mode):
+            return None
+        value = encoder_mode(self.config.camera_id)
+        return str(value) if value is not None else None
 
     @property
     def profile(self) -> PublishProfile:
@@ -1116,6 +1225,10 @@ class InferenceEngine:
             stage_timer.record_stage("publish_stream", ended_at=loop.time())
         else:
             stage_timer.record_skipped_stage("publish_stream")
+        await self._maybe_record_runtime_report(
+            heartbeat_at=current_ts,
+            loop_time=loop.time(),
+        )
         telemetry = TelemetryFrame(
             camera_id=self.config.camera_id,
             ts=current_ts,
@@ -1836,6 +1949,15 @@ def _edge_telemetry_headers(settings: Settings) -> dict[str, str]:
     return {}
 
 
+def _runtime_reporter_from_settings(settings: Settings) -> RuntimeReporter | None:
+    if settings.api_bearer_token is None:
+        return None
+    return HttpRuntimeReporter(
+        api_base_url=settings.api_base_url,
+        bearer_token=settings.api_bearer_token.get_secret_value(),
+    )
+
+
 async def build_runtime_engine(
     config: EngineConfig,
     *,
@@ -1915,6 +2037,8 @@ async def build_runtime_engine(
         CameraSourceConfig(
             source_uri=source_uri,
             source_uri_factory=source_uri_factory,
+            target_width=registration.target_width,
+            target_height=registration.target_height,
             frame_skip=config.camera.frame_skip,
             fps_cap=config.camera.fps_cap,
         )
@@ -2068,6 +2192,9 @@ async def build_runtime_engine(
         diagnostics_enabled=settings.worker_diagnostics_enabled,
         runtime=runtime,
         runtime_policy=runtime_policy,
+        runtime_reporter=_runtime_reporter_from_settings(settings),
+        edge_node_id=settings.edge_node_id,
+        runtime_report_interval_seconds=settings.worker_runtime_report_interval_seconds,
     )
     engine.runtime_selection = runtime_selection
     return engine

@@ -8,6 +8,8 @@ import pytest
 
 from argus.link.edge_agent import (
     PingStatistics,
+    ThroughputMeasurement,
+    async_main,
     build_edge_sample_payload,
     build_udp_sequence_edge_sample_payload,
     fetch_edge_agent_config,
@@ -185,6 +187,103 @@ async def test_fetch_edge_agent_config_sends_bearer_token() -> None:
 
     assert result["site_id"] == "site-1"
     assert seen[0].headers["authorization"] == "Bearer secret-token"
+
+
+@pytest.mark.asyncio
+async def test_one_shot_config_run_records_installed_payload_throughput(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    throughput_calls: list[dict[str, object]] = []
+    posted_payloads: list[dict[str, object]] = []
+
+    async def fake_fetch_edge_agent_config(
+        *,
+        config_url: str,
+        bearer_token: str,
+    ) -> dict[str, object]:
+        assert config_url.endswith("/edge-agent-config")
+        assert bearer_token == "node-credential"
+        return {
+            "site_id": "site-1",
+            "target_id": "vezor-master-udp-reflector",
+            "method": "udp_sequence",
+            "reflector_address": "192.0.2.10",
+            "reflector_port": 8622,
+            "reflector_key_id": "master-reflector-test",
+            "reflector_secret": "reflector-secret",
+            "packet_count": 3,
+            "packet_spacing_ms": 1,
+            "loss_timeout_ms": 50,
+            "throughput_test_url": "http://api.local/api/v1/link/throughput/payload.bin",
+            "throughput_test_max_bytes": 1048576,
+            "throughput_payload_sha256": "a" * 64,
+        }
+
+    async def fake_run_udp_sequence_probe(**kwargs: object) -> PingStatistics:
+        assert kwargs["reflector_host"] == "192.0.2.10"
+        return PingStatistics(
+            packet_count=3,
+            packets_received=3,
+            latency_ms=5,
+            jitter_ms=0.25,
+            duration_ms=40,
+        )
+
+    async def fake_measure_throughput_payload(**kwargs: object) -> ThroughputMeasurement:
+        throughput_calls.append(dict(kwargs))
+        return ThroughputMeasurement(
+            bytes_received=1048576,
+            duration_seconds=0.5,
+            throughput_mbps=16.777216,
+            sha256="a" * 64,
+        )
+
+    async def fake_post_edge_sample(**kwargs: object) -> dict[str, object]:
+        posted_payloads.append(dict(kwargs["payload"]))
+        return {"ok": True}
+
+    monkeypatch.setattr(
+        "argus.link.edge_agent.fetch_edge_agent_config",
+        fake_fetch_edge_agent_config,
+    )
+    monkeypatch.setattr("argus.link.edge_agent.run_udp_sequence_probe", fake_run_udp_sequence_probe)
+    monkeypatch.setattr(
+        "argus.link.edge_agent.measure_throughput_payload",
+        fake_measure_throughput_payload,
+    )
+    monkeypatch.setattr("argus.link.edge_agent.post_edge_sample", fake_post_edge_sample)
+
+    exit_code = await async_main(
+        [
+            "--api-base-url",
+            "http://api.local",
+            "--bearer-token",
+            "node-credential",
+            "--config-url",
+            "http://api.local/api/v1/link/control-targets/master/edge-agent-config",
+            "--agent-id",
+            "edge-install-core-link",
+            "--include-throughput",
+            "--once",
+        ]
+    )
+
+    assert exit_code == 0
+    assert throughput_calls == [
+        {
+            "url": "http://api.local/api/v1/link/throughput/payload.bin",
+            "bearer_token": "node-credential",
+            "max_bytes": 1048576,
+            "expected_sha256": "a" * 64,
+        }
+    ]
+    assert posted_payloads[0]["throughput_mbps"] == 16.777
+    assert posted_payloads[0]["measurement_metadata"] == {
+        "throughput_bytes": 1048576,
+        "throughput_duration_seconds": 0.5,
+        "throughput_payload_sha256": "a" * 64,
+        "throughput_url_id": "master-installed-payload",
+    }
 
 
 @pytest.mark.asyncio

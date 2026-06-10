@@ -296,6 +296,9 @@ class _FakeOperationsService:
             last_error=payload.last_error,
             runtime_artifact_id=payload.runtime_artifact_id,
             scene_contract_hash=payload.scene_contract_hash,
+            selected_provider=payload.selected_provider,
+            media_pipeline_mode=payload.media_pipeline_mode,
+            encoder_mode=payload.encoder_mode,
             created_at=datetime(2026, 5, 13, 8, 1, tzinfo=UTC),
         )
 
@@ -727,6 +730,9 @@ async def test_runtime_report_route_records_supervisor_truth() -> None:
                 "restart_count": 2,
                 "last_error": "previous restart recovered",
                 "scene_contract_hash": "a" * 64,
+                "selected_provider": "TensorrtExecutionProvider",
+                "media_pipeline_mode": "jetson_gstreamer_native",
+                "encoder_mode": "hardware",
             },
         )
 
@@ -737,8 +743,12 @@ async def test_runtime_report_route_records_supervisor_truth() -> None:
     assert body["restart_count"] == 2
     assert body["last_error"] == "previous restart recovered"
     assert body["scene_contract_hash"] == "a" * 64
+    assert body["selected_provider"] == "TensorrtExecutionProvider"
+    assert body["media_pipeline_mode"] == "jetson_gstreamer_native"
+    assert body["encoder_mode"] == "hardware"
     assert operations.runtime_report_payload is not None
     assert operations.runtime_report_payload.camera_id == camera_id
+    assert operations.runtime_report_payload.selected_provider == "TensorrtExecutionProvider"
 
 
 @pytest.mark.asyncio

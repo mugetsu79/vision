@@ -1094,12 +1094,18 @@ function formatModelOptionLabel(model: ModelOption) {
 function summarizeSelectedModelRuntime(
   model: ModelOption,
   runtimeVocabularyVersion: number,
+  data: CameraWizardData,
 ) {
-  const artifacts = model.runtime_artifacts ?? [];
+  const artifacts = (model.runtime_artifacts ?? []).filter((artifact) =>
+    artifactMatchesSceneRuntime(artifact, data),
+  );
+  const hasRegisteredArtifacts = (model.runtime_artifacts ?? []).length > 0;
   if (artifacts.length === 0) {
     return {
       label: "Dynamic/fallback runtime",
-      detail: "No compiled artifact registered; worker will use the canonical model runtime.",
+      detail: hasRegisteredArtifacts
+        ? "No central-compatible compiled artifact is ready; worker will use the canonical model runtime."
+        : "No compiled artifact registered; worker will use the canonical model runtime.",
       tone: "muted" as const,
     };
   }
@@ -1161,6 +1167,21 @@ function summarizeSelectedModelRuntime(
     detail: "No valid compiled artifact is ready; worker will use the canonical model runtime.",
     tone: "muted" as const,
   };
+}
+
+function artifactMatchesSceneRuntime(artifact: RuntimeArtifact, data: CameraWizardData) {
+  const targetProfile = artifact.target_profile ?? "";
+  const isJetsonArtifact = targetProfile === "linux-aarch64-nvidia-jetson";
+  const usesEdgeRuntime =
+    data.processingMode === "edge" ||
+    (data.processingMode === "hybrid" && data.edgeNodeId.trim().length > 0);
+  if (isJetsonArtifact) {
+    return usesEdgeRuntime;
+  }
+  if (data.processingMode === "central" && !usesEdgeRuntime) {
+    return true;
+  }
+  return !usesEdgeRuntime;
 }
 
 function toCreatePayload(
@@ -1374,12 +1395,13 @@ export function CameraWizard({
   const selectedRuntimeSummary = useMemo(
     () =>
       selectedPrimaryModel
-        ? summarizeSelectedModelRuntime(
-            selectedPrimaryModel,
-            data.runtimeVocabularyVersion,
-          )
+          ? summarizeSelectedModelRuntime(
+              selectedPrimaryModel,
+              data.runtimeVocabularyVersion,
+              data,
+            )
         : null,
-    [data.runtimeVocabularyVersion, selectedPrimaryModel],
+    [data, data.runtimeVocabularyVersion, selectedPrimaryModel],
   );
   const storageProfileOptions = useMemo(
     () => evidenceStorageProfileOptions(evidenceStorageProfilesQuery.data),

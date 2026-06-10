@@ -5,7 +5,7 @@ import contextlib
 import importlib
 import subprocess
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from logging import getLogger
 from typing import Any, Literal, Protocol
@@ -29,6 +29,8 @@ PublishTokenFactory = Callable[[UUID, str], str]
 ReadTokenFactory = Callable[[UUID, str], str]
 
 LOGGER = getLogger(__name__)
+
+_GSTREAMER_PUBLISHER_STARTUP_GRACE_S = 0.05
 
 
 class PublishProfile(StrEnum):
@@ -97,6 +99,8 @@ class _PublisherRestartRequired(RuntimeError):
 
 
 class _FFmpegFramePublisher:
+    encoder_mode = "software"
+
     def __init__(
         self,
         *,
@@ -219,6 +223,8 @@ class _FFmpegFramePublisher:
 
 
 class _GStreamerFramePublisher:
+    encoder_mode = "hardware"
+
     def __init__(
         self,
         *,
@@ -297,6 +303,12 @@ class _GStreamerFramePublisher:
             raise RuntimeError(
                 "GStreamer is required to publish processed live streams on Jetson."
             ) from exc
+        await asyncio.sleep(_GSTREAMER_PUBLISHER_STARTUP_GRACE_S)
+        if process.returncode is not None:
+            raise RuntimeError(
+                "GStreamer hardware publisher exited during startup "
+                f"with code {process.returncode}."
+            )
         stderr_task = None
         stderr_stream = getattr(process, "stderr", None)
         if stderr_stream is not None:
@@ -404,6 +416,7 @@ class MediaMTXClient:
         self._publisher_idle_restart_seconds = max(0.0, publisher_idle_restart_seconds)
         self._registrations: dict[UUID, StreamRegistration] = {}
         self._publishers: dict[UUID, _PublisherState] = {}
+        self._software_publish_fallbacks: set[UUID] = set()
         self._pushed_frames: dict[UUID, dict[str, Any]] = {}
 
     async def close(self) -> None:
@@ -521,7 +534,12 @@ class MediaMTXClient:
             await publisher.close()
             self._publishers.pop(registration.camera_id, None)
             return
-        except _PublisherRestartRequired:
+        except _PublisherRestartRequired as exc:
+            if _publisher_encoder_mode(publisher) == "hardware":
+                self._mark_software_publish_fallback(
+                    registration=registration,
+                    reason=str(exc),
+                )
             await publisher.close()
             self._publishers.pop(registration.camera_id, None)
             publisher_state = await self._ensure_publisher(
@@ -555,6 +573,14 @@ class MediaMTXClient:
             publisher.push_frame(frame, ts=ts),
             timeout=self._publisher_push_timeout_seconds,
         )
+
+    def encoder_mode(self, camera_id: UUID) -> str | None:
+        state = self._publishers.get(camera_id)
+        if state is not None:
+            return _publisher_encoder_mode(state.publisher)
+        if camera_id in self._software_publish_fallbacks:
+            return "software"
+        return None
 
     async def create_webrtc_offer(self, *, camera_id: UUID, sdp_offer: str) -> str:
         response = await self._http_client.post(
@@ -726,6 +752,14 @@ class MediaMTXClient:
                 or not existing.publisher.is_alive()
             )
         ):
+            if (
+                not existing.publisher.is_alive()
+                and _publisher_encoder_mode(existing.publisher) == "hardware"
+            ):
+                self._mark_software_publish_fallback(
+                    registration=registration,
+                    reason="hardware publisher process exited",
+                )
             await existing.publisher.close()
             self._publishers.pop(registration.camera_id, None)
             existing = None
@@ -739,8 +773,9 @@ class MediaMTXClient:
                 key="jwt",
                 value=self._publish_token_factory(registration.camera_id, registration.path_name),
             )
+        publisher_registration = self._publisher_registration(registration)
         publisher = await self._publisher_factory(
-            registration=registration,
+            registration=publisher_registration,
             frame=frame,
             publish_url=publish_url,
         )
@@ -753,6 +788,33 @@ class MediaMTXClient:
         )
         self._publishers[registration.camera_id] = state
         return state
+
+    def _publisher_registration(self, registration: StreamRegistration) -> StreamRegistration:
+        if (
+            registration.camera_id in self._software_publish_fallbacks
+            and registration.publish_profile is PublishProfile.JETSON_NANO
+        ):
+            return replace(registration, publish_profile=PublishProfile.CENTRAL_GPU)
+        return registration
+
+    def _mark_software_publish_fallback(
+        self,
+        *,
+        registration: StreamRegistration,
+        reason: str,
+    ) -> None:
+        if registration.camera_id in self._software_publish_fallbacks:
+            return
+        self._software_publish_fallbacks.add(registration.camera_id)
+        LOGGER.warning(
+            "Jetson hardware H.264 publisher failed after startup; using FFmpeg software",
+            extra={
+                "camera_id": str(registration.camera_id),
+                "path_name": registration.path_name,
+                "encoder_mode": "software",
+                "reason": reason,
+            },
+        )
 
     def _should_restart_idle_publisher(
         self,
@@ -861,6 +923,11 @@ def default_profile_probe(command: list[str]) -> str:
     return completed.stdout
 
 
+def _publisher_encoder_mode(publisher: FramePublisher) -> str | None:
+    value = getattr(publisher, "encoder_mode", None)
+    return str(value) if value is not None else None
+
+
 async def _default_publisher_factory(
     *,
     registration: StreamRegistration,
@@ -868,11 +935,22 @@ async def _default_publisher_factory(
     publish_url: str,
 ) -> FramePublisher:
     if registration.publish_profile is PublishProfile.JETSON_NANO:
-        return await _FFmpegFramePublisher.create(
-            registration=registration,
-            frame=frame,
-            publish_url=publish_url,
-        )
+        try:
+            return await _GStreamerFramePublisher.create(
+                registration=registration,
+                frame=frame,
+                publish_url=publish_url,
+            )
+        except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
+            LOGGER.warning(
+                "Jetson hardware H.264 publisher unavailable; falling back to FFmpeg software: %s",
+                exc,
+                extra={
+                    "camera_id": str(registration.camera_id),
+                    "path_name": registration.path_name,
+                    "encoder_mode": "software",
+                },
+            )
     return await _FFmpegFramePublisher.create(
         registration=registration,
         frame=frame,

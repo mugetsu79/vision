@@ -97,17 +97,20 @@ async def test_client_calls_lifecycle_runtime_and_admission_routes() -> None:
     camera_id = uuid4()
     edge_node_id = uuid4()
     assignment_id = uuid4()
+    runtime_artifact_id = uuid4()
     lifecycle_request = _lifecycle_request_json(
         tenant_id=tenant_id,
         camera_id=camera_id,
         edge_node_id=edge_node_id,
         assignment_id=assignment_id,
+        runtime_artifact_id=runtime_artifact_id,
     )
     fleet = _fleet_overview_json(
         tenant_id=tenant_id,
         camera_id=camera_id,
         edge_node_id=edge_node_id,
         assignment_id=assignment_id,
+        runtime_artifact_id=runtime_artifact_id,
     )
     seen: list[httpx.Request] = []
 
@@ -146,8 +149,11 @@ async def test_client_calls_lifecycle_runtime_and_admission_routes() -> None:
                     "runtime_state": "running",
                     "restart_count": 0,
                     "last_error": None,
-                    "runtime_artifact_id": None,
-                    "scene_contract_hash": None,
+                    "runtime_artifact_id": str(runtime_artifact_id),
+                    "scene_contract_hash": "a" * 64,
+                    "selected_provider": "TensorrtExecutionProvider",
+                    "media_pipeline_mode": "jetson_gstreamer_native",
+                    "encoder_mode": "hardware",
                     "created_at": "2026-05-13T12:00:00Z",
                 },
             )
@@ -238,6 +244,11 @@ async def test_client_calls_lifecycle_runtime_and_admission_routes() -> None:
     runtime_body = json.loads(seen[2].content)
     assert runtime_body["camera_id"] == str(camera_id)
     assert runtime_body["runtime_state"] == "running"
+    assert runtime_body["runtime_artifact_id"] == str(runtime_artifact_id)
+    assert runtime_body["scene_contract_hash"] == "a" * 64
+    assert runtime_body["selected_provider"] == "TensorrtExecutionProvider"
+    assert runtime_body["media_pipeline_mode"] == "jetson_gstreamer_native"
+    assert runtime_body["encoder_mode"] == "hardware"
     admission_body = json.loads(seen[4].content)
     assert admission_body["camera_id"] == str(camera_id)
     assert admission_body["assignment_id"] == str(assignment_id)
@@ -628,6 +639,7 @@ def _lifecycle_request_json(
     camera_id: UUID,
     edge_node_id: UUID,
     assignment_id: UUID,
+    runtime_artifact_id: UUID | None = None,
 ) -> dict[str, object]:
     return OperationsLifecycleRequestResponse(
         id=uuid4(),
@@ -639,7 +651,13 @@ def _lifecycle_request_json(
         status=OperationsLifecycleStatus.REQUESTED,
         requested_by_subject="operator-1",
         requested_at=datetime(2026, 5, 13, 12, 0, tzinfo=UTC),
-        request_payload={},
+        request_payload={
+            "runtime_artifact_id": str(runtime_artifact_id) if runtime_artifact_id else None,
+            "scene_contract_hash": "a" * 64,
+            "selected_provider": "TensorrtExecutionProvider",
+            "media_pipeline_mode": "jetson_gstreamer_native",
+            "encoder_mode": "hardware",
+        },
         created_at=datetime(2026, 5, 13, 12, 0, tzinfo=UTC),
         updated_at=datetime(2026, 5, 13, 12, 0, tzinfo=UTC),
     ).model_dump(mode="json")
@@ -651,9 +669,10 @@ def _fleet_overview_json(
     camera_id: UUID,
     edge_node_id: UUID,
     assignment_id: UUID,
+    runtime_artifact_id: UUID | None = None,
 ) -> dict[str, object]:
     model_id = uuid4()
-    runtime_artifact_id = uuid4()
+    runtime_artifact_id = runtime_artifact_id or uuid4()
     return FleetOverviewResponse.model_validate(
         {
             "mode": "manual_dev",

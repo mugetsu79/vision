@@ -216,6 +216,9 @@ class SupervisorOperationsService:
             last_error=payload.last_error,
             runtime_artifact_id=payload.runtime_artifact_id,
             scene_contract_hash=payload.scene_contract_hash,
+            selected_provider=payload.selected_provider,
+            media_pipeline_mode=payload.media_pipeline_mode,
+            encoder_mode=payload.encoder_mode,
         )
         async with self.session_factory() as session:
             session.add(row)
@@ -761,6 +764,9 @@ def supervisor_runtime_report_response(
         last_error=row.last_error,
         runtime_artifact_id=row.runtime_artifact_id,
         scene_contract_hash=row.scene_contract_hash,
+        selected_provider=row.selected_provider,
+        media_pipeline_mode=row.media_pipeline_mode,
+        encoder_mode=row.encoder_mode,
         created_at=row.created_at,
     )
 

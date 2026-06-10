@@ -215,11 +215,7 @@ export function SupervisorLifecycleControls({
       <dl className="mt-3 grid gap-2 text-xs md:grid-cols-2">
         <LifecycleFact
           label="Heartbeat"
-          value={
-            runtimeReport?.heartbeat_at
-              ? formatDate(runtimeReport.heartbeat_at)
-              : "Not reported"
-          }
+          value={runtimeHeartbeatValue(worker, runtimeReport)}
         />
         <LifecycleFact
           label="Runtime"
@@ -236,6 +232,18 @@ export function SupervisorLifecycleControls({
         <LifecycleFact
           label="Scene contract"
           value={hashPrefix(runtimeReport?.scene_contract_hash)}
+        />
+        <LifecycleFact
+          label="Provider"
+          value={runtimeReport?.selected_provider ?? "Not reported"}
+        />
+        <LifecycleFact
+          label="Media pipeline"
+          value={formatMediaPipelineMode(runtimeReport?.media_pipeline_mode)}
+        />
+        <LifecycleFact
+          label="Encoder"
+          value={formatEncoderMode(runtimeReport?.encoder_mode)}
         />
         <LifecycleFact
           label="Last request"
@@ -267,6 +275,45 @@ function LifecycleFact({ label, value }: { label: string; value: string }) {
       </dd>
     </div>
   );
+}
+
+function runtimeHeartbeatValue(
+  worker: Worker,
+  runtimeReport: Worker["runtime_report"],
+) {
+  if (runtimeReport?.heartbeat_at) {
+    return formatDate(runtimeReport.heartbeat_at);
+  }
+  if (
+    worker.lifecycle_owner === "central_supervisor" &&
+    worker.runtime_status === "not_reported"
+  ) {
+    return "Awaiting first heartbeat";
+  }
+  return "Not reported";
+}
+
+function formatMediaPipelineMode(value: string | null | undefined) {
+  if (value === "jetson_gstreamer_native") {
+    return "Native Jetson GStreamer";
+  }
+  if (value === "jetson_gstreamer_software") {
+    return "Software GStreamer";
+  }
+  if (value === "ffmpeg_software") {
+    return "FFmpeg software";
+  }
+  return value ?? "Not reported";
+}
+
+function formatEncoderMode(value: string | null | undefined) {
+  if (value === "hardware") {
+    return "Hardware H.264";
+  }
+  if (value === "software") {
+    return "FFmpeg software";
+  }
+  return value ?? "Not reported";
 }
 
 function lifecycleReason(worker: Worker): string {

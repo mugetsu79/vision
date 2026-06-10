@@ -215,10 +215,18 @@ with `--config-url` pointed at the scoped edge-agent config endpoint.
 
 ## Throughput
 
-Throughput measurement is manual only. Vezor does not run throughput tests at
-the monitoring interval because that would waste bandwidth. Operators must use
-the explicit **Measure throughput** action on a backend synthetic HTTP/HTTPS
-target with a configured throughput URL and byte cap.
+Throughput measurement is manual after install. Vezor does not run throughput
+tests at the monitoring interval because that would waste bandwidth. Operators
+must use the explicit **Measure throughput** action on a backend synthetic
+HTTP/HTTPS target with a configured throughput URL and byte cap.
+
+Installed master appliances create a deterministic
+`/var/lib/vezor/link-throughput/vezor-speed-test-64MiB.bin` payload and SHA256
+sidecar. The backend serves it to authenticated admins and authorized
+supervisors at `/api/v1/link/throughput/payload.bin`. The scoped edge-agent
+config includes the payload URL, byte cap, size, and SHA so a newly installed
+edge appliance can run one source-side throughput sample during installation.
+That install-time sample is a smoke fixture, not a recurring monitor.
 
 ## Packet Loss Semantics
 

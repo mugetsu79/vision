@@ -23,6 +23,7 @@ from argus.streaming.mediamtx import (
     _FFmpegFramePublisher,
     _GStreamerFramePublisher,
     _prepare_frame_for_publish,
+    _PublisherRestartRequired,
     probe_publish_profile,
 )
 from argus.streaming.webrtc import MediaMTXTokenIssuer
@@ -227,26 +228,30 @@ async def test_mediamtx_client_registers_profile_specific_processed_path() -> No
 
 
 @pytest.mark.asyncio
-async def test_default_publisher_factory_uses_ffmpeg_for_jetson_profile_without_nvenc(
+async def test_default_publisher_factory_prefers_jetson_hardware_encoder(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    created: list[tuple[StreamRegistration, tuple[int, ...], str]] = []
+    gstreamer_created: list[tuple[StreamRegistration, tuple[int, ...], str]] = []
 
-    async def fake_create(
+    async def gstreamer_create(
         *,
         registration: StreamRegistration,
         frame: np.ndarray,
         publish_url: str,
     ) -> _FakeFramePublisher:
-        created.append((registration, tuple(int(value) for value in frame.shape), publish_url))
-        return _FakeFramePublisher()
+        gstreamer_created.append(
+            (registration, tuple(int(value) for value in frame.shape), publish_url)
+        )
+        publisher = _FakeFramePublisher()
+        publisher.encoder_mode = "hardware"
+        return publisher
 
-    async def fail_gstreamer_create(**kwargs: object) -> _FakeFramePublisher:
+    async def fail_ffmpeg_create(**kwargs: object) -> _FakeFramePublisher:
         del kwargs
-        raise AssertionError("Jetson Orin Nano processed streams must not require NVENC")
+        raise AssertionError("Jetson processed streams should prefer nvv4l2h264enc when available")
 
-    monkeypatch.setattr(_GStreamerFramePublisher, "create", fail_gstreamer_create)
-    monkeypatch.setattr(_FFmpegFramePublisher, "create", fake_create)
+    monkeypatch.setattr(_GStreamerFramePublisher, "create", gstreamer_create)
+    monkeypatch.setattr(_FFmpegFramePublisher, "create", fail_ffmpeg_create)
 
     registration = StreamRegistration(
         camera_id=uuid4(),
@@ -266,7 +271,62 @@ async def test_default_publisher_factory_uses_ffmpeg_for_jetson_profile_without_
     )
 
     assert isinstance(publisher, _FakeFramePublisher)
-    assert created == [
+    assert publisher.encoder_mode == "hardware"
+    assert gstreamer_created == [
+        (
+            registration,
+            (720, 1280, 3),
+            "rtsp://mediamtx.internal:8554/cameras/example/annotated",
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_default_publisher_factory_falls_back_to_ffmpeg_when_jetson_encoder_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ffmpeg_created: list[tuple[StreamRegistration, tuple[int, ...], str]] = []
+
+    async def fail_gstreamer_create(**kwargs: object) -> _FakeFramePublisher:
+        del kwargs
+        raise RuntimeError("GStreamer nvv4l2h264enc is unavailable")
+
+    async def ffmpeg_create(
+        *,
+        registration: StreamRegistration,
+        frame: np.ndarray,
+        publish_url: str,
+    ) -> _FakeFramePublisher:
+        ffmpeg_created.append(
+            (registration, tuple(int(value) for value in frame.shape), publish_url)
+        )
+        publisher = _FakeFramePublisher()
+        publisher.encoder_mode = "software"
+        return publisher
+
+    monkeypatch.setattr(_GStreamerFramePublisher, "create", fail_gstreamer_create)
+    monkeypatch.setattr(_FFmpegFramePublisher, "create", ffmpeg_create)
+
+    registration = StreamRegistration(
+        camera_id=uuid4(),
+        mode=StreamMode.ANNOTATED_WHIP,
+        read_path="rtsp://mediamtx.internal:8554/cameras/example/annotated",
+        publish_path="rtsp://mediamtx.internal:8554/cameras/example/annotated",
+        path_name="cameras/example/annotated",
+        target_fps=10,
+        publish_profile=PublishProfile.JETSON_NANO,
+    )
+    frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+
+    publisher = await _default_publisher_factory(
+        registration=registration,
+        frame=frame,
+        publish_url=registration.publish_path or "",
+    )
+
+    assert isinstance(publisher, _FakeFramePublisher)
+    assert publisher.encoder_mode == "software"
+    assert ffmpeg_created == [
         (
             registration,
             (720, 1280, 3),
@@ -935,6 +995,73 @@ async def test_mediamtx_client_times_out_stalled_publisher_and_recovers_on_next_
 
 
 @pytest.mark.asyncio
+async def test_mediamtx_client_falls_back_when_jetson_hardware_publisher_dies_on_push(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gstreamer_created = 0
+    ffmpeg_created = 0
+    ffmpeg_publishers: list[_FakeFramePublisher] = []
+    camera_id = uuid4()
+
+    async def gstreamer_create(
+        *,
+        registration: StreamRegistration,
+        frame: np.ndarray,
+        publish_url: str,
+    ) -> _FailingHardwarePublisher:
+        nonlocal gstreamer_created
+        del registration, frame, publish_url
+        gstreamer_created += 1
+        return _FailingHardwarePublisher()
+
+    async def ffmpeg_create(
+        *,
+        registration: StreamRegistration,
+        frame: np.ndarray,
+        publish_url: str,
+    ) -> _FakeFramePublisher:
+        nonlocal ffmpeg_created
+        del registration, frame, publish_url
+        ffmpeg_created += 1
+        publisher = _FakeFramePublisher()
+        publisher.encoder_mode = "software"
+        ffmpeg_publishers.append(publisher)
+        return publisher
+
+    monkeypatch.setattr(_GStreamerFramePublisher, "create", gstreamer_create)
+    monkeypatch.setattr(_FFmpegFramePublisher, "create", ffmpeg_create)
+
+    client = MediaMTXClient(
+        api_base_url="http://mediamtx.internal:9997",
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
+        whip_base_url="http://mediamtx.internal:8889",
+        http_client=AsyncClient(transport=_ok_transport()),
+    )
+    registration = await client.register_stream(
+        camera_id=camera_id,
+        rtsp_url="rtsp://camera.internal/live",
+        profile=PublishProfile.JETSON_NANO,
+        stream_kind="transcode",
+        privacy=PrivacyPolicy(blur_faces=True, blur_plates=True),
+    )
+    frame = np.zeros((12, 16, 3), dtype=np.uint8)
+
+    await client.push_frame(registration, frame, ts=datetime(2026, 4, 20, 18, 0, tzinfo=UTC))
+    await client.push_frame(
+        registration,
+        frame,
+        ts=datetime(2026, 4, 20, 18, 0, 1, tzinfo=UTC),
+    )
+
+    assert gstreamer_created == 1
+    assert ffmpeg_created == 1
+    assert ffmpeg_publishers[0].frames == [(12, 16, 3), (12, 16, 3)]
+    assert client.encoder_mode(camera_id) == "software"
+
+    await client.close()
+
+
+@pytest.mark.asyncio
 async def test_mediamtx_client_restarts_publisher_after_long_publish_gap() -> None:
     created_publishers: list[_FakeFramePublisher] = []
     camera_id = uuid4()
@@ -1146,6 +1273,46 @@ async def test_gstreamer_frame_publisher_uses_jetson_hardware_encoder(
 
 
 @pytest.mark.asyncio
+async def test_gstreamer_frame_publisher_rejects_encoder_startup_exit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _FakeProcess:
+        def __init__(self) -> None:
+            self.stdin = None
+            self.stderr = None
+            self.returncode: int | None = 1
+
+        async def wait(self) -> int:
+            return self.returncode or 0
+
+    async def fake_create_subprocess_exec(*command: str, **kwargs: object) -> _FakeProcess:
+        del command, kwargs
+        return _FakeProcess()
+
+    monkeypatch.setattr(
+        "argus.streaming.mediamtx.asyncio.create_subprocess_exec",
+        fake_create_subprocess_exec,
+    )
+
+    registration = StreamRegistration(
+        camera_id=uuid4(),
+        mode=StreamMode.ANNOTATED_WHIP,
+        read_path="rtsp://mediamtx.internal:8554/cameras/example/annotated",
+        publish_path="rtsp://mediamtx.internal:8554/cameras/example/annotated",
+        path_name="cameras/example/annotated",
+        target_fps=10,
+        publish_profile=PublishProfile.JETSON_NANO,
+    )
+
+    with pytest.raises(RuntimeError, match="GStreamer hardware publisher exited during startup"):
+        await _GStreamerFramePublisher.create(
+            registration=registration,
+            frame=np.zeros((720, 1280, 3), dtype=np.uint8),
+            publish_url=registration.publish_path or "",
+        )
+
+
+@pytest.mark.asyncio
 async def test_ffmpeg_frame_publisher_captures_stderr_for_diagnostics(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1245,6 +1412,23 @@ class _BlockingFramePublisher:
     async def push_frame(self, frame: np.ndarray, *, ts: datetime) -> None:
         del frame, ts
         await asyncio.sleep(3600)
+
+    def is_alive(self) -> bool:
+        return not self.closed
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+class _FailingHardwarePublisher:
+    encoder_mode = "hardware"
+
+    def __init__(self) -> None:
+        self.closed = False
+
+    async def push_frame(self, frame: np.ndarray, *, ts: datetime) -> None:
+        del frame, ts
+        raise _PublisherRestartRequired("hardware encoder died")
 
     def is_alive(self) -> bool:
         return not self.closed

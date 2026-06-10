@@ -296,6 +296,11 @@ describe("CameraWizard", () => {
 
     await user.type(screen.getByLabelText(/camera name/i), "Dock Camera");
     await user.selectOptions(screen.getByLabelText(/site/i), "site-1");
+    await user.selectOptions(screen.getByLabelText(/processing mode/i), "edge");
+    await user.type(
+      screen.getByLabelText(/edge node id/i),
+      "22222222-2222-2222-2222-222222222222",
+    );
     await user.type(screen.getByLabelText(/rtsp url/i), "rtsp://camera.local/live");
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.selectOptions(screen.getByLabelText(/primary model/i), "open-model");
@@ -313,12 +318,73 @@ describe("CameraWizard", () => {
 
     await user.type(screen.getByLabelText(/camera name/i), "Dock Camera");
     await user.selectOptions(screen.getByLabelText(/site/i), "site-1");
+    await user.selectOptions(screen.getByLabelText(/processing mode/i), "edge");
+    await user.type(
+      screen.getByLabelText(/edge node id/i),
+      "22222222-2222-2222-2222-222222222222",
+    );
     await user.type(screen.getByLabelText(/rtsp url/i), "rtsp://camera.local/live");
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.selectOptions(screen.getByLabelText(/primary model/i), "model-1");
 
     expect(screen.getByText(/Dynamic\/fallback runtime/i)).toBeInTheDocument();
     expect(screen.getByText(/No compiled artifact registered/i)).toBeInTheDocument();
+  });
+
+  test("does not show Jetson TensorRT artifacts as effective for central scenes", async () => {
+    const user = userEvent.setup();
+
+    renderWizard({
+      models: [
+        {
+          id: "model-jetson",
+          name: "YOLO26n COCO",
+          version: "2026.1",
+          classes: ["person", "car"],
+          capability: "fixed_vocab",
+          runtime_artifacts: [
+            {
+              id: "artifact-jetson",
+              model_id: "model-jetson",
+              camera_id: null,
+              scope: "model",
+              kind: "tensorrt_engine",
+              capability: "fixed_vocab",
+              runtime_backend: "tensorrt_engine",
+              path: "/models/yolo26n.engine",
+              target_profile: "linux-aarch64-nvidia-jetson",
+              precision: "fp16",
+              input_shape: { width: 640, height: 640 },
+              classes: ["person", "car"],
+              vocabulary_hash: null,
+              vocabulary_version: null,
+              source_model_sha256: "a".repeat(64),
+              sha256: "c".repeat(64),
+              size_bytes: 2048,
+              builder: {},
+              runtime_versions: {},
+              validation_status: "valid",
+              validation_error: null,
+              build_duration_seconds: 3.2,
+              validation_duration_seconds: null,
+              validated_at: "2026-05-10T08:00:00Z",
+              created_at: "2026-05-10T08:00:00Z",
+              updated_at: "2026-05-10T08:00:00Z",
+            },
+          ],
+        },
+      ],
+    });
+
+    await user.type(screen.getByLabelText(/camera name/i), "Lobby Camera");
+    await user.selectOptions(screen.getByLabelText(/site/i), "site-1");
+    await user.type(screen.getByLabelText(/rtsp url/i), "rtsp://camera.local/live");
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.selectOptions(screen.getByLabelText(/primary model/i), "model-jetson");
+
+    expect(screen.queryByText(/TensorRT artifact: valid/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Dynamic\/fallback runtime/i)).toBeInTheDocument();
+    expect(screen.getByText(/No central-compatible compiled artifact/i)).toBeInTheDocument();
   });
 
   test("marks compiled open-vocab artifacts stale when the vocabulary version differs", async () => {
@@ -376,6 +442,11 @@ describe("CameraWizard", () => {
 
     await user.type(screen.getByLabelText(/camera name/i), "Dock Camera");
     await user.selectOptions(screen.getByLabelText(/site/i), "site-1");
+    await user.selectOptions(screen.getByLabelText(/processing mode/i), "edge");
+    await user.type(
+      screen.getByLabelText(/edge node id/i),
+      "22222222-2222-2222-2222-222222222222",
+    );
     await user.type(screen.getByLabelText(/rtsp url/i), "rtsp://camera.local/live");
     await user.click(screen.getByRole("button", { name: /next/i }));
     await user.selectOptions(screen.getByLabelText(/primary model/i), "open-model");

@@ -71,6 +71,9 @@ function supervisedWorker(overrides: Partial<Worker> = {}): Worker {
       runtime_artifact_id: "00000000-0000-0000-0000-000000000601",
       scene_contract_hash:
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      selected_provider: "TensorrtExecutionProvider",
+      media_pipeline_mode: "jetson_gstreamer_native",
+      encoder_mode: "hardware",
       created_at: "2026-05-13T08:01:00Z",
     },
     latest_lifecycle_request: {
@@ -155,6 +158,44 @@ describe("SupervisorLifecycleControls", () => {
       action: "restart",
       request_payload: { source: "operations_ui" },
     });
+  });
+
+  test("shows runtime report media and provider evidence", () => {
+    render(
+      <SupervisorLifecycleControls
+        worker={supervisedWorker()}
+        edgeNodes={edgeNodes}
+      />,
+    );
+
+    expect(screen.getByText("TensorrtExecutionProvider")).toBeInTheDocument();
+    expect(screen.getByText("Native Jetson GStreamer")).toBeInTheDocument();
+    expect(screen.getByText("Hardware H.264")).toBeInTheDocument();
+  });
+
+  test("shows central supervised cameras as awaiting first heartbeat", () => {
+    render(
+      <SupervisorLifecycleControls
+        worker={supervisedWorker({
+          node_id: null,
+          node_hostname: null,
+          processing_mode: "central",
+          runtime_status: "not_reported",
+          lifecycle_owner: "central_supervisor",
+          detail:
+            "Central supervisor owns this worker process; awaiting first per-camera heartbeat.",
+          runtime_report: null,
+          allowed_lifecycle_actions: ["start", "stop", "restart", "drain"],
+        })}
+        edgeNodes={edgeNodes}
+      />,
+    );
+
+    expect(
+      screen.getByText(/awaiting first per-camera heartbeat/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Awaiting first heartbeat")).toBeInTheDocument();
+    expect(screen.getByText("not_reported")).toBeInTheDocument();
   });
 
   test("removes a configured worker assignment without deleting the scene", async () => {

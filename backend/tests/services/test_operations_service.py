@@ -13,6 +13,7 @@ from argus.api.contracts import (
     TenantContext,
     WorkerDesiredState,
     WorkerModelAdmissionRequest,
+    WorkerRuntimeStatus,
 )
 from argus.core.config import Settings
 from argus.core.security import AuthenticatedUser
@@ -788,10 +789,14 @@ async def test_fleet_overview_allows_central_start_when_supervisor_hardware_is_f
     worker = response.camera_workers[0]
     assert response.mode == "supervised"
     assert worker.desired_state == WorkerDesiredState.SUPERVISED
+    assert worker.runtime_status == WorkerRuntimeStatus.NOT_REPORTED
+    assert worker.runtime_report is None
     assert worker.lifecycle_owner == "central_supervisor"
     assert worker.dev_run_command is None
     assert OperationsLifecycleAction.START in worker.allowed_lifecycle_actions
-    assert worker.detail == "Central Supervisor owns this worker process."
+    assert worker.detail == (
+        "Central supervisor owns this worker process; awaiting first per-camera heartbeat."
+    )
 
 
 @pytest.mark.asyncio

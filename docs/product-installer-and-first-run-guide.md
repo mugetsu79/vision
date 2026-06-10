@@ -103,7 +103,13 @@ Use it to validate generic site link posture outside FleetOps:
 - edge-agent ICMP sequence probes can post source-side packet-count samples
 - edge-agent UDP sequence probes can measure against an authenticated
   cooperating reflector
-- throughput checks are explicit manual operator actions, not interval jobs
+- master installers create the deterministic Core Link
+  `vezor-speed-test-64MiB.bin` payload and `.sha256` sidecar for authenticated
+  throughput smoke checks
+- edge installers run one initial edge-agent sample with throughput enabled when
+  the master edge-agent config exposes the installed payload URL, cap, and SHA
+- post-install throughput checks are explicit manual operator actions, not
+  interval jobs
 
 The master appliance includes disabled-by-default reflector settings and UDP
 port mapping support. A real reflector listener requires

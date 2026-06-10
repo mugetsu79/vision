@@ -7695,6 +7695,8 @@ export interface components {
             camera_id: string;
             /** Edge Node Id */
             edge_node_id?: string | null;
+            /** Encoder Mode */
+            encoder_mode?: string | null;
             /**
              * Heartbeat At
              * Format: date-time
@@ -7702,6 +7704,8 @@ export interface components {
             heartbeat_at: string;
             /** Last Error */
             last_error?: string | null;
+            /** Media Pipeline Mode */
+            media_pipeline_mode?: string | null;
             /**
              * Restart Count
              * @default 0
@@ -7713,6 +7717,8 @@ export interface components {
             runtime_state: components["schemas"]["WorkerRuntimeState"];
             /** Scene Contract Hash */
             scene_contract_hash?: string | null;
+            /** Selected Provider */
+            selected_provider?: string | null;
         };
         /** SupervisorRuntimeReportResponse */
         SupervisorRuntimeReportResponse: {
@@ -7730,6 +7736,8 @@ export interface components {
             created_at: string;
             /** Edge Node Id */
             edge_node_id?: string | null;
+            /** Encoder Mode */
+            encoder_mode?: string | null;
             /**
              * Heartbeat At
              * Format: date-time
@@ -7742,6 +7750,8 @@ export interface components {
             id: string;
             /** Last Error */
             last_error?: string | null;
+            /** Media Pipeline Mode */
+            media_pipeline_mode?: string | null;
             /** Restart Count */
             restart_count: number;
             /** Runtime Artifact Id */
@@ -7749,6 +7759,8 @@ export interface components {
             runtime_state: components["schemas"]["WorkerRuntimeState"];
             /** Scene Contract Hash */
             scene_contract_hash?: string | null;
+            /** Selected Provider */
+            selected_provider?: string | null;
             /**
              * Tenant Id
              * Format: uuid

@@ -103,6 +103,9 @@ async def test_records_worker_runtime_report_with_heartbeat_and_runtime_truth() 
             last_error="recovered from stream timeout",
             runtime_artifact_id=runtime_artifact_id,
             scene_contract_hash=scene_contract_hash,
+            selected_provider="TensorrtExecutionProvider",
+            media_pipeline_mode="jetson_gstreamer_native",
+            encoder_mode="hardware",
         ),
     )
     latest = await service.latest_runtime_reports_by_camera(
@@ -116,6 +119,9 @@ async def test_records_worker_runtime_report_with_heartbeat_and_runtime_truth() 
     assert report.last_error == "recovered from stream timeout"
     assert report.runtime_artifact_id == runtime_artifact_id
     assert report.scene_contract_hash == scene_contract_hash
+    assert report.selected_provider == "TensorrtExecutionProvider"
+    assert report.media_pipeline_mode == "jetson_gstreamer_native"
+    assert report.encoder_mode == "hardware"
     assert latest[camera_id].id == report.id
 
 

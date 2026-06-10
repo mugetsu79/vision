@@ -164,8 +164,12 @@ without inventing a local master link.
 Backend synthetic checks measure from the backend network. Edge-agent checks
 measure from the edge site. Use edge-agent ICMP sequence for no-reflector
 targets such as `8.8.8.8`; use Vezor UDP sequence only when the far end has a
-cooperating authenticated reflector. Throughput measurement is manual only and
-must not run at the monitoring interval.
+cooperating authenticated reflector. Master installers include the deterministic
+Core Link `vezor-speed-test-64MiB.bin` payload and serve its URL, byte cap, and
+SHA through the scoped edge-agent config. Edge installers run one initial
+edge-agent throughput smoke sample against that payload when available.
+After install, throughput measurement is manual only and must not run at the
+monitoring interval.
 
 The master deployment can host a UDP sequence reflector on port `8622`, but it
 is disabled by default. Binding the listener requires deployment settings,

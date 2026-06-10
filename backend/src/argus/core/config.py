@@ -6,6 +6,7 @@ from ipaddress import ip_network
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlsplit, urlunsplit
+from uuid import UUID
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -27,6 +28,7 @@ class Settings(BaseSettings):
     api_base_url: str = "http://localhost:8000"
     api_bearer_token: SecretStr | None = None
     central_supervisor_credential: SecretStr | None = None
+    edge_node_id: UUID | None = None
     cors_allowed_origins: tuple[str, ...] = (
         "http://localhost:3000",
         "http://127.0.0.1:3000",
@@ -93,6 +95,7 @@ class Settings(BaseSettings):
     worker_metrics_port: int = 9108
     worker_diagnostics_enabled: bool = False
     worker_config_poll_interval_seconds: float = Field(default=2.0, gt=0)
+    worker_runtime_report_interval_seconds: float = Field(default=10.0, gt=0)
     publish_profile: str | None = None
     inference_execution_provider_override: ExecutionProvider | None = None
     inference_execution_profile_override: ExecutionProfile | None = None

@@ -687,6 +687,9 @@ class WorkerRuntimeReport(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         nullable=True,
     )
     scene_contract_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    selected_provider: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    media_pipeline_mode: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    encoder_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 
 class OperationsLifecycleRequest(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):

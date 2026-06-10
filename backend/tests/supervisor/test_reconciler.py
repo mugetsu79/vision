@@ -10,6 +10,7 @@ from argus.api.contracts import (
     FleetOverviewResponse,
     FleetSummary,
     OperationsLifecycleRequestResponse,
+    SupervisorRuntimeReportResponse,
     WorkerAssignmentResponse,
     WorkerDesiredState,
     WorkerModelAdmissionResponse,
@@ -20,6 +21,7 @@ from argus.models.enums import (
     OperationsLifecycleAction,
     OperationsLifecycleStatus,
     ProcessingMode,
+    WorkerRuntimeState,
 )
 from argus.supervisor.process_adapter import WorkerProcessResult
 from argus.supervisor.reconciler import SupervisorReconciler
@@ -138,6 +140,63 @@ async def test_reconciler_recovers_desired_worker_after_restart() -> None:
         runtime_status=WorkerRuntimeStatus.OFFLINE,
         admission=admission,
     )
+    operations = _FakeSupervisorOperations(
+        requests=[],
+        admission=admission,
+    )
+    adapter = _FakeProcessAdapter()
+    reconciler = SupervisorReconciler(
+        operations=operations,
+        process_adapter=adapter,
+        tenant_id=tenant_id,
+        supervisor_id="edge-supervisor-1",
+        edge_node_id=edge_node_id,
+    )
+
+    processed = await reconciler.reconcile_once(fleet=_fleet_overview(worker))
+
+    assert processed == 1
+    assert adapter.calls == [("start", worker.camera_id)]
+    assert operations.admission_evaluations == [worker.camera_id]
+    assert operations.runtime_reports[0]["camera_id"] == worker.camera_id
+
+
+@pytest.mark.asyncio
+async def test_reconciler_recovers_desired_worker_from_running_report_after_restart() -> None:
+    tenant_id = uuid4()
+    edge_node_id = uuid4()
+    admission = _admission_response(
+        tenant_id=tenant_id,
+        camera_id=uuid4(),
+        edge_node_id=edge_node_id,
+        assignment_id=uuid4(),
+        status=ModelAdmissionStatus.RECOMMENDED,
+    )
+    worker = _fleet_worker(
+        tenant_id=tenant_id,
+        edge_node_id=edge_node_id,
+        desired_state=WorkerDesiredState.SUPERVISED,
+        runtime_status=WorkerRuntimeStatus.RUNNING,
+        admission=admission,
+    )
+    worker.runtime_report = SupervisorRuntimeReportResponse(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        camera_id=worker.camera_id,
+        edge_node_id=edge_node_id,
+        assignment_id=worker.assignment.id if worker.assignment is not None else None,
+        heartbeat_at=datetime(2026, 5, 13, 11, 50, tzinfo=UTC),
+        runtime_state=WorkerRuntimeState.RUNNING,
+        restart_count=0,
+        last_error=None,
+        runtime_artifact_id=admission.runtime_artifact_id,
+        scene_contract_hash=None,
+        selected_provider=admission.selected_backend,
+        media_pipeline_mode="jetson_gstreamer_native",
+        encoder_mode="software",
+        created_at=datetime(2026, 5, 13, 11, 50, tzinfo=UTC),
+    )
+    worker.restart_policy = "on_failure"
     operations = _FakeSupervisorOperations(
         requests=[],
         admission=admission,

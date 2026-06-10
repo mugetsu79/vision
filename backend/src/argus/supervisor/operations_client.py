@@ -346,6 +346,7 @@ class SupervisorOperationsClient:
         last_error: str | None = None,
     ) -> SupervisorRuntimeReportResponse:
         del tenant_id
+        request_payload = dict(request.request_payload)
         payload = SupervisorRuntimeReportCreate(
             camera_id=request.camera_id,
             edge_node_id=request.edge_node_id,
@@ -354,6 +355,15 @@ class SupervisorOperationsClient:
             runtime_state=_runtime_state(runtime_state),
             restart_count=0,
             last_error=last_error,
+            runtime_artifact_id=_uuid(request_payload.get("runtime_artifact_id")),
+            scene_contract_hash=_string(request_payload.get("scene_contract_hash")),
+            selected_provider=(
+                _string(request_payload.get("selected_provider"))
+                or _string(request_payload.get("selected_inference_provider"))
+                or _string(request_payload.get("selected_backend"))
+            ),
+            media_pipeline_mode=_string(request_payload.get("media_pipeline_mode")),
+            encoder_mode=_string(request_payload.get("encoder_mode")),
         )
         body = await self._request(
             "POST",

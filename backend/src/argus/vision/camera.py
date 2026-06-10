@@ -75,6 +75,12 @@ class _PrefetchedFrameCapture:
             return {}
         return dict(last_stage_timings())
 
+    def media_pipeline_mode(self) -> str | None:
+        media_pipeline_mode = getattr(self._capture, "media_pipeline_mode", None)
+        if not callable(media_pipeline_mode):
+            return None
+        return media_pipeline_mode()
+
     def release(self) -> None:
         self._capture.release()
 
@@ -151,6 +157,12 @@ class _LatestFrameCapture:
     def last_stage_timings(self) -> dict[str, float]:
         return dict(self._last_stage_timings)
 
+    def media_pipeline_mode(self) -> str | None:
+        media_pipeline_mode = getattr(self._capture, "media_pipeline_mode", None)
+        if not callable(media_pipeline_mode):
+            return None
+        return media_pipeline_mode()
+
     def release(self) -> None:
         self._closed = True
         self._new_frame_event.set()
@@ -179,6 +191,12 @@ class CameraSourceMode(StrEnum):
     LINUX_USB = "linux-usb"
 
 
+class MediaPipelineMode(StrEnum):
+    JETSON_GSTREAMER_NATIVE = "jetson_gstreamer_native"
+    JETSON_GSTREAMER_SOFTWARE = "jetson_gstreamer_software"
+    FFMPEG_SOFTWARE = "ffmpeg_software"
+
+
 @dataclass(slots=True, frozen=True)
 class PlatformInfo:
     machine: str
@@ -189,6 +207,8 @@ class PlatformInfo:
 class CameraSourceConfig:
     source_uri: str
     source_uri_factory: SourceUriFactory | None = None
+    target_width: int | None = None
+    target_height: int | None = None
     frame_skip: int = 1
     fps_cap: int = 25
     reconnect_backoff_base: float = 1.0
@@ -265,12 +285,27 @@ class CameraSource:
     def last_stage_timings(self) -> dict[str, float]:
         return dict(self._last_stage_timings)
 
+    def media_pipeline_mode(self) -> str | None:
+        media_pipeline_mode = getattr(self._capture, "media_pipeline_mode", None)
+        if callable(media_pipeline_mode):
+            value = media_pipeline_mode()
+            if value is not None:
+                return value
+        if self.mode is CameraSourceMode.X86_RTSP or self._backend == cv2.CAP_FFMPEG:
+            return MediaPipelineMode.FFMPEG_SOFTWARE.value
+        return None
+
     def close(self) -> None:
         self._capture.release()
 
     def _open_capture(self) -> CaptureHandle:
         source_uri = self._resolve_source_uri()
-        mode, source, backend = _resolve_capture_spec(source_uri, self._platform_info)
+        mode, source, backend = _resolve_capture_spec(
+            source_uri,
+            self._platform_info,
+            target_width=self.config.target_width,
+            target_height=self.config.target_height,
+        )
         self.mode = mode
         self._source = source
         self._backend = backend
@@ -365,6 +400,9 @@ def _is_jetson_device() -> bool:
 def _resolve_capture_spec(
     source_uri: str,
     platform_info: PlatformInfo,
+    *,
+    target_width: int | None = None,
+    target_height: int | None = None,
 ) -> tuple[CameraSourceMode, str | int, int | None]:
     if source_uri.startswith("usb://"):
         device_path = source_uri.removeprefix("usb://")
@@ -382,16 +420,38 @@ def _resolve_capture_spec(
     if platform_info.jetson:
         options = _jetson_rtsp_options_from_environment()
         drop_on_latency = "true" if options.drop_on_latency else "false"
+        resize_bgrx_caps = _gstreamer_resize_caps(
+            format_name="BGRx",
+            target_width=target_width,
+            target_height=target_height,
+        )
+        resize_bgr_caps = _gstreamer_resize_caps(
+            format_name="BGR",
+            target_width=target_width,
+            target_height=target_height,
+        )
         pipeline = (
             f"rtspsrc location={source_uri} protocols={options.protocols} "
             f"latency={options.latency_ms} drop-on-latency={drop_on_latency} ! "
             "rtph264depay ! h264parse ! nvv4l2decoder ! nvvidconv ! "
-            "video/x-raw,format=BGRx ! videoconvert ! video/x-raw,format=BGR ! "
+            f"{resize_bgrx_caps} ! videoconvert ! {resize_bgr_caps} ! "
             "appsink drop=true max-buffers=1 sync=false"
         )
         return CameraSourceMode.JETSON_RTSP, pipeline, cv2.CAP_GSTREAMER
 
     return CameraSourceMode.X86_RTSP, source_uri, cv2.CAP_FFMPEG
+
+
+def _gstreamer_resize_caps(
+    *,
+    format_name: str,
+    target_width: int | None,
+    target_height: int | None,
+) -> str:
+    caps = f"video/x-raw,format={format_name}"
+    if target_width is not None and target_height is not None:
+        caps = f"{caps},width={int(target_width)},height={int(target_height)}"
+    return caps
 
 
 def _jetson_rtsp_options_from_environment() -> _JetsonRtspOptions:
@@ -492,7 +552,10 @@ def _open_jetson_gstreamer_capture_with_fallback(
     backend: int | None,
 ) -> CaptureHandle:
     try:
-        return _open_gstreamer_rawvideo_capture(source)
+        return _open_gstreamer_rawvideo_capture(
+            source,
+            media_pipeline_mode=MediaPipelineMode.JETSON_GSTREAMER_NATIVE.value,
+        )
     except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
         LOGGER.warning(
             "Jetson native GStreamer capture unavailable; falling back to software decode: %s",
@@ -502,7 +565,10 @@ def _open_jetson_gstreamer_capture_with_fallback(
 
     fallback_source = _jetson_software_decode_pipeline(source)
     try:
-        return _open_gstreamer_rawvideo_capture(fallback_source)
+        return _open_gstreamer_rawvideo_capture(
+            fallback_source,
+            media_pipeline_mode=MediaPipelineMode.JETSON_GSTREAMER_SOFTWARE.value,
+        )
     except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
         LOGGER.warning(
             "Jetson software GStreamer capture unavailable; falling back to ffmpeg rawvideo: %s",
@@ -516,12 +582,24 @@ def _open_jetson_gstreamer_capture_with_fallback(
     return cast(CaptureHandle, _open_opencv_capture(fallback_source, backend))
 
 
-def _open_gstreamer_rawvideo_capture(source: str) -> CaptureHandle:
-    capture = _GStreamerRawVideoCapture.create(source)
+def _open_gstreamer_rawvideo_capture(
+    source: str,
+    *,
+    media_pipeline_mode: str = MediaPipelineMode.JETSON_GSTREAMER_NATIVE.value,
+) -> CaptureHandle:
+    capture = _GStreamerRawVideoCapture.create(
+        source,
+        media_pipeline_mode=media_pipeline_mode,
+    )
     success, frame = capture.read()
     if success and frame is not None:
+        label = (
+            "Jetson software GStreamer rawvideo capture is active"
+            if media_pipeline_mode == MediaPipelineMode.JETSON_GSTREAMER_SOFTWARE.value
+            else "Jetson native GStreamer rawvideo capture is active"
+        )
         LOGGER.warning(
-            "Jetson native GStreamer rawvideo capture is active",
+            label,
             extra={"source_uri": _redact_gstreamer_source_uri(source)},
         )
         return _PrefetchedFrameCapture(capture, frame)
@@ -566,10 +644,16 @@ def _should_try_jetson_software_decode_fallback(
 
 
 def _jetson_software_decode_pipeline(source: str) -> str:
-    return source.replace(
-        "nvv4l2decoder ! nvvidconv ! video/x-raw,format=BGRx ! videoconvert ! "
-        "video/x-raw,format=BGR ! ",
-        "avdec_h264 ! videoconvert ! video/x-raw,format=BGR ! ",
+    return re.sub(
+        (
+            r"nvv4l2decoder ! nvvidconv ! "
+            r"video/x-raw,format=BGRx(?:,width=\d+,height=\d+)? ! "
+            r"videoconvert ! "
+            r"(?P<bgr_caps>video/x-raw,format=BGR(?:,width=\d+,height=\d+)?) ! "
+        ),
+        r"avdec_h264 ! videoconvert ! \g<bgr_caps> ! ",
+        source,
+        count=1,
     )
 
 
@@ -624,6 +708,7 @@ class _GStreamerRawVideoCapture:
     _height: int
     _source_uri: str
     _redacted_source_uri: str
+    _media_pipeline_mode: str
     _stderr_tail: deque[str] = field(default_factory=lambda: deque(maxlen=20))
     _stderr_reported: bool = False
     _latest_frame: deque[Frame] = field(default_factory=lambda: deque(maxlen=1))
@@ -632,11 +717,18 @@ class _GStreamerRawVideoCapture:
     _last_stage_timings: dict[str, float] = field(default_factory=dict)
 
     @classmethod
-    def create(cls, source: str) -> _GStreamerRawVideoCapture:
+    def create(
+        cls,
+        source: str,
+        *,
+        media_pipeline_mode: str = MediaPipelineMode.JETSON_GSTREAMER_NATIVE.value,
+    ) -> _GStreamerRawVideoCapture:
         source_uri = _extract_gstreamer_source_uri(source)
         if source_uri is None:
             raise RuntimeError("GStreamer pipeline does not include an rtspsrc location.")
-        width, height = _probe_video_dimensions(source_uri)
+        width, height = _extract_gstreamer_output_dimensions(source) or _probe_video_dimensions(
+            source_uri
+        )
         pipeline = _gstreamer_rawvideo_pipeline(source, width=width, height=height)
         command = ["gst-launch-1.0", "-q", *shlex.split(pipeline)]
         process = subprocess.Popen(
@@ -651,6 +743,7 @@ class _GStreamerRawVideoCapture:
             _height=height,
             _source_uri=source_uri,
             _redacted_source_uri=redact_url_secrets(source_uri),
+            _media_pipeline_mode=media_pipeline_mode,
         )
         instance._start_stderr_pump()
         instance._start_frame_pump()
@@ -736,6 +829,9 @@ class _GStreamerRawVideoCapture:
     def last_stage_timings(self) -> dict[str, float]:
         return dict(self._last_stage_timings)
 
+    def media_pipeline_mode(self) -> str:
+        return self._media_pipeline_mode
+
     def _report_stderr(self, reason: str) -> None:
         if self._stderr_reported:
             return
@@ -770,14 +866,30 @@ class _GStreamerRawVideoCapture:
 
 
 def _gstreamer_rawvideo_pipeline(source: str, *, width: int, height: int) -> str:
-    appsink_caps = "video/x-raw,format=BGR ! appsink drop=true max-buffers=1 sync=false"
+    appsink_match = re.search(
+        (
+            r"video/x-raw,format=BGR(?:,width=\d+,height=\d+)? ! "
+            r"appsink drop=true max-buffers=1 sync=false"
+        ),
+        source,
+    )
     fdsink_caps = (
         f"video/x-raw,format=BGR,width={width},height={height} ! "
         "fdsink fd=1 sync=false"
     )
-    if appsink_caps not in source:
+    if appsink_match is None:
         raise RuntimeError("GStreamer pipeline does not include the expected BGR appsink caps.")
-    return source.replace(appsink_caps, fdsink_caps)
+    return f"{source[: appsink_match.start()]}{fdsink_caps}{source[appsink_match.end() :]}"
+
+
+def _extract_gstreamer_output_dimensions(source: str) -> tuple[int, int] | None:
+    match = re.search(
+        r"video/x-raw,format=BGR,width=(?P<width>\d+),height=(?P<height>\d+)",
+        source,
+    )
+    if match is None:
+        return None
+    return int(match.group("width")), int(match.group("height"))
 
 
 @dataclass(slots=True)
@@ -921,6 +1033,9 @@ class _FFmpegRawVideoCapture:
 
     def last_stage_timings(self) -> dict[str, float]:
         return dict(self._last_stage_timings)
+
+    def media_pipeline_mode(self) -> str:
+        return MediaPipelineMode.FFMPEG_SOFTWARE.value
 
     def _report_stderr(self, reason: str) -> None:
         if self._stderr_reported:
