@@ -19,10 +19,12 @@ from argus.api.contracts import (
     RuntimeVocabularyState,
     SourceCapability,
     TenantContext,
+    WorkerStreamSettings,
 )
 from argus.core.config import Settings
 from argus.core.security import AuthenticatedUser, decrypt_rtsp_url
 from argus.models.enums import (
+    CameraSourceKind,
     DetectorCapability,
     ModelFormat,
     ModelTask,
@@ -83,6 +85,44 @@ _EXPECTED_720P20_SOURCE_BROWSER_PROFILE_IDS = [
     for profile_id in _EXPECTED_720P_UNKNOWN_FPS_SOURCE_BROWSER_PROFILE_IDS
     if not profile_id.endswith("p25")
 ]
+
+
+def test_source_profile_hash_changes_with_source_and_stream_without_leaking_uri() -> None:
+    source_capability = SourceCapability(
+        width=1280,
+        height=720,
+        fps=20,
+        codec="h264",
+        aspect_ratio="16:9",
+    )
+    stream = WorkerStreamSettings(
+        profile_id="720p20",
+        kind="transcode",
+        width=1280,
+        height=720,
+        fps=20,
+    )
+
+    first_hash = app_services._source_profile_hash(
+        CameraSourceKind.RTSP,
+        "rtsp://camera.example/live?token=fake-token-one",
+        source_capability,
+        stream,
+    )
+    second_hash = app_services._source_profile_hash(
+        CameraSourceKind.RTSP,
+        "rtsp://camera.example/alternate?token=fake-token-two",
+        source_capability,
+        stream,
+    )
+
+    assert first_hash != second_hash
+    assert len(first_hash) == 64
+    assert len(second_hash) == 64
+    assert "fake-token" not in first_hash
+    assert "camera.example" not in first_hash
+    assert "fake-token" not in second_hash
+    assert "camera.example" not in second_hash
 
 
 def _assert_browser_profiles_match_720p_source(
@@ -1046,11 +1086,12 @@ async def test_update_camera_reprobes_source_capability_when_rtsp_changes(
         created_at=now,
         updated_at=now,
     )
+    events = _FakeEvents()
     service = CameraService(
         session_factory=_FakeSessionFactory(),
         settings=settings,
         audit_logger=audit_logger,
-        events=None,
+        events=events,
     )
     user = AuthenticatedUser(
         subject="admin-1",
@@ -1133,6 +1174,19 @@ async def test_update_camera_reprobes_source_capability_when_rtsp_changes(
     _assert_1080p_profile_marked_unsupported(
         response.browser_delivery.unsupported_profiles
     )
+    assert events.calls
+    subject, command, _serialized = events.calls[0]
+    assert subject == f"cmd.camera.{camera_id}"
+    command_payload = command.model_dump(mode="python")  # type: ignore[attr-defined]
+    assert command_payload["camera"]["source_uri"] == "rtsp://new-camera/live"
+    assert command_payload["source_capability"] == {
+        "width": 1280,
+        "height": 720,
+        "fps": 20,
+        "codec": "h264",
+        "aspect_ratio": "16:9",
+    }
+    assert len(command_payload["source_profile_hash"]) == 64
 
 
 @pytest.mark.asyncio
@@ -1938,6 +1992,229 @@ async def test_get_setup_preview_returns_frame_size_and_preview_url(
         f"/api/v1/cameras/{camera_id}/setup-preview/image?rev={int(now.timestamp() * 1000)}"
     )
     assert response.captured_at == now
+
+
+@pytest.mark.asyncio
+async def test_get_setup_preview_returns_source_profile_metadata_on_fresh_capture(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=False,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    tenant_id = uuid4()
+    camera_id = uuid4()
+    model_id = uuid4()
+    now = datetime.now(tz=UTC)
+    source_capability = SourceCapability(
+        width=1280,
+        height=720,
+        fps=20,
+        codec="h264",
+        aspect_ratio="16:9",
+    )
+    camera = _camera(camera_id, uuid4(), model_id, settings)
+    camera.source_capability = source_capability.model_dump(mode="python")
+
+    service = CameraService(
+        session_factory=_FakeSessionFactory(),
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+        events=None,
+    )
+
+    async def fake_load_camera(session, tenant_id_arg, camera_id_arg):  # noqa: ANN001
+        assert tenant_id_arg == tenant_id
+        assert camera_id_arg == camera_id
+        return camera
+
+    monkeypatch.setattr(app_services, "_load_camera", fake_load_camera)
+    monkeypatch.setattr(
+        app_services,
+        "_capture_setup_preview_snapshot",
+        lambda camera_arg, settings_arg: app_services._SetupPreviewSnapshot(
+            image_bytes=b"preview-jpeg",
+            frame_size=FrameSize(width=1280, height=720),
+            captured_at=now,
+        ),
+    )
+
+    response = await service.get_setup_preview(_tenant_context(tenant_id), camera_id)
+
+    assert response.source_profile_hash is not None
+    assert len(response.source_profile_hash) == 64
+    assert response.source_capability == source_capability
+    assert response.stale is False
+
+
+@pytest.mark.asyncio
+async def test_get_setup_preview_recaptures_when_current_source_profile_hash_changes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=False,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    tenant_id = uuid4()
+    camera_id = uuid4()
+    model_id = uuid4()
+    captured_at = datetime.now(tz=UTC)
+    old_capability = SourceCapability(
+        width=2304,
+        height=1296,
+        fps=20,
+        codec="h264",
+        aspect_ratio="16:9",
+    )
+    current_capability = SourceCapability(
+        width=1280,
+        height=720,
+        fps=20,
+        codec="h264",
+        aspect_ratio="16:9",
+    )
+    camera = _camera(camera_id, uuid4(), model_id, settings)
+    camera.source_capability = old_capability.model_dump(mode="python")
+    camera.source_config = {
+        "kind": "rtsp",
+        "capture_uri": "rtsp://old-camera/live",
+        "redacted_uri": "rtsp://***@old-camera/live",
+    }
+
+    service = CameraService(
+        session_factory=_FakeSessionFactory(),
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+        events=None,
+    )
+    capture_calls = 0
+
+    async def fake_load_camera(session, tenant_id_arg, camera_id_arg):  # noqa: ANN001
+        assert tenant_id_arg == tenant_id
+        assert camera_id_arg == camera_id
+        return camera
+
+    def fake_capture_setup_preview_snapshot(camera_arg, settings_arg):  # noqa: ANN001
+        nonlocal capture_calls
+        capture_calls += 1
+        frame_size = (
+            FrameSize(width=2304, height=1296)
+            if capture_calls == 1
+            else FrameSize(width=1280, height=720)
+        )
+        return app_services._SetupPreviewSnapshot(
+            image_bytes=f"preview-{capture_calls}".encode(),
+            frame_size=frame_size,
+            captured_at=captured_at,
+        )
+
+    monkeypatch.setattr(app_services, "_load_camera", fake_load_camera)
+    monkeypatch.setattr(
+        app_services,
+        "_capture_setup_preview_snapshot",
+        fake_capture_setup_preview_snapshot,
+    )
+
+    first = await service.get_setup_preview(_tenant_context(tenant_id), camera_id)
+    cached = await service.get_setup_preview(_tenant_context(tenant_id), camera_id)
+    camera.source_capability = current_capability.model_dump(mode="python")
+    camera.source_config = {
+        "kind": "rtsp",
+        "capture_uri": "rtsp://current-camera/live",
+        "redacted_uri": "rtsp://***@current-camera/live",
+    }
+    recaptured = await service.get_setup_preview(_tenant_context(tenant_id), camera_id)
+
+    assert capture_calls == 2
+    assert cached.source_profile_hash == first.source_profile_hash
+    assert recaptured.source_profile_hash != first.source_profile_hash
+    assert recaptured.source_capability == current_capability
+    assert recaptured.frame_size == FrameSize(width=1280, height=720)
+    assert recaptured.stale is False
+
+
+@pytest.mark.asyncio
+async def test_get_setup_preview_returns_stale_cached_still_when_current_recapture_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        enable_startup_services=False,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    tenant_id = uuid4()
+    camera_id = uuid4()
+    model_id = uuid4()
+    captured_at = datetime.now(tz=UTC)
+    old_capability = SourceCapability(
+        width=2304,
+        height=1296,
+        fps=20,
+        codec="h264",
+        aspect_ratio="16:9",
+    )
+    current_capability = SourceCapability(
+        width=1280,
+        height=720,
+        fps=20,
+        codec="h264",
+        aspect_ratio="16:9",
+    )
+    camera = _camera(camera_id, uuid4(), model_id, settings)
+    camera.source_capability = old_capability.model_dump(mode="python")
+    camera.source_config = {
+        "kind": "rtsp",
+        "capture_uri": "rtsp://old-camera/live",
+        "redacted_uri": "rtsp://***@old-camera/live",
+    }
+
+    service = CameraService(
+        session_factory=_FakeSessionFactory(),
+        settings=settings,
+        audit_logger=_FakeAuditLogger(),
+        events=None,
+    )
+    capture_calls = 0
+
+    async def fake_load_camera(session, tenant_id_arg, camera_id_arg):  # noqa: ANN001
+        assert tenant_id_arg == tenant_id
+        assert camera_id_arg == camera_id
+        return camera
+
+    def fake_capture_setup_preview_snapshot(camera_arg, settings_arg):  # noqa: ANN001
+        nonlocal capture_calls
+        capture_calls += 1
+        if capture_calls == 1:
+            return app_services._SetupPreviewSnapshot(
+                image_bytes=b"old-preview-jpeg",
+                frame_size=FrameSize(width=2304, height=1296),
+                captured_at=captured_at,
+            )
+        raise RuntimeError("Timed out while capturing a setup preview frame after 20s.")
+
+    monkeypatch.setattr(app_services, "_load_camera", fake_load_camera)
+    monkeypatch.setattr(
+        app_services,
+        "_capture_setup_preview_snapshot",
+        fake_capture_setup_preview_snapshot,
+    )
+
+    original = await service.get_setup_preview(_tenant_context(tenant_id), camera_id)
+    camera.source_capability = current_capability.model_dump(mode="python")
+    camera.source_config = {
+        "kind": "rtsp",
+        "capture_uri": "rtsp://current-camera/live",
+        "redacted_uri": "rtsp://***@current-camera/live",
+    }
+    stale = await service.get_setup_preview(_tenant_context(tenant_id), camera_id)
+
+    assert capture_calls == 2
+    assert stale.stale is True
+    assert stale.source_profile_hash == original.source_profile_hash
+    assert stale.source_capability == old_capability
+    assert stale.frame_size == FrameSize(width=2304, height=1296)
 
 
 def test_capture_setup_preview_snapshot_uses_normalized_rtsp_source_config(

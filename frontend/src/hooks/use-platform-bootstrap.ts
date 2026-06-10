@@ -33,7 +33,7 @@ async function readJson<T>(
   response: Response,
   fallbackMessage: string,
 ): Promise<T> {
-  const body = await response.json().catch(() => null);
+  const body: unknown = await response.json().catch(() => null);
 
   if (!response.ok) {
     throw toApiError(body, fallbackMessage);

@@ -680,7 +680,7 @@ describe("SettingsPage operations workbench", () => {
     ).toBeGreaterThan(0);
     expect(
       within(sceneMatrix).getByRole("link", {
-        name: /inspect delivery for lobby/i,
+        name: /inspect operations for lobby/i,
       }),
     ).toHaveAttribute("href", "/settings");
     expect(

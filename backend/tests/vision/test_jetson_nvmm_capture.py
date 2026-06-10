@@ -5,10 +5,34 @@ from types import ModuleType
 
 import numpy as np
 
+import argus.vision.jetson_nvmm_capture as jetson_capture
 from argus.vision.jetson_nvmm_capture import (
     NativeJetsonFrame,
     probe_native_jetson_capture,
 )
+
+
+class FakeNativeJetsonModule:
+    def __init__(self) -> None:
+        self.open_calls: list[tuple[str, int | None, int | None, int]] = []
+        self.handle = object()
+
+    def open_rtsp(
+        self,
+        source_uri: str,
+        width: int | None,
+        height: int | None,
+        fps_cap: int,
+    ) -> object:
+        self.open_calls.append((source_uri, width, height, fps_cap))
+        return self.handle
+
+    def read(self, handle: object) -> NativeJetsonFrame | None:
+        assert handle is self.handle
+        return None
+
+    def close(self, handle: object) -> None:
+        assert handle is self.handle
 
 
 def test_native_jetson_frame_returns_bgr_numpy_copy() -> None:
@@ -27,6 +51,95 @@ def test_native_jetson_frame_returns_bgr_numpy_copy() -> None:
     assert observed is not original
     observed[0, 0, 0] = 255
     assert original[0, 0, 0] != 255
+
+
+def test_native_capture_wrapper_reports_backend_and_mode() -> None:
+    module = FakeNativeJetsonModule()
+
+    capture = jetson_capture.NativeJetsonCapture.create(
+        source_uri="rtsp://camera.local/ch2",
+        target_width=1280,
+        target_height=720,
+        fps_cap=20,
+        native_module=module,
+    )
+
+    assert module.open_calls == [("rtsp://camera.local/ch2", 1280, 720, 20)]
+    assert capture.media_capture_backend() == "jetson_nvmm_native"
+    assert capture.media_pipeline_mode() == "jetson_gstreamer_native"
+
+
+def test_native_capture_wrapper_accepts_native_dimensions() -> None:
+    module = FakeNativeJetsonModule()
+
+    jetson_capture.NativeJetsonCapture.create(
+        source_uri="rtsp://camera.local/ch2",
+        target_width=None,
+        target_height=None,
+        fps_cap=20,
+        native_module=module,
+    )
+
+    assert module.open_calls == [("rtsp://camera.local/ch2", None, None, 20)]
+
+
+def test_native_capture_validates_module_shape_before_opening() -> None:
+    class _MissingCloseModule:
+        def __init__(self) -> None:
+            self.open_calls = 0
+
+        def open_rtsp(
+            self,
+            source_uri: str,
+            width: int | None,
+            height: int | None,
+            fps_cap: int,
+        ) -> object:
+            del source_uri, width, height, fps_cap
+            self.open_calls += 1
+            return object()
+
+        def read(self, handle: object) -> None:
+            del handle
+
+    module = _MissingCloseModule()
+
+    with np.testing.assert_raises(jetson_capture.NativeJetsonUnavailable):
+        jetson_capture.NativeJetsonCapture.create(
+            source_uri="rtsp://camera.local/ch2",
+            target_width=1280,
+            target_height=720,
+            fps_cap=20,
+            native_module=module,
+        )
+
+    assert module.open_calls == 0
+
+
+def test_native_frame_can_delay_bgr_materialization() -> None:
+    calls = 0
+
+    def materialize() -> np.ndarray:
+        nonlocal calls
+        calls += 1
+        return np.zeros((720, 1280, 3), dtype=np.uint8)
+
+    frame = NativeJetsonFrame(
+        width=1280,
+        height=720,
+        format="NV12",
+        captured_at_monotonic=12.5,
+        memory_kind="cuda",
+        source_profile_hash="h" * 64,
+        _bgr_materializer=materialize,
+    )
+
+    assert calls == 0
+
+    observed = frame.as_bgr_numpy()
+
+    assert calls == 1
+    assert observed.shape == (720, 1280, 3)
 
 
 def test_probe_native_jetson_capture_reports_unavailable_when_extension_missing() -> None:

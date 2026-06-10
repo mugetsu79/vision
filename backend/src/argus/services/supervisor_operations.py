@@ -216,6 +216,7 @@ class SupervisorOperationsService:
             last_error=payload.last_error,
             runtime_artifact_id=payload.runtime_artifact_id,
             scene_contract_hash=payload.scene_contract_hash,
+            source_profile_hash=payload.source_profile_hash,
             selected_provider=payload.selected_provider,
             media_pipeline_mode=payload.media_pipeline_mode,
             media_capture_backend=payload.media_capture_backend,
@@ -655,11 +656,9 @@ class SupervisorOperationsService:
         if not isinstance(heartbeat_at, datetime) or now - heartbeat_at > REPORT_STALE_AFTER:
             return WorkerRuntimeStatus.UNKNOWN
         runtime_state = getattr(report, "runtime_state", WorkerRuntimeState.UNKNOWN)
-        if runtime_state in {
-            WorkerRuntimeState.STARTING,
-            WorkerRuntimeState.RUNNING,
-            WorkerRuntimeState.DRAINING,
-        }:
+        if runtime_state is WorkerRuntimeState.STARTING:
+            return WorkerRuntimeStatus.STARTING
+        if runtime_state in {WorkerRuntimeState.RUNNING, WorkerRuntimeState.DRAINING}:
             return WorkerRuntimeStatus.RUNNING
         if runtime_state in {WorkerRuntimeState.STOPPED, WorkerRuntimeState.ERROR}:
             return WorkerRuntimeStatus.OFFLINE
@@ -765,6 +764,7 @@ def supervisor_runtime_report_response(
         last_error=row.last_error,
         runtime_artifact_id=row.runtime_artifact_id,
         scene_contract_hash=row.scene_contract_hash,
+        source_profile_hash=row.source_profile_hash,
         selected_provider=row.selected_provider,
         media_pipeline_mode=row.media_pipeline_mode,
         media_capture_backend=row.media_capture_backend,

@@ -407,6 +407,16 @@ function deriveWorkerSignal(
       detail: worker.detail ?? undefined,
     };
   }
+  if (worker.runtime_status === "starting") {
+    return {
+      health: "attention",
+      label:
+        worker.runtime_presentation === "awaiting_profile_heartbeat"
+          ? "Worker awaiting profile heartbeat"
+          : "Worker starting",
+      detail: worker.detail ?? undefined,
+    };
+  }
   if (worker.runtime_status === "stale") {
     return {
       health: "attention",

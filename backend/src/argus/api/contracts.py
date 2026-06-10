@@ -1461,6 +1461,9 @@ class CameraCommandPayload(BaseModel):
     runtime_vocabulary_version: int | None = None
     tracker_type: TrackerType | None = None
     privacy: WorkerPrivacySettings | None = None
+    camera: WorkerCameraSettings | None = None
+    source_capability: SourceCapability | None = None
+    source_profile_hash: str | None = Field(default=None, min_length=64, max_length=64)
     stream: WorkerStreamSettings | None = None
     attribute_rules: list[dict[str, Any]] | None = None
     incident_rules: list[WorkerIncidentRule] | None = None
@@ -1482,6 +1485,7 @@ class WorkerConfigResponse(BaseModel):
     mode: ProcessingMode
     scene_contract_snapshot_id: UUID | None = None
     scene_contract_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    source_profile_hash: str | None = Field(default=None, min_length=64, max_length=64)
     privacy_manifest_snapshot_id: UUID | None = None
     privacy_manifest_hash: str | None = Field(default=None, min_length=64, max_length=64)
     runtime_passport_snapshot_id: UUID | None = None
@@ -1626,6 +1630,9 @@ class CameraSetupPreviewResponse(BaseModel):
     preview_url: str = Field(min_length=1)
     frame_size: FrameSize
     captured_at: datetime
+    source_profile_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    source_capability: SourceCapability | None = None
+    stale: bool = False
 
 
 class EdgeRegisterRequest(BaseModel):
@@ -1677,11 +1684,21 @@ class WorkerDesiredState(StrEnum):
 
 
 class WorkerRuntimeStatus(StrEnum):
+    STARTING = "starting"
     RUNNING = "running"
     STALE = "stale"
     OFFLINE = "offline"
     UNKNOWN = "unknown"
     NOT_REPORTED = "not_reported"
+
+
+WorkerRuntimePresentation = Literal[
+    "running",
+    "awaiting_first_heartbeat",
+    "awaiting_profile_heartbeat",
+    "stale",
+    "failed",
+]
 
 
 RuleLoadStatus = Literal["loaded", "stale", "unknown", "not_configured"]
@@ -2163,6 +2180,7 @@ class SupervisorRuntimeReportCreate(BaseModel):
     last_error: str | None = None
     runtime_artifact_id: UUID | None = None
     scene_contract_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    source_profile_hash: str | None = Field(default=None, min_length=64, max_length=64)
     selected_provider: str | None = Field(default=None, max_length=128)
     media_pipeline_mode: str | None = Field(default=None, max_length=64)
     media_capture_backend: str | None = Field(default=None, max_length=64)
@@ -2181,6 +2199,7 @@ class SupervisorRuntimeReportResponse(BaseModel):
     last_error: str | None = None
     runtime_artifact_id: UUID | None = None
     scene_contract_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    source_profile_hash: str | None = Field(default=None, min_length=64, max_length=64)
     selected_provider: str | None = Field(default=None, max_length=128)
     media_pipeline_mode: str | None = Field(default=None, max_length=64)
     media_capture_backend: str | None = Field(default=None, max_length=64)
@@ -2249,6 +2268,7 @@ class FleetCameraWorkerSummary(BaseModel):
     processing_mode: ProcessingMode
     desired_state: WorkerDesiredState
     runtime_status: WorkerRuntimeStatus
+    runtime_presentation: WorkerRuntimePresentation = "awaiting_first_heartbeat"
     lifecycle_owner: Literal["manual_dev", "central_supervisor", "edge_supervisor", "none"]
     dev_run_command: str | None = None
     detail: str | None = None

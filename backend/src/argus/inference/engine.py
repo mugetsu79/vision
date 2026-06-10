@@ -10,7 +10,7 @@ from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from datetime import datetime
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 from uuid import UUID
 
 import cv2
@@ -99,6 +99,7 @@ from argus.vision.count_events import CountEventProcessor, CountEventRecord
 from argus.vision.detection_regions import DetectionRegionDecision, DetectionRegionPolicy
 from argus.vision.detector import YoloDetector
 from argus.vision.detector_factory import build_detector as _build_detector
+from argus.vision.frames import is_captured_frame
 from argus.vision.homography import Homography
 from argus.vision.privacy import PrivacyConfig, PrivacyFilter
 from argus.vision.profiles import resolve_scene_vision_profile
@@ -274,6 +275,7 @@ class EngineConfig(BaseModel):
     mode: ProcessingMode
     scene_contract_snapshot_id: UUID | None = None
     scene_contract_hash: str | None = Field(default=None, min_length=64, max_length=64)
+    source_profile_hash: str | None = Field(default=None, min_length=64, max_length=64)
     privacy_manifest_snapshot_id: UUID | None = None
     privacy_manifest_hash: str | None = Field(default=None, min_length=64, max_length=64)
     runtime_passport_snapshot_id: UUID | None = None
@@ -304,6 +306,8 @@ class EngineConfig(BaseModel):
 
 
 class CameraCommand(BaseModel):
+    camera: CameraSettings | None = None
+    source_profile_hash: str | None = Field(default=None, min_length=64, max_length=64)
     active_classes: list[str] | None = None
     runtime_vocabulary: list[str] | None = None
     runtime_vocabulary_source: RuntimeVocabularySource | None = None
@@ -320,7 +324,7 @@ class CameraCommand(BaseModel):
 
 
 class FrameSource(Protocol):
-    def next_frame(self) -> Frame: ...
+    def next_frame(self) -> object: ...
 
     def close(self) -> None: ...
 
@@ -332,6 +336,8 @@ class ReconfigurableFrameSource(Protocol):
         target_width: int | None,
         target_height: int | None,
         fps_cap: int,
+        source_uri: str | None = None,
+        source_profile_hash: str | None = None,
     ) -> None: ...
 
 
@@ -1045,6 +1051,7 @@ class InferenceEngine:
             last_error=None,
             runtime_artifact_id=self._runtime_artifact_id(),
             scene_contract_hash=self.config.scene_contract_hash,
+            source_profile_hash=self.config.source_profile_hash,
             selected_provider=self._selected_runtime_provider(),
             media_pipeline_mode=self._media_pipeline_mode(),
             media_capture_backend=self._media_capture_backend(),
@@ -1119,23 +1126,30 @@ class InferenceEngine:
             frame_attempt=frame_attempt,
             stage="capture",
         )
-        frame = self.frame_source.next_frame()
+        raw_frame = self.frame_source.next_frame()
+        captured_frame = raw_frame if is_captured_frame(raw_frame) else None
+        frame: Frame | None = None
+        frame_shape = (
+            (captured_frame.height, captured_frame.width, 3)
+            if captured_frame is not None
+            else tuple(int(value) for value in cast(Frame, raw_frame).shape)
+        )
         self._log_frame_diagnostic(
             "Worker frame capture completed",
             frame_attempt=frame_attempt,
             stage="capture",
-            frame_shape=tuple(int(value) for value in frame.shape),
+            frame_shape=frame_shape,
         )
-        if self.incident_capture is not None:
+        if captured_frame is None:
+            frame = cast(Frame, raw_frame)
+        if self.incident_capture is not None and captured_frame is None:
             await self.incident_capture.record_frame(
                 camera_id=self.config.camera_id,
-                frame=frame,
+                frame=cast(Frame, frame),
                 ts=current_ts,
             )
         stage_timer.record_stage("capture", ended_at=loop.time())
         self._record_frame_source_substage_timings(stage_timer)
-        processed = self.preprocessor(frame.copy())
-        stage_timer.record_stage("preprocess", ended_at=loop.time())
         visible_classes = self._visible_classes()
         detector_classes = self._detector_classes(visible_classes)
         self._log_frame_diagnostic(
@@ -1145,15 +1159,44 @@ class InferenceEngine:
             active_classes=list(visible_classes),
             detector_classes=list(detector_classes),
         )
-        detections = self.detector.detect(processed, detector_classes)
-        self._log_frame_diagnostic(
-            "Worker frame detect completed",
-            frame_attempt=frame_attempt,
-            stage="detect",
-            detection_count=len(detections),
-        )
-        stage_timer.record_stage("detect", ended_at=loop.time())
-        self._record_detector_substage_timings(stage_timer)
+        detect_captured_frame = getattr(self.detector, "detect_captured_frame", None)
+        if captured_frame is not None and callable(detect_captured_frame):
+            detections = detect_captured_frame(captured_frame, allowed_classes=detector_classes)
+            self._log_frame_diagnostic(
+                "Worker frame detect completed",
+                frame_attempt=frame_attempt,
+                stage="detect",
+                detection_count=len(detections),
+            )
+            stage_timer.record_stage("detect", ended_at=loop.time())
+            self._record_detector_substage_timings(stage_timer)
+            frame = captured_frame.as_bgr_numpy()
+            if self.incident_capture is not None:
+                await self.incident_capture.record_frame(
+                    camera_id=self.config.camera_id,
+                    frame=frame,
+                    ts=current_ts,
+                )
+            processed = self.preprocessor(frame.copy())
+            stage_timer.record_stage("preprocess", ended_at=loop.time())
+        else:
+            if frame is None:
+                frame = (
+                    captured_frame.as_bgr_numpy()
+                    if captured_frame is not None
+                    else cast(Frame, raw_frame)
+                )
+            processed = self.preprocessor(frame.copy())
+            stage_timer.record_stage("preprocess", ended_at=loop.time())
+            detections = self.detector.detect(processed, detector_classes)
+            self._log_frame_diagnostic(
+                "Worker frame detect completed",
+                frame_attempt=frame_attempt,
+                stage="detect",
+                detection_count=len(detections),
+            )
+            stage_timer.record_stage("detect", ended_at=loop.time())
+            self._record_detector_substage_timings(stage_timer)
         filtered = self._filter_visible_detections(detections, visible_classes)
         filtered, region_decisions = self._detection_region_policy.filter_detections(filtered)
         self._record_detection_region_decisions(region_decisions)
@@ -1326,7 +1369,22 @@ class InferenceEngine:
     async def apply_command(self, command: CameraCommand) -> None:
         should_register_stream = False
         stream_changed = False
+        source_changed = False
+        previous_camera = self.config.camera
+        previous_source_profile_hash = self.config.source_profile_hash
+        previous_stream = self.config.stream
         visible_classes_before = self._visible_class_key()
+        if command.camera is not None and command.camera != self.config.camera:
+            self.config.camera = command.camera
+            should_register_stream = True
+            source_changed = True
+        if (
+            "source_profile_hash" in command.model_fields_set
+            and command.source_profile_hash != self.config.source_profile_hash
+        ):
+            self.config.source_profile_hash = command.source_profile_hash
+            should_register_stream = True
+            source_changed = True
         if command.active_classes is not None:
             self._state.active_classes = list(command.active_classes)
         if command.runtime_vocabulary is not None:
@@ -1411,19 +1469,39 @@ class InferenceEngine:
             )
             should_register_stream = True
         if self._started and should_register_stream:
-            self._stream_registration = await self.stream_client.register_stream(
-                camera_id=self.config.camera_id,
-                rtsp_url=self.config.camera.resolved_source_uri,
-                profile=self.profile,
-                stream_kind=self.config.stream.kind,
-                privacy=self._state.privacy,
-                target_fps=self.config.stream.fps,
-                profile_id=self.config.stream.profile_id,
-                target_width=self.config.stream.width,
-                target_height=self.config.stream.height,
-            )
-            if stream_changed:
-                self._reconfigure_frame_source_for_stream()
+            previous_stream_registration = self._stream_registration
+            frame_source_reconfigured = False
+            try:
+                if stream_changed or source_changed:
+                    self._reconfigure_frame_source_for_stream(use_config_stream=True)
+                    frame_source_reconfigured = True
+                self._stream_registration = await self.stream_client.register_stream(
+                    camera_id=self.config.camera_id,
+                    rtsp_url=self.config.camera.resolved_source_uri,
+                    profile=self.profile,
+                    stream_kind=self.config.stream.kind,
+                    privacy=self._state.privacy,
+                    target_fps=self.config.stream.fps,
+                    profile_id=self.config.stream.profile_id,
+                    target_width=self.config.stream.width,
+                    target_height=self.config.stream.height,
+                )
+            except Exception:
+                if source_changed:
+                    self.config.camera = previous_camera
+                    self.config.source_profile_hash = previous_source_profile_hash
+                if stream_changed:
+                    self.config.stream = previous_stream
+                self._stream_registration = previous_stream_registration
+                if frame_source_reconfigured:
+                    try:
+                        self._reconfigure_frame_source_for_stream()
+                    except Exception:
+                        logger.exception(
+                            "Failed to roll back frame source after stream registration failure",
+                            extra={"camera_id": str(self.config.camera_id)},
+                        )
+                raise
         if command.attribute_rules is not None:
             self._state.attribute_rules = list(command.attribute_rules)
         if command.incident_rules is not None:
@@ -1513,11 +1591,11 @@ class InferenceEngine:
             if isinstance(stage_name, str) and isinstance(duration, int | float):
                 stage_timer.record_duration(f"capture_{stage_name}", float(duration))
 
-    def _reconfigure_frame_source_for_stream(self) -> None:
+    def _reconfigure_frame_source_for_stream(self, *, use_config_stream: bool = False) -> None:
         reconfigure = getattr(self.frame_source, "reconfigure", None)
         if not callable(reconfigure):
             return
-        registration = self._stream_registration
+        registration = None if use_config_stream else self._stream_registration
         target_width = (
             registration.target_width if registration is not None else self.config.stream.width
         )
@@ -1529,6 +1607,8 @@ class InferenceEngine:
             target_width=target_width,
             target_height=target_height,
             fps_cap=_capture_fps_cap(self.config.camera.fps_cap, target_fps),
+            source_uri=self.config.camera.resolved_source_uri,
+            source_profile_hash=self.config.source_profile_hash,
         )
 
     def _face_privacy_classes(self) -> list[str]:
@@ -1953,6 +2033,8 @@ async def load_engine_config(
 def _command_from_engine_config(config: EngineConfig) -> CameraCommand:
     runtime_vocabulary = config.model.runtime_vocabulary
     return CameraCommand(
+        camera=config.camera,
+        source_profile_hash=config.source_profile_hash,
         active_classes=list(config.active_classes),
         runtime_vocabulary=list(runtime_vocabulary.terms),
         runtime_vocabulary_source=runtime_vocabulary.source,
@@ -2085,6 +2167,7 @@ async def build_runtime_engine(
         CameraSourceConfig(
             source_uri=source_uri,
             source_uri_factory=source_uri_factory,
+            source_profile_hash=config.source_profile_hash,
             target_width=registration.target_width,
             target_height=registration.target_height,
             frame_skip=config.camera.frame_skip,

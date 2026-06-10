@@ -271,6 +271,86 @@ def test_camera_source_reconfigures_jetson_rtsp_capture_dimensions() -> None:
     assert int(frame[0, 0, 0]) == 2
 
 
+def test_camera_source_reconfigures_when_uri_or_source_profile_hash_changes() -> None:
+    initial_capture = _FakeCapture([np.full((2, 2, 3), 1, dtype=np.uint8)])
+    reconfigured_frame = np.full((3, 3, 3), 2, dtype=np.uint8)
+    reconfigured_capture = _FakeCapture([reconfigured_frame])
+    captures = [initial_capture, reconfigured_capture]
+    calls: list[_CaptureCall] = []
+
+    def capture_factory(source: str | int, backend: int | None) -> _FakeCapture:
+        calls.append(_CaptureCall(source=source, backend=backend))
+        return captures.pop(0)
+
+    source = create_camera_source(
+        CameraSourceConfig(
+            source_uri="rtsp://camera.local/ch1",
+            fps_cap=0,
+        ),
+        platform_info=PlatformInfo(machine="x86_64", jetson=False),
+        capture_factory=capture_factory,
+    )
+
+    source.reconfigure(
+        target_width=None,
+        target_height=None,
+        fps_cap=0,
+        source_uri="rtsp://camera.local/ch2",
+        source_profile_hash="d" * 64,
+    )
+
+    np.testing.assert_array_equal(source.next_frame(), reconfigured_frame)
+    assert [call.source for call in calls] == [
+        "rtsp://camera.local/ch1",
+        "rtsp://camera.local/ch2",
+    ]
+    assert source.config.source_uri == "rtsp://camera.local/ch2"
+    assert source.config.source_profile_hash == "d" * 64
+    assert initial_capture.released is True
+    assert reconfigured_capture.released is False
+
+
+def test_camera_source_reconfigure_rolls_back_when_new_capture_has_no_first_frame() -> None:
+    old_frame = np.full((2, 2, 3), 7, dtype=np.uint8)
+    old_capture = _FakeCapture([old_frame])
+    failed_capture = _FakeCapture([None])
+    captures = [old_capture, failed_capture]
+    calls: list[_CaptureCall] = []
+
+    def capture_factory(source: str | int, backend: int | None) -> _FakeCapture:
+        calls.append(_CaptureCall(source=source, backend=backend))
+        return captures.pop(0)
+
+    source = create_camera_source(
+        CameraSourceConfig(
+            source_uri="rtsp://camera.local/ch1",
+            source_profile_hash="a" * 64,
+            fps_cap=0,
+        ),
+        platform_info=PlatformInfo(machine="x86_64", jetson=False),
+        capture_factory=capture_factory,
+    )
+
+    with pytest.raises(RuntimeError):
+        source.reconfigure(
+            target_width=None,
+            target_height=None,
+            fps_cap=0,
+            source_uri="rtsp://camera.local/ch2",
+            source_profile_hash="d" * 64,
+        )
+
+    assert [call.source for call in calls] == [
+        "rtsp://camera.local/ch1",
+        "rtsp://camera.local/ch2",
+    ]
+    assert source.config.source_uri == "rtsp://camera.local/ch1"
+    assert source.config.source_profile_hash == "a" * 64
+    assert old_capture.released is False
+    assert failed_capture.released is True
+    np.testing.assert_array_equal(source.next_frame(), old_frame)
+
+
 def test_camera_source_reports_precise_capture_backend() -> None:
     frame = np.zeros((4, 4, 3), dtype=np.uint8)
 
@@ -965,6 +1045,41 @@ def test_jetson_capture_backend_env_requires_appsink(
         _default_capture_factory(_jetson_rtsp_pipeline(), cv2.CAP_GSTREAMER)
 
     assert rawvideo_calls == 0
+
+
+def test_jetson_capture_backend_env_requires_nvmm_native_capture(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+    native_calls: list[str] = []
+
+    def open_native_capture(source: str) -> _FakeCapture:
+        native_calls.append(source)
+        return _FakeCapture([frame])
+
+    def fail_appsink(*args: object, **kwargs: object) -> object:
+        raise AssertionError("appsink should not run when nvmm is requested")
+
+    def fail_rawvideo(*args: object, **kwargs: object) -> object:
+        raise AssertionError("rawvideo should not run when nvmm is requested")
+
+    monkeypatch.setenv("ARGUS_JETSON_CAPTURE_BACKEND", "nvmm")
+    monkeypatch.setattr(
+        camera_module,
+        "_open_native_jetson_nvmm_capture",
+        open_native_capture,
+        raising=False,
+    )
+    monkeypatch.setattr(camera_module, "_open_gstreamer_appsink_capture", fail_appsink)
+    monkeypatch.setattr(camera_module, "_open_gstreamer_rawvideo_capture", fail_rawvideo)
+
+    capture = _default_capture_factory(_jetson_rtsp_pipeline(), cv2.CAP_GSTREAMER)
+
+    ok, observed = capture.read()
+
+    assert ok is True
+    np.testing.assert_array_equal(observed, frame)
+    assert native_calls == [_jetson_rtsp_pipeline()]
 
 
 def test_jetson_capture_backend_invalid_env_warns_and_uses_auto(

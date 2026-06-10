@@ -1590,6 +1590,104 @@ describe("CameraWizard", () => {
     expect(screen.getByRole("button", { name: /refresh still/i })).toBeInTheDocument();
   });
 
+  test("blocks source point editing when setup preview metadata is stale", async () => {
+    const user = userEvent.setup();
+    const createObjectURL = vi.fn(() => "blob:stale-camera-preview");
+    const revokeObjectURL = vi.fn();
+    Object.defineProperty(window.URL, "createObjectURL", {
+      configurable: true,
+      value: createObjectURL,
+    });
+    Object.defineProperty(window.URL, "revokeObjectURL", {
+      configurable: true,
+      value: revokeObjectURL,
+    });
+    vi.spyOn(global, "fetch").mockImplementation((input) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.endsWith("/api/v1/cameras/camera-1/setup-preview")) {
+        return Promise.resolve(new Response(
+          JSON.stringify({
+            camera_id: "camera-1",
+            preview_url: "/api/v1/cameras/camera-1/setup-preview/image?rev=12345",
+            frame_size: { width: 2304, height: 1296 },
+            captured_at: "2026-04-19T00:00:00Z",
+            source_profile_hash: "a".repeat(64),
+            source_capability: {
+              width: 2304,
+              height: 1296,
+              fps: 20,
+              codec: "h264",
+              aspect_ratio: "16:9",
+            },
+            stale: true,
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        ));
+      }
+
+      return Promise.resolve(new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xdb]), {
+        status: 200,
+        headers: { "Content-Type": "image/jpeg" },
+      }));
+    });
+
+    renderWizard({
+      initialCamera: {
+        id: "camera-1",
+        site_id: "site-1",
+        edge_node_id: null,
+        name: "Dock Camera",
+        rtsp_url_masked: "rtsp://***",
+        processing_mode: "hybrid",
+        primary_model_id: "model-1",
+        secondary_model_id: null,
+        tracker_type: "botsort",
+        active_classes: [],
+        attribute_rules: [],
+        zones: [],
+        homography: null,
+        privacy: {
+          blur_faces: true,
+          blur_plates: true,
+          method: "gaussian",
+          strength: 7,
+        },
+        browser_delivery: {
+          default_profile: "720p10",
+          allow_native_on_demand: true,
+          profiles: [],
+        },
+        frame_skip: 1,
+        fps_cap: 25,
+        created_at: "2026-04-19T00:00:00Z",
+        updated_at: "2026-04-19T00:00:00Z",
+      },
+    });
+
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /next/i }));
+    await user.click(screen.getByRole("button", { name: /next/i }));
+
+    expect(await screen.findByRole("button", { name: /refresh still/i })).toBeInTheDocument();
+    const addSourcePoint = screen.getByRole("button", { name: /add source point/i });
+    expect(addSourcePoint).toBeDisabled();
+
+    const sourceCanvas = screen.getByLabelText(/source points canvas/i);
+    stubRect(sourceCanvas, 2304, 1296);
+    fireEvent.click(sourceCanvas, { clientX: 128, clientY: 72 });
+    expect(
+      screen.queryByRole("button", { name: /source point 1/i }),
+    ).not.toBeInTheDocument();
+
+    const addDestinationPoint = screen.getByRole("button", { name: /add destination point/i });
+    expect(addDestinationPoint).toBeEnabled();
+    await user.click(addDestinationPoint);
+    expect(screen.getByText(/D1:/)).toBeInTheDocument();
+  });
+
   test("requires reselecting a primary model when the stored model is no longer in inventory", async () => {
     const user = userEvent.setup();
 

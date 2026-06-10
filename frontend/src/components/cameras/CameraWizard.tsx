@@ -1401,7 +1401,7 @@ export function CameraWizard({
               data,
             )
         : null,
-    [data, data.runtimeVocabularyVersion, selectedPrimaryModel],
+    [data, selectedPrimaryModel],
   );
   const storageProfileOptions = useMemo(
     () => evidenceStorageProfileOptions(evidenceStorageProfilesQuery.data),
@@ -1556,6 +1556,7 @@ export function CameraWizard({
   );
   const setupFrameSize = setupPreviewQuery.data?.frame_size ?? fallbackSetupFrameSize;
   const setupPreviewSrc = setupPreviewQuery.data?.preview_src ?? null;
+  const setupPreviewStale = setupPreviewQuery.data?.stale === true;
   const calibrationPreviewState = useMemo(() => {
     const defaultFrameLabel = `${setupFrameSize.width}×${setupFrameSize.height}`;
     const capturedLabel = setupPreviewQuery.data
@@ -1598,6 +1599,15 @@ export function CameraWizard({
       };
     }
 
+    if (setupPreviewStale) {
+      return {
+        tone: "warning" as const,
+        title: "Calibration still needs refresh",
+        body: `Current camera source settings changed since this still was captured. Refresh still before editing source points. Captured ${capturedLabel}.`,
+        frameLabel: defaultFrameLabel,
+      };
+    }
+
     if (setupPreviewQuery.data && setupPreviewSrc) {
       return {
         tone: "success" as const,
@@ -1630,6 +1640,7 @@ export function CameraWizard({
     setupPreviewQuery.error,
     setupPreviewQuery.isError,
     setupPreviewQuery.isPending,
+    setupPreviewStale,
     setupPreviewSrc,
   ]);
 
@@ -2783,6 +2794,7 @@ export function CameraWizard({
                 dst={data.homography.dst}
                 refDistanceM={data.homography.refDistanceM}
                 sourceFrameSize={setupFrameSize}
+                sourceEditingDisabled={setupPreviewStale}
                 sourcePreviewSrc={setupPreviewSrc}
                 onChange={(homography) => updateData("homography", homography)}
               />

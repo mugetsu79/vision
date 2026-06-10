@@ -357,6 +357,7 @@ class SupervisorOperationsClient:
             last_error=last_error,
             runtime_artifact_id=_uuid(request_payload.get("runtime_artifact_id")),
             scene_contract_hash=_string(request_payload.get("scene_contract_hash")),
+            source_profile_hash=_string(request_payload.get("source_profile_hash")),
             selected_provider=(
                 _string(request_payload.get("selected_provider"))
                 or _string(request_payload.get("selected_inference_provider"))

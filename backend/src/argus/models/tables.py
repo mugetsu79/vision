@@ -687,6 +687,7 @@ class WorkerRuntimeReport(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         nullable=True,
     )
     scene_contract_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_profile_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     selected_provider: Mapped[str | None] = mapped_column(String(128), nullable=True)
     media_pipeline_mode: Mapped[str | None] = mapped_column(String(64), nullable=True)
     media_capture_backend: Mapped[str | None] = mapped_column(String(64), nullable=True)

@@ -10,9 +10,18 @@ optional acceleration path, not a cross-platform dependency.
 
 Decode and resize work should stay in NVIDIA media surfaces for as long as
 possible. The lane should cross into Python memory only when Python asks for a
-BGR NumPy frame.
+BGR NumPy frame. TensorRT inference must be able to run against the native
+NVMM/CUDA-backed frame before `NativeJetsonFrame.as_bgr_numpy()` is called.
 
-The extension must expose worker-compatible semantics:
+The native module contract is intentionally small and does not include
+DeepStream or hardware encode:
+
+- `open_rtsp(source_uri, width, height, fps_cap) -> handle`
+- `read(handle) -> NativeJetsonFrame | None`
+- `close(handle) -> None`
+
+`NativeJetsonCapture` wraps that handle API and exposes worker-compatible
+semantics:
 
 - `read()`
 - `release()`

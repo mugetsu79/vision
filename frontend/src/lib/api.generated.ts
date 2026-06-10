@@ -3502,6 +3502,14 @@ export interface components {
             frame_size: components["schemas"]["FrameSize"];
             /** Preview Url */
             preview_url: string;
+            source_capability?: components["schemas"]["SourceCapability"] | null;
+            /** Source Profile Hash */
+            source_profile_hash?: string | null;
+            /**
+             * Stale
+             * @default false
+             */
+            stale: boolean;
         };
         /**
          * CameraSourceKind
@@ -4421,6 +4429,12 @@ export interface components {
             restart_policy: "never" | "on_failure" | "always";
             rule_runtime?: components["schemas"]["FleetRuleRuntimeSummary"];
             runtime_passport?: components["schemas"]["RuntimePassportSummary"] | null;
+            /**
+             * Runtime Presentation
+             * @default awaiting_first_heartbeat
+             * @enum {string}
+             */
+            runtime_presentation: "running" | "awaiting_first_heartbeat" | "awaiting_profile_heartbeat" | "stale" | "failed";
             runtime_report?: components["schemas"]["SupervisorRuntimeReportResponse"] | null;
             runtime_status: components["schemas"]["WorkerRuntimeStatus"];
             /**
@@ -7721,6 +7735,8 @@ export interface components {
             scene_contract_hash?: string | null;
             /** Selected Provider */
             selected_provider?: string | null;
+            /** Source Profile Hash */
+            source_profile_hash?: string | null;
         };
         /** SupervisorRuntimeReportResponse */
         SupervisorRuntimeReportResponse: {
@@ -7765,6 +7781,8 @@ export interface components {
             scene_contract_hash?: string | null;
             /** Selected Provider */
             selected_provider?: string | null;
+            /** Source Profile Hash */
+            source_profile_hash?: string | null;
             /**
              * Tenant Id
              * Format: uuid
@@ -8330,6 +8348,8 @@ export interface components {
             /** Scene Contract Snapshot Id */
             scene_contract_snapshot_id?: string | null;
             secondary_model?: components["schemas"]["WorkerModelSettings"] | null;
+            /** Source Profile Hash */
+            source_profile_hash?: string | null;
             stream?: components["schemas"]["WorkerStreamSettings"];
             stream_delivery?: components["schemas"]["WorkerStreamDeliverySettings"] | null;
             tracker: components["schemas"]["WorkerTrackerSettings"];
@@ -8718,7 +8738,7 @@ export interface components {
          * WorkerRuntimeStatus
          * @enum {string}
          */
-        WorkerRuntimeStatus: "running" | "stale" | "offline" | "unknown" | "not_reported";
+        WorkerRuntimeStatus: "starting" | "running" | "stale" | "offline" | "unknown" | "not_reported";
         /** WorkerStreamDeliverySettings */
         WorkerStreamDeliverySettings: {
             /**

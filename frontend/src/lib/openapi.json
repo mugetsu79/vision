@@ -961,6 +961,34 @@
             "minLength": 1,
             "title": "Preview Url",
             "type": "string"
+          },
+          "source_capability": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceCapability"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_profile_hash": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Profile Hash"
+          },
+          "stale": {
+            "default": false,
+            "title": "Stale",
+            "type": "boolean"
           }
         },
         "required": [
@@ -3502,6 +3530,18 @@
                 "type": "null"
               }
             ]
+          },
+          "runtime_presentation": {
+            "default": "awaiting_first_heartbeat",
+            "enum": [
+              "running",
+              "awaiting_first_heartbeat",
+              "awaiting_profile_heartbeat",
+              "stale",
+              "failed"
+            ],
+            "title": "Runtime Presentation",
+            "type": "string"
           },
           "runtime_report": {
             "anyOf": [
@@ -13235,6 +13275,19 @@
               }
             ],
             "title": "Selected Provider"
+          },
+          "source_profile_hash": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Profile Hash"
           }
         },
         "required": [
@@ -13381,6 +13434,19 @@
               }
             ],
             "title": "Selected Provider"
+          },
+          "source_profile_hash": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Profile Hash"
           },
           "tenant_id": {
             "format": "uuid",
@@ -15064,6 +15130,19 @@
               }
             ]
           },
+          "source_profile_hash": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Profile Hash"
+          },
           "stream": {
             "$ref": "#/components/schemas/WorkerStreamSettings"
           },
@@ -16153,6 +16232,7 @@
       },
       "WorkerRuntimeStatus": {
         "enum": [
+          "starting",
           "running",
           "stale",
           "offline",

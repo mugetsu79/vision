@@ -9,6 +9,8 @@ frontend/.vite/
 frontend/dist/
 frontend/*.tsbuildinfo
 frontend/test-results/
+.playwright-cli/
+.playwright-mcp/
 dist/
 infra/secrets/*.dec.yaml
 infra/secrets/*.dec.yml

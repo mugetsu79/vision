@@ -28,6 +28,7 @@ export function HomographyEditor({
   refDistanceM,
   onChange,
   sourceFrameSize,
+  sourceEditingDisabled = false,
   sourcePreviewSrc,
   destinationFrameSize,
 }: {
@@ -40,6 +41,7 @@ export function HomographyEditor({
     refDistanceM: number;
   }) => void;
   sourceFrameSize?: FrameSize;
+  sourceEditingDisabled?: boolean;
   sourcePreviewSrc?: string | null;
   destinationFrameSize?: FrameSize;
 }) {
@@ -61,6 +63,9 @@ export function HomographyEditor({
   function updateSourcePoints(
     pointsNormalized: readonly (readonly [number, number])[],
   ) {
+    if (sourceEditingDisabled) {
+      return;
+    }
     onChange({
       src: denormalizePointList(pointsNormalized, resolvedSourceFrameSize),
       dst,
@@ -174,7 +179,7 @@ export function HomographyEditor({
             </div>
             <Button
               className="px-3 py-2"
-              disabled={src.length >= 4}
+              disabled={sourceEditingDisabled || src.length >= 4}
               onClick={() =>
                 onChange({
                   src: [...src, [src.length * 10, src.length * 10]],
@@ -204,7 +209,7 @@ export function HomographyEditor({
               previewSrc={sourcePreviewSrc}
               value={normalizePointList(src, resolvedSourceFrameSize)}
               variant="source"
-              onChange={updateSourcePoints}
+              onChange={sourceEditingDisabled ? () => undefined : updateSourcePoints}
             />
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
@@ -300,6 +305,7 @@ export function HomographyEditor({
       <div className="flex flex-wrap gap-3 rounded-[1.15rem] border border-white/8 bg-[#0b1320] p-4 sm:justify-end">
         <Button
           className="bg-[#121b29] text-[#eef4ff] shadow-none ring-1 ring-white/10 hover:bg-[#172235]"
+          disabled={sourceEditingDisabled}
           onClick={() => onChange({ src: [], dst, refDistanceM })}
         >
           Reset source
@@ -312,6 +318,7 @@ export function HomographyEditor({
         </Button>
         <Button
           className="bg-[#121b29] text-[#eef4ff] shadow-none ring-1 ring-white/10 hover:bg-[#172235]"
+          disabled={sourceEditingDisabled}
           onClick={() => onChange({ src: [], dst: [], refDistanceM: 0 })}
         >
           Clear calibration

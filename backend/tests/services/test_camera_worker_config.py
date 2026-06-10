@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -613,6 +615,12 @@ def test_camera_worker_config_maps_camera_models_and_homography_for_engine() -> 
             "allow_native_on_demand": True,
             "profiles": [],
         },
+        source_capability={
+            "width": 1920,
+            "height": 1080,
+            "fps": 20,
+            "codec": "h264",
+        },
         frame_skip=2,
         fps_cap=10,
     )
@@ -653,12 +661,47 @@ def test_camera_worker_config_maps_camera_models_and_homography_for_engine() -> 
         primary_model=primary_model,
         secondary_model=secondary_model,
         settings=settings,
-        rtsp_url="rtsp://lab-camera.local/live",
+        rtsp_url="rtsp://ops-user:s3cr3t!@lab-camera.local/private/live?token=secret",
     )
+
+    expected_source_capability = SourceCapability(
+        width=1920,
+        height=1080,
+        fps=20,
+        codec="h264",
+    )
+    expected_source_uri = "rtsp://ops-user:s3cr3t!@lab-camera.local/private/live?token=secret"
+    expected_source_profile_payload = {
+        "source_kind": CameraSourceKind.RTSP.value,
+        "source_uri_sha256": hashlib.sha256(
+            expected_source_uri.encode("utf-8")
+        ).hexdigest(),
+        "source_capability": expected_source_capability.model_dump(mode="json"),
+        "stream": {
+            "profile_id": "720p10",
+            "kind": "transcode",
+            "width": 1280,
+            "height": 720,
+            "fps": 10,
+        },
+    }
+    expected_source_profile_hash = hashlib.sha256(
+        json.dumps(
+            expected_source_profile_payload,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
 
     assert config.camera_id == camera_id
     assert config.mode is ProcessingMode.CENTRAL
-    assert config.camera.rtsp_url == "rtsp://lab-camera.local/live"
+    assert config.source_profile_hash == expected_source_profile_hash
+    assert len(config.source_profile_hash) == 64
+    assert "ops-user" not in config.source_profile_hash
+    assert "s3cr3t!" not in config.source_profile_hash
+    assert "lab-camera.local" not in config.source_profile_hash
+    assert "/private/live" not in config.source_profile_hash
+    assert config.camera.rtsp_url == expected_source_uri
     assert config.camera.frame_skip == 2
     assert config.camera.fps_cap == 10
     assert config.model.name == "YOLO12n"

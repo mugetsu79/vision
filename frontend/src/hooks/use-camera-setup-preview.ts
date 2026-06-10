@@ -5,6 +5,14 @@ import { useQuery } from "@tanstack/react-query";
 import { resolveAccessToken, toApiError } from "@/lib/api";
 import { frontendConfig } from "@/lib/config";
 
+type SourceCapability = {
+  width: number;
+  height: number;
+  fps?: number | null;
+  codec?: string | null;
+  aspect_ratio?: string | null;
+};
+
 type CameraSetupPreviewPayload = {
   camera_id: string;
   preview_url: string;
@@ -13,6 +21,9 @@ type CameraSetupPreviewPayload = {
     height: number;
   };
   captured_at: string;
+  source_profile_hash?: string | null;
+  source_capability?: SourceCapability | null;
+  stale?: boolean;
 };
 
 type CameraSetupPreviewQueryData = CameraSetupPreviewPayload & {
@@ -115,6 +126,9 @@ export function useCameraSetupPreview(
           preview_url: query.data.preview_url,
           frame_size: query.data.frame_size,
           captured_at: query.data.captured_at,
+          source_profile_hash: query.data.source_profile_hash ?? null,
+          source_capability: query.data.source_capability ?? null,
+          stale: query.data.stale ?? false,
           preview_src: previewSrc,
         } satisfies CameraSetupPreview)
       : undefined,

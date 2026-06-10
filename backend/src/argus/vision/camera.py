@@ -31,6 +31,7 @@ from argus.vision.capture_options import (
     _OPENCV_CAPTURE_READ_TIMEOUT_MS,
     _OPENCV_FFMPEG_CAPTURE_OPTIONS,
 )
+from argus.vision.frames import CapturedFrame
 from argus.vision.gstreamer_appsink import (
     AppSinkPipelineMode,
     GStreamerAppSinkCapture,
@@ -38,6 +39,7 @@ from argus.vision.gstreamer_appsink import (
     build_rtsp_appsink_pipeline,
     probe_appsink_capabilities,
 )
+from argus.vision.jetson_nvmm_capture import NativeJetsonCapture
 
 LOGGER = getLogger(__name__)
 
@@ -48,9 +50,11 @@ _JETSON_CAPTURE_BACKEND_ENV = "ARGUS_JETSON_CAPTURE_BACKEND"
 _JETSON_CAPTURE_BACKEND_AUTO = "auto"
 _JETSON_CAPTURE_BACKEND_APPSINK = "appsink"
 _JETSON_CAPTURE_BACKEND_RAWVIDEO = "rawvideo"
+_JETSON_CAPTURE_BACKEND_NVMM = "nvmm"
 _JETSON_RTSP_DEFAULT_PROTOCOLS = "tcp"
 _JETSON_RTSP_DEFAULT_LATENCY_MS = 200
 _JETSON_RTSP_DEFAULT_DROP_ON_LATENCY = True
+_JETSON_RTSP_DEFAULT_FPS_CAP = 25
 _GST_FLAG_VALUE_PATTERN = re.compile(r"^[A-Za-z0-9_+,-]+$")
 _GST_LOCATION_PROPERTY_PATTERN = re.compile(
     r"\blocation=(?P<value>\"(?:\\.|[^\"\\])*\"|\S+)",
@@ -62,27 +66,29 @@ _MEDIA_CAPTURE_BACKEND_OPENCV_FFMPEG = "opencv_ffmpeg"
 _MEDIA_CAPTURE_BACKEND_OPENCV_GSTREAMER = "opencv_gstreamer"
 
 Frame = NDArray[np.uint8]
+CaptureFrame = Frame | CapturedFrame
 MonotonicClock = Callable[[], float]
 SleepFunction = Callable[[float], None]
 SourceUriFactory = Callable[[], str]
 
 
 class CaptureHandle(Protocol):
-    def read(self) -> tuple[bool, Frame | None]: ...
+    def read(self) -> tuple[bool, CaptureFrame | None]: ...
 
     def release(self) -> None: ...
 
 
 CaptureFactory = Callable[[str | int, int | None], CaptureHandle]
+_UNSET_SOURCE_PROFILE_HASH = object()
 
 
 @dataclass(slots=True)
 class _PrefetchedFrameCapture:
     _capture: CaptureHandle
-    _first_frame: Frame
+    _first_frame: CaptureFrame
     _has_first_frame: bool = True
 
-    def read(self) -> tuple[bool, Frame | None]:
+    def read(self) -> tuple[bool, CaptureFrame | None]:
         if self._has_first_frame:
             self._has_first_frame = False
             return True, self._first_frame
@@ -113,7 +119,7 @@ class _LatestFrameCapture:
     _media_capture_backend: str | None = None
     _read_timeout_s: float = _FFMPEG_FRAME_WAIT_TIMEOUT_S
     _release_join_timeout_s: float = 1.0
-    _latest_frame: deque[Frame] = field(default_factory=lambda: deque(maxlen=1))
+    _latest_frame: deque[CaptureFrame] = field(default_factory=lambda: deque(maxlen=1))
     _new_frame_event: threading.Event = field(default_factory=threading.Event)
     _release_lock: threading.Lock = field(default_factory=threading.Lock)
     _pump_thread: threading.Thread | None = None
@@ -157,7 +163,7 @@ class _LatestFrameCapture:
         self._pump_thread = threading.Thread(target=pump, daemon=True)
         self._pump_thread.start()
 
-    def read(self) -> tuple[bool, Frame | None]:
+    def read(self) -> tuple[bool, CaptureFrame | None]:
         started_at = perf_counter()
         if not self._new_frame_event.wait(timeout=self._read_timeout_s):
             completed_at = perf_counter()
@@ -220,7 +226,7 @@ class _MediaCaptureBackendCapture:
     _capture: CaptureHandle
     _media_capture_backend: str
 
-    def read(self) -> tuple[bool, Frame | None]:
+    def read(self) -> tuple[bool, CaptureFrame | None]:
         return self._capture.read()
 
     def last_stage_timings(self) -> dict[str, float]:
@@ -268,6 +274,7 @@ class PlatformInfo:
 class CameraSourceConfig:
     source_uri: str
     source_uri_factory: SourceUriFactory | None = None
+    source_profile_hash: str | None = None
     target_width: int | None = None
     target_height: int | None = None
     frame_skip: int = 1
@@ -312,7 +319,7 @@ class CameraSource:
     def reconnect_attempts(self) -> int:
         return self._reconnect_attempts
 
-    def next_frame(self) -> Frame:
+    def next_frame(self) -> CaptureFrame:
         timings = {
             "throttle": 0.0,
             "read": 0.0,
@@ -373,9 +380,18 @@ class CameraSource:
         target_width: int | None,
         target_height: int | None,
         fps_cap: int,
+        source_uri: str | None = None,
+        source_profile_hash: str | None | object = _UNSET_SOURCE_PROFILE_HASH,
     ) -> None:
+        next_source_profile_hash = (
+            self.config.source_profile_hash
+            if source_profile_hash is _UNSET_SOURCE_PROFILE_HASH
+            else cast(str | None, source_profile_hash)
+        )
         next_config = replace(
             self.config,
+            source_uri=source_uri if source_uri is not None else self.config.source_uri,
+            source_profile_hash=next_source_profile_hash,
             target_width=target_width,
             target_height=target_height,
             fps_cap=fps_cap,
@@ -385,14 +401,29 @@ class CameraSource:
 
         previous_capture = self._capture
         previous_config = self.config
+        previous_mode = self.mode
+        previous_source = self._source
+        previous_backend = self._backend
+        previous_current_source_uri = self._current_source_uri
+        next_capture: CaptureHandle | None = None
         try:
             self.config = next_config
-            self._capture = self._open_capture()
+            next_capture = self._open_capture()
+            success, first_frame = next_capture.read()
+            if not success or first_frame is None:
+                raise RuntimeError("Camera capture produced no first frame after reconfigure.")
         except Exception:
             self.config = previous_config
             self._capture = previous_capture
+            self.mode = previous_mode
+            self._source = previous_source
+            self._backend = previous_backend
+            self._current_source_uri = previous_current_source_uri
+            if next_capture is not None:
+                next_capture.release()
             raise
 
+        self._capture = _PrefetchedFrameCapture(next_capture, first_frame)
         previous_capture.release()
         self._raw_frame_index = 0
         self._last_yield_at = None
@@ -587,6 +618,7 @@ def _jetson_capture_backend_preference() -> str:
         _JETSON_CAPTURE_BACKEND_AUTO,
         _JETSON_CAPTURE_BACKEND_APPSINK,
         _JETSON_CAPTURE_BACKEND_RAWVIDEO,
+        _JETSON_CAPTURE_BACKEND_NVMM,
     }:
         return value
     LOGGER.warning(
@@ -681,6 +713,9 @@ def _open_jetson_gstreamer_capture_with_fallback(
     backend: int | None,
 ) -> CaptureHandle:
     backend_preference = _jetson_capture_backend_preference()
+    if backend_preference == _JETSON_CAPTURE_BACKEND_NVMM:
+        return _open_native_jetson_nvmm_capture(source)
+
     if backend_preference != _JETSON_CAPTURE_BACKEND_RAWVIDEO:
         try:
             return _open_gstreamer_appsink_capture(
@@ -745,6 +780,34 @@ def _open_jetson_gstreamer_capture_with_fallback(
             _MEDIA_CAPTURE_BACKEND_OPENCV_GSTREAMER,
         )
     return capture
+
+
+def _open_native_jetson_nvmm_capture(source: str) -> CaptureHandle:
+    source_uri = _extract_gstreamer_source_uri(source)
+    if source_uri is None:
+        raise RuntimeError("GStreamer pipeline does not include an rtspsrc location.")
+    dimensions = _extract_gstreamer_output_dimensions(source)
+    target_width = dimensions[0] if dimensions is not None else None
+    target_height = dimensions[1] if dimensions is not None else None
+    capture = NativeJetsonCapture.create(
+        source_uri=source_uri,
+        target_width=target_width,
+        target_height=target_height,
+        fps_cap=_JETSON_RTSP_DEFAULT_FPS_CAP,
+    )
+    try:
+        success, frame = capture.read()
+    except Exception:
+        capture.release()
+        raise
+    if success and frame is not None:
+        LOGGER.warning(
+            "Jetson native NVMM capture is active",
+            extra={"source_uri": redact_url_secrets(source_uri)},
+        )
+        return _PrefetchedFrameCapture(cast(CaptureHandle, capture), frame)
+    capture.release()
+    raise RuntimeError("native Jetson NVMM capture produced no first frame.")
 
 
 def _open_gstreamer_appsink_capture(

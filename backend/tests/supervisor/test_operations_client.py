@@ -151,6 +151,7 @@ async def test_client_calls_lifecycle_runtime_and_admission_routes() -> None:
                     "last_error": None,
                     "runtime_artifact_id": str(runtime_artifact_id),
                     "scene_contract_hash": "a" * 64,
+                    "source_profile_hash": "b" * 64,
                     "selected_provider": "TensorrtExecutionProvider",
                     "media_pipeline_mode": "jetson_gstreamer_native",
                     "media_capture_backend": "gstreamer_appsink",
@@ -247,6 +248,7 @@ async def test_client_calls_lifecycle_runtime_and_admission_routes() -> None:
     assert runtime_body["runtime_state"] == "running"
     assert runtime_body["runtime_artifact_id"] == str(runtime_artifact_id)
     assert runtime_body["scene_contract_hash"] == "a" * 64
+    assert runtime_body["source_profile_hash"] == "b" * 64
     assert runtime_body["selected_provider"] == "TensorrtExecutionProvider"
     assert runtime_body["media_pipeline_mode"] == "jetson_gstreamer_native"
     assert runtime_body["media_capture_backend"] == "gstreamer_appsink"
@@ -656,6 +658,7 @@ def _lifecycle_request_json(
         request_payload={
             "runtime_artifact_id": str(runtime_artifact_id) if runtime_artifact_id else None,
             "scene_contract_hash": "a" * 64,
+            "source_profile_hash": "b" * 64,
             "selected_provider": "TensorrtExecutionProvider",
             "media_pipeline_mode": "jetson_gstreamer_native",
             "media_capture_backend": "gstreamer_appsink",

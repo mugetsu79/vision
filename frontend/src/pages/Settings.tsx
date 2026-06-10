@@ -448,6 +448,12 @@ export function SettingsPage() {
                         />
                         <HardwareAdmissionPanel worker={worker} />
                         <RuleRuntimePanel summary={worker.rule_runtime} />
+                        {worker.runtime_presentation &&
+                        worker.runtime_presentation !== worker.runtime_status ? (
+                          <p className="mt-2 text-sm text-[#93a7c5]">
+                            {worker.runtime_presentation}
+                          </p>
+                        ) : null}
                         {worker.detail ? (
                           <p className="mt-2 text-sm text-[#93a7c5]">
                             {worker.detail}
@@ -981,6 +987,7 @@ function statusTone(
   }
   if (
     normalized === "stale" ||
+    normalized === "starting" ||
     normalized === "manual" ||
     normalized === "not_reported" ||
     normalized === "unknown"

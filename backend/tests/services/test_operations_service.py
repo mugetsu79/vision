@@ -29,6 +29,7 @@ from argus.models.enums import (
     RoleEnum,
     RuleAction,
     TrackerType,
+    WorkerRuntimeState,
 )
 from argus.models.tables import (
     Camera,
@@ -40,6 +41,7 @@ from argus.models.tables import (
     Site,
     WorkerAssignment,
     WorkerModelAdmissionReport,
+    WorkerRuntimeReport,
 )
 from argus.services.app import OperationsService
 
@@ -790,12 +792,173 @@ async def test_fleet_overview_allows_central_start_when_supervisor_hardware_is_f
     assert response.mode == "supervised"
     assert worker.desired_state == WorkerDesiredState.SUPERVISED
     assert worker.runtime_status == WorkerRuntimeStatus.NOT_REPORTED
+    assert worker.runtime_presentation == "awaiting_first_heartbeat"
     assert worker.runtime_report is None
     assert worker.lifecycle_owner == "central_supervisor"
     assert worker.dev_run_command is None
     assert OperationsLifecycleAction.START in worker.allowed_lifecycle_actions
     assert worker.detail == (
         "Central supervisor owns this worker process; awaiting first per-camera heartbeat."
+    )
+
+
+@pytest.mark.asyncio
+async def test_fleet_overview_marks_worker_awaiting_profile_heartbeat_on_source_hash_mismatch(
+) -> None:
+    tenant_id = uuid4()
+    site = _site(tenant_id)
+    camera_id = uuid4()
+    camera = Camera(
+        id=camera_id,
+        site_id=site.id,
+        edge_node_id=None,
+        name="Camera 1",
+        rtsp_url_encrypted="encrypted-rtsp-url",
+        source_config={
+            "kind": "rtsp",
+            "capture_uri": "rtsp://current-camera/live",
+            "redacted_uri": "rtsp://***@current-camera/live",
+        },
+        processing_mode=ProcessingMode.CENTRAL,
+        primary_model_id=uuid4(),
+        secondary_model_id=None,
+        tracker_type=TrackerType.BYTETRACK,
+        active_classes=["person"],
+        attribute_rules=[],
+        zones=[],
+        homography=None,
+        privacy={},
+        browser_delivery={
+            "default_profile": "720p20",
+            "allow_native_on_demand": True,
+            "profiles": [
+                {"id": "720p20", "kind": "transcode", "w": 1280, "h": 720, "fps": 20}
+            ],
+        },
+        source_capability={"width": 1280, "height": 720, "fps": 20, "codec": "h264"},
+        frame_skip=1,
+        fps_cap=25,
+    )
+    runtime_report = WorkerRuntimeReport(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        camera_id=camera_id,
+        edge_node_id=None,
+        assignment_id=None,
+        heartbeat_at=datetime.now(tz=UTC),
+        runtime_state=WorkerRuntimeState.RUNNING,
+        restart_count=0,
+        last_error=None,
+        runtime_artifact_id=None,
+        scene_contract_hash=None,
+        source_profile_hash="f" * 64,
+        created_at=datetime.now(tz=UTC),
+    )
+    session_factory = _FakeSessionFactory([], [(camera, site)], [], [], [])
+    supervisor_operations = _FakeSupervisorOperations(runtime_reports_by_camera={
+        camera_id: runtime_report,
+    })
+    service = OperationsService(
+        session_factory=session_factory,
+        settings=Settings(_env_file=None),
+        supervisor_operations=supervisor_operations,
+        runtime_configuration=_FakeRuntimeConfiguration(
+            {
+                "lifecycle_owner": "central_supervisor",
+                "supervisor_mode": "polling",
+                "restart_policy": "on_failure",
+            }
+        ),
+    )
+
+    response = await service.get_fleet_overview(_tenant_context(tenant_id))
+
+    worker = response.camera_workers[0]
+    assert worker.runtime_status == WorkerRuntimeStatus.STARTING
+    assert worker.runtime_presentation == "awaiting_profile_heartbeat"
+    assert worker.runtime_report is not None
+    assert worker.runtime_report.source_profile_hash == "f" * 64
+    assert worker.detail == (
+        "Worker is awaiting a fresh per-camera heartbeat for the current source profile."
+    )
+
+
+@pytest.mark.asyncio
+async def test_fleet_overview_marks_failed_worker_awaiting_profile_heartbeat_on_mismatch(
+) -> None:
+    tenant_id = uuid4()
+    site = _site(tenant_id)
+    camera_id = uuid4()
+    camera = Camera(
+        id=camera_id,
+        site_id=site.id,
+        edge_node_id=None,
+        name="Camera 1",
+        rtsp_url_encrypted="encrypted-rtsp-url",
+        source_config={
+            "kind": "rtsp",
+            "capture_uri": "rtsp://current-camera/live",
+            "redacted_uri": "rtsp://***@current-camera/live",
+        },
+        processing_mode=ProcessingMode.CENTRAL,
+        primary_model_id=uuid4(),
+        secondary_model_id=None,
+        tracker_type=TrackerType.BYTETRACK,
+        active_classes=["person"],
+        attribute_rules=[],
+        zones=[],
+        homography=None,
+        privacy={},
+        browser_delivery={
+            "default_profile": "720p20",
+            "allow_native_on_demand": True,
+            "profiles": [
+                {"id": "720p20", "kind": "transcode", "w": 1280, "h": 720, "fps": 20}
+            ],
+        },
+        source_capability={"width": 1280, "height": 720, "fps": 20, "codec": "h264"},
+        frame_skip=1,
+        fps_cap=25,
+    )
+    runtime_report = WorkerRuntimeReport(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        camera_id=camera_id,
+        edge_node_id=None,
+        assignment_id=None,
+        heartbeat_at=datetime.now(tz=UTC),
+        runtime_state=WorkerRuntimeState.ERROR,
+        restart_count=1,
+        last_error="capture source changed",
+        runtime_artifact_id=None,
+        scene_contract_hash=None,
+        source_profile_hash="f" * 64,
+        created_at=datetime.now(tz=UTC),
+    )
+    session_factory = _FakeSessionFactory([], [(camera, site)], [], [], [])
+    supervisor_operations = _FakeSupervisorOperations(runtime_reports_by_camera={
+        camera_id: runtime_report,
+    })
+    service = OperationsService(
+        session_factory=session_factory,
+        settings=Settings(_env_file=None),
+        supervisor_operations=supervisor_operations,
+        runtime_configuration=_FakeRuntimeConfiguration(
+            {
+                "lifecycle_owner": "central_supervisor",
+                "supervisor_mode": "polling",
+                "restart_policy": "on_failure",
+            }
+        ),
+    )
+
+    response = await service.get_fleet_overview(_tenant_context(tenant_id))
+
+    worker = response.camera_workers[0]
+    assert worker.runtime_status == WorkerRuntimeStatus.STARTING
+    assert worker.runtime_presentation == "awaiting_profile_heartbeat"
+    assert worker.detail == (
+        "Worker is awaiting a fresh per-camera heartbeat for the current source profile."
     )
 
 
@@ -872,10 +1035,12 @@ class _FakeSupervisorOperations:
         self,
         *,
         assignments_by_camera: dict[UUID, WorkerAssignment] | None = None,
+        runtime_reports_by_camera: dict[UUID, WorkerRuntimeReport] | None = None,
         central_report: EdgeNodeHardwareReport | None = None,
         edge_reports: dict[UUID, EdgeNodeHardwareReport] | None = None,
     ) -> None:
         self.assignments_by_camera = assignments_by_camera or {}
+        self.runtime_reports_by_camera = runtime_reports_by_camera or {}
         self.central_report = central_report
         self.edge_reports = edge_reports or {}
         self.model_admission_payload: WorkerModelAdmissionRequest | None = None
@@ -889,8 +1054,27 @@ class _FakeSupervisorOperations:
         }
 
     async def latest_runtime_reports_by_camera(self, **kwargs):  # noqa: ANN003
-        del kwargs
-        return {}
+        camera_ids = kwargs.get("camera_ids", [])
+        return {
+            camera_id: report
+            for camera_id, report in self.runtime_reports_by_camera.items()
+            if camera_id in camera_ids
+        }
+
+    def runtime_status_for_report(self, report, *, now):  # noqa: ANN001
+        if report is None:
+            return WorkerRuntimeStatus.NOT_REPORTED
+        heartbeat_at = getattr(report, "heartbeat_at", None)
+        if not isinstance(heartbeat_at, datetime) or now - heartbeat_at > timedelta(seconds=45):
+            return WorkerRuntimeStatus.UNKNOWN
+        runtime_state = getattr(report, "runtime_state", WorkerRuntimeState.UNKNOWN)
+        if runtime_state is WorkerRuntimeState.STARTING:
+            return WorkerRuntimeStatus.STARTING
+        if runtime_state in {WorkerRuntimeState.RUNNING, WorkerRuntimeState.DRAINING}:
+            return WorkerRuntimeStatus.RUNNING
+        if runtime_state in {WorkerRuntimeState.STOPPED, WorkerRuntimeState.ERROR}:
+            return WorkerRuntimeStatus.OFFLINE
+        return WorkerRuntimeStatus.UNKNOWN
 
     async def latest_lifecycle_requests_by_camera(self, **kwargs):  # noqa: ANN003
         del kwargs

@@ -301,7 +301,16 @@ class _SetupPreviewSnapshot:
     image_bytes: bytes
     frame_size: FrameSize
     captured_at: datetime
+    source_profile_hash: str | None = None
+    source_capability: SourceCapability | None = None
+    stale: bool = False
     content_type: str = "image/jpeg"
+
+
+@dataclass(slots=True)
+class _SetupPreviewSourceProfile:
+    source_profile_hash: str
+    source_capability: SourceCapability | None
 
 
 @dataclass(slots=True)
@@ -1139,6 +1148,9 @@ class CameraService:
             ),
             frame_size=snapshot.frame_size,
             captured_at=snapshot.captured_at,
+            source_profile_hash=snapshot.source_profile_hash,
+            source_capability=snapshot.source_capability,
+            stale=snapshot.stale,
         )
 
     async def get_setup_preview_image(
@@ -1166,12 +1178,14 @@ class CameraService:
         force_refresh: bool,
     ) -> _SetupPreviewSnapshot:
         now = datetime.now(tz=UTC)
+        current_profile = _setup_preview_source_profile(camera, self.settings)
         cached_entry = self._setup_preview_cache.get(camera.id)
         if (
             not force_refresh
             and cached_entry is not None
             and cached_entry.expires_at > now
             and cached_entry.camera_updated_at == camera.updated_at
+            and cached_entry.snapshot.source_profile_hash == current_profile.source_profile_hash
         ):
             return cached_entry.snapshot
 
@@ -1183,6 +1197,7 @@ class CameraService:
                 and cached_entry is not None
                 and cached_entry.expires_at > now
                 and cached_entry.camera_updated_at == camera.updated_at
+                and cached_entry.snapshot.source_profile_hash == current_profile.source_profile_hash
             ):
                 return cached_entry.snapshot
 
@@ -1193,13 +1208,25 @@ class CameraService:
                     self.settings,
                 )
             except RuntimeError:
-                if cached_entry is not None and cached_entry.camera_updated_at == camera.updated_at:
+                if cached_entry is not None and (
+                    cached_entry.camera_updated_at == camera.updated_at
+                    or cached_entry.snapshot.source_profile_hash
+                    != current_profile.source_profile_hash
+                ):
+                    stale = (
+                        cached_entry.snapshot.source_profile_hash
+                        != current_profile.source_profile_hash
+                    )
                     logger.warning(
                         "Setup preview refresh failed; reusing cached still for camera %s",
                         camera.id,
                     )
-                    return cached_entry.snapshot
+                    return _setup_preview_snapshot_with_stale(
+                        cached_entry.snapshot,
+                        stale=stale,
+                    )
                 raise
+            snapshot = _setup_preview_snapshot_with_profile(snapshot, current_profile)
             self._setup_preview_cache[camera.id] = _SetupPreviewCacheEntry(
                 snapshot=snapshot,
                 camera_updated_at=camera.updated_at,
@@ -1682,6 +1709,24 @@ class CameraService:
         if self.events is None:
             return
         runtime_vocabulary = _runtime_vocabulary_state_from_camera(camera)
+        source_kind = _source_kind_from_camera(camera)
+        rtsp_url = _camera_rtsp_capture_uri(camera, self.settings)
+        source_uri, camera_source, worker_rtsp_url = _worker_camera_source_payload(
+            camera,
+            rtsp_url=rtsp_url,
+        )
+        source_capability = (
+            SourceCapability.model_validate(camera.source_capability)
+            if camera.source_capability is not None
+            else None
+        )
+        browser_delivery = BrowserDeliverySettings.model_validate(
+            camera.browser_delivery or BrowserDeliverySettings().model_dump(mode="python")
+        )
+        worker_stream = _resolve_worker_stream_settings(
+            browser_delivery=browser_delivery,
+            fps_cap=int(camera.fps_cap or 25),
+        )
         async with self.session_factory() as session:
             incident_rules = await _load_enabled_incident_rules(
                 session=session,
@@ -1694,12 +1739,21 @@ class CameraService:
             runtime_vocabulary_version=runtime_vocabulary.version,
             tracker_type=camera.tracker_type,
             privacy=_worker_privacy_settings(camera.privacy),
-            stream=_resolve_worker_stream_settings(
-                browser_delivery=BrowserDeliverySettings.model_validate(
-                    camera.browser_delivery or BrowserDeliverySettings().model_dump(mode="python")
-                ),
+            camera=WorkerCameraSettings(
+                rtsp_url=worker_rtsp_url,
+                source_uri=source_uri,
+                camera_source=camera_source,
+                frame_skip=int(camera.frame_skip or 1),
                 fps_cap=int(camera.fps_cap or 25),
             ),
+            source_capability=source_capability,
+            source_profile_hash=_source_profile_hash(
+                source_kind,
+                source_uri,
+                source_capability,
+                worker_stream,
+            ),
+            stream=worker_stream,
             attribute_rules=list(camera.attribute_rules),
             incident_rules=[_incident_rule_to_worker_rule(rule) for rule in incident_rules],
             zones=cast(Any, [_worker_zone_payload(zone) for zone in camera.zones]),
@@ -2054,6 +2108,25 @@ class OperationsService:
                     runtime_report,
                     now=now,
                 )
+            current_source_profile_hash = _camera_source_profile_hash_or_none(
+                camera,
+                self.settings,
+            )
+            if (
+                runtime_report is not None
+                and current_source_profile_hash is not None
+                and runtime_report.source_profile_hash != current_source_profile_hash
+            ):
+                runtime = WorkerRuntimeStatus.STARTING
+                detail = (
+                    "Worker is awaiting a fresh per-camera heartbeat for the current "
+                    "source profile."
+                )
+            runtime_presentation = _fleet_worker_runtime_presentation(
+                runtime_status=runtime,
+                runtime_report=runtime_report,
+                current_source_profile_hash=current_source_profile_hash,
+            )
             controls = None
             if self.runtime_configuration is not None and not assignment_removed:
                 runtime_config = await self.runtime_configuration.resolve_profile_for_runtime(
@@ -2092,10 +2165,16 @@ class OperationsService:
                     and runtime_report is None
                     and runtime is WorkerRuntimeStatus.NOT_REPORTED
                 ):
+                    runtime_presentation = "awaiting_first_heartbeat"
                     detail = (
                         "Central supervisor owns this worker process; "
                         "awaiting first per-camera heartbeat."
                     )
+            if runtime_presentation == "awaiting_profile_heartbeat":
+                detail = (
+                    "Worker is awaiting a fresh per-camera heartbeat for the current "
+                    "source profile."
+                )
             runtime_passport_summary = (
                 _runtime_passport_summary(runtime_passport)
                 if (runtime_passport := runtime_passports_by_camera.get(camera.id)) is not None
@@ -2115,6 +2194,7 @@ class OperationsService:
                     processing_mode=camera.processing_mode,
                     desired_state=desired,
                     runtime_status=runtime,
+                    runtime_presentation=runtime_presentation,
                     lifecycle_owner=owner,
                     dev_run_command=(
                         _central_dev_run_command(camera.id) if owner == "manual_dev" else None
@@ -4839,6 +4919,48 @@ def _fleet_lifecycle_mode(
     return FleetLifecycleMode.SUPERVISED
 
 
+def _fleet_worker_runtime_presentation(
+    *,
+    runtime_status: WorkerRuntimeStatus,
+    runtime_report: WorkerRuntimeReport | None,
+    current_source_profile_hash: str | None,
+) -> Literal[
+    "running",
+    "awaiting_first_heartbeat",
+    "awaiting_profile_heartbeat",
+    "stale",
+    "failed",
+]:
+    if runtime_report is None:
+        return "awaiting_first_heartbeat"
+    if (
+        current_source_profile_hash is not None
+        and runtime_report.source_profile_hash != current_source_profile_hash
+    ):
+        return "awaiting_profile_heartbeat"
+    if runtime_status is WorkerRuntimeStatus.RUNNING:
+        return "running"
+    if runtime_status in {
+        WorkerRuntimeStatus.STARTING,
+        WorkerRuntimeStatus.NOT_REPORTED,
+    }:
+        return "awaiting_first_heartbeat"
+    if runtime_status in {WorkerRuntimeStatus.STALE, WorkerRuntimeStatus.UNKNOWN}:
+        return "stale"
+    return "failed"
+
+
+def _camera_source_profile_hash_or_none(camera: Camera, settings: Settings) -> str | None:
+    try:
+        return _setup_preview_source_profile(camera, settings).source_profile_hash
+    except Exception:
+        logger.debug(
+            "Unable to derive camera source profile hash for fleet overview",
+            exc_info=True,
+        )
+        return None
+
+
 def _derive_worker_lifecycle(
     *,
     camera: Camera,
@@ -5781,17 +5903,22 @@ def _camera_to_worker_config(
         if camera.source_capability is not None
         else None
     )
+    source_kind = _source_kind_from_camera(camera)
     browser_delivery = _build_source_aware_browser_delivery(
         requested=requested_browser_delivery,
         source_capability=source_capability,
         privacy=privacy.model_dump(mode="python"),
         processing_mode=camera.processing_mode,
         edge_node_id=camera.edge_node_id,
-        source_kind=_source_kind_from_camera(camera),
+        source_kind=source_kind,
     )
     source_uri, camera_source, worker_rtsp_url = _worker_camera_source_payload(
         camera,
         rtsp_url=rtsp_url,
+    )
+    worker_stream = _resolve_worker_stream_settings(
+        browser_delivery=browser_delivery,
+        fps_cap=camera.fps_cap,
     )
     vision_profile = SceneVisionProfile.model_validate(camera.vision_profile or {})
     if vision_profile.motion_metrics.speed_enabled and camera.homography is None:
@@ -5819,6 +5946,12 @@ def _camera_to_worker_config(
         mode=camera.processing_mode,
         scene_contract_snapshot_id=scene_contract_snapshot_id,
         scene_contract_hash=scene_contract_hash,
+        source_profile_hash=_source_profile_hash(
+            source_kind,
+            source_uri,
+            source_capability,
+            worker_stream,
+        ),
         privacy_manifest_snapshot_id=privacy_manifest_snapshot_id,
         privacy_manifest_hash=privacy_manifest_hash,
         runtime_passport_snapshot_id=runtime_passport_snapshot_id,
@@ -5843,10 +5976,7 @@ def _camera_to_worker_config(
             subject_prefix="evt.tracking",
             http_fallback_url=None,
         ),
-        stream=_resolve_worker_stream_settings(
-            browser_delivery=browser_delivery,
-            fps_cap=camera.fps_cap,
-        ),
+        stream=worker_stream,
         stream_delivery=stream_delivery,
         model=_model_to_worker_settings(
             primary_model,
@@ -6046,6 +6176,61 @@ def _worker_camera_source_payload(
     camera_source = _camera_source_settings_from_camera(camera, rtsp_url=rtsp_url, for_worker=True)
     normalized = normalize_camera_source(camera_source)
     return normalized.capture_uri, camera_source, None
+
+
+def _source_profile_hash(
+    source_kind: CameraSourceKind,
+    source_uri: str,
+    source_capability: SourceCapability | None,
+    stream: WorkerStreamSettings,
+) -> str:
+    source_uri_hash = hashlib.sha256(source_uri.strip().encode("utf-8")).hexdigest()
+    canonical_payload = {
+        "source_kind": source_kind.value,
+        "source_uri_sha256": source_uri_hash,
+        "source_capability": (
+            source_capability.model_dump(mode="json")
+            if source_capability is not None
+            else None
+        ),
+        "stream": stream.model_dump(mode="json"),
+    }
+    canonical_json = json.dumps(
+        canonical_payload,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+
+
+def _setup_preview_source_profile(camera: Camera, settings: Settings) -> _SetupPreviewSourceProfile:
+    source_kind = _source_kind_from_camera(camera)
+    rtsp_url = _camera_rtsp_capture_uri(camera, settings)
+    source_uri, _camera_source, _worker_rtsp_url = _worker_camera_source_payload(
+        camera,
+        rtsp_url=rtsp_url,
+    )
+    source_capability = (
+        SourceCapability.model_validate(camera.source_capability)
+        if camera.source_capability is not None
+        else None
+    )
+    browser_delivery = BrowserDeliverySettings.model_validate(
+        camera.browser_delivery or BrowserDeliverySettings().model_dump(mode="python")
+    )
+    worker_stream = _resolve_worker_stream_settings(
+        browser_delivery=browser_delivery,
+        fps_cap=int(camera.fps_cap or 25),
+    )
+    return _SetupPreviewSourceProfile(
+        source_profile_hash=_source_profile_hash(
+            source_kind,
+            source_uri,
+            source_capability,
+            worker_stream,
+        ),
+        source_capability=source_capability,
+    )
 
 
 def _mask_camera_source_url(camera: Camera) -> str:
@@ -7111,12 +7296,46 @@ def _capture_setup_preview_snapshot(
     camera: Camera,
     settings: Settings,
 ) -> _SetupPreviewSnapshot:
+    source_profile = _setup_preview_source_profile(camera, settings)
     rtsp_url = _camera_rtsp_capture_uri(camera, settings)
     image_bytes, width, height = capture_still_image(rtsp_url)
     return _SetupPreviewSnapshot(
         image_bytes=image_bytes,
         frame_size=FrameSize(width=width, height=height),
         captured_at=datetime.now(tz=UTC),
+        source_profile_hash=source_profile.source_profile_hash,
+        source_capability=source_profile.source_capability,
+    )
+
+
+def _setup_preview_snapshot_with_profile(
+    snapshot: _SetupPreviewSnapshot,
+    source_profile: _SetupPreviewSourceProfile,
+) -> _SetupPreviewSnapshot:
+    return _SetupPreviewSnapshot(
+        image_bytes=snapshot.image_bytes,
+        frame_size=snapshot.frame_size,
+        captured_at=snapshot.captured_at,
+        source_profile_hash=snapshot.source_profile_hash or source_profile.source_profile_hash,
+        source_capability=snapshot.source_capability or source_profile.source_capability,
+        stale=False,
+        content_type=snapshot.content_type,
+    )
+
+
+def _setup_preview_snapshot_with_stale(
+    snapshot: _SetupPreviewSnapshot,
+    *,
+    stale: bool,
+) -> _SetupPreviewSnapshot:
+    return _SetupPreviewSnapshot(
+        image_bytes=snapshot.image_bytes,
+        frame_size=snapshot.frame_size,
+        captured_at=snapshot.captured_at,
+        source_profile_hash=snapshot.source_profile_hash,
+        source_capability=snapshot.source_capability,
+        stale=stale,
+        content_type=snapshot.content_type,
     )
 
 

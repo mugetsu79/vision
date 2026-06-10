@@ -93,10 +93,10 @@ def test_worker_metrics_server_unexpected_os_error_is_fatal(
 
 
 class _FakeFrameSource:
-    def __init__(self, frames: list[np.ndarray]) -> None:
+    def __init__(self, frames: list[object]) -> None:
         self._frames = iter(frames)
 
-    def next_frame(self) -> np.ndarray:
+    def next_frame(self) -> object:
         return next(self._frames)
 
     def close(self) -> None:
@@ -114,14 +114,38 @@ class _ReconfigurableFrameSource(_FakeFrameSource):
         target_width: int | None,
         target_height: int | None,
         fps_cap: int,
+        source_uri: str | None = None,
+        source_profile_hash: str | None = None,
     ) -> None:
         self.reconfigure_calls.append(
             {
                 "target_width": target_width,
                 "target_height": target_height,
                 "fps_cap": fps_cap,
+                "source_uri": source_uri,
+                "source_profile_hash": source_profile_hash,
             }
         )
+
+
+class _FailingReconfigurableFrameSource(_ReconfigurableFrameSource):
+    def reconfigure(
+        self,
+        *,
+        target_width: int | None,
+        target_height: int | None,
+        fps_cap: int,
+        source_uri: str | None = None,
+        source_profile_hash: str | None = None,
+    ) -> None:
+        super().reconfigure(
+            target_width=target_width,
+            target_height=target_height,
+            fps_cap=fps_cap,
+            source_uri=source_uri,
+            source_profile_hash=source_profile_hash,
+        )
+        raise RuntimeError("simulated reopen failure")
 
 
 class _TimedFrameSource(_FakeFrameSource):
@@ -188,6 +212,39 @@ class _FakeDetector:
             Detection(class_name="car", confidence=0.95, bbox=(10.0, 10.0, 30.0, 30.0), class_id=0),
             Detection(class_name="bus", confidence=0.91, bbox=(40.0, 12.0, 90.0, 80.0), class_id=1),
         ]
+
+
+class _GpuOnlyFrame:
+    width = 1280
+    height = 720
+    memory_kind = "cuda"
+    source_profile_hash = "g" * 64
+
+    def __init__(self) -> None:
+        self.materialized = False
+        self.materialized_after_detect = False
+
+    def as_bgr_numpy(self) -> np.ndarray:
+        self.materialized = True
+        return np.zeros((720, 1280, 3), dtype=np.uint8)
+
+
+class _GpuFrameDetector(_FakeDetector):
+    def __init__(self, frame: _GpuOnlyFrame) -> None:
+        super().__init__()
+        self.frame = frame
+        self.used_gpu_frame = False
+
+    def detect_captured_frame(
+        self,
+        frame: object,
+        allowed_classes: list[str] | None = None,
+    ) -> list[Detection]:
+        del allowed_classes
+        self.used_gpu_frame = True
+        assert frame is self.frame
+        assert self.frame.materialized is False
+        return []
 
 
 class _TimedFakeDetector(_FakeDetector):
@@ -529,6 +586,39 @@ class _FailingStreamClient(_FakeStreamClient):
     ) -> None:
         await super().push_frame(registration, frame, ts=ts)
         raise RuntimeError("annotated publisher unavailable")
+
+
+class _FailingRegisterStreamClient(_FakeStreamClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self._registrations_before_failure = 1
+
+    async def register_stream(
+        self,
+        *,
+        camera_id: UUID,
+        rtsp_url: str,
+        profile: PublishProfile,
+        stream_kind: str,
+        privacy: PrivacyPolicy,
+        target_fps: int,
+        profile_id: str | None = None,
+        target_width: int | None = None,
+        target_height: int | None = None,
+    ) -> StreamRegistration:
+        await super().register_stream(
+            camera_id=camera_id,
+            rtsp_url=rtsp_url,
+            profile=profile,
+            stream_kind=stream_kind,
+            privacy=privacy,
+            target_fps=target_fps,
+            profile_id=profile_id,
+            target_width=target_width,
+            target_height=target_height,
+        )
+        if len(self.register_stream_calls) > self._registrations_before_failure:
+            raise RuntimeError("stream registration unavailable")
 
 
 class _RecordingRuntimeReporter:
@@ -1581,6 +1671,7 @@ async def test_engine_reports_runtime_report_media_capture_backend_and_encoder_m
         update={
             "mode": ProcessingMode.EDGE,
             "scene_contract_hash": "c" * 64,
+            "source_profile_hash": "b" * 64,
             "stream": StreamSettings(
                 profile_id="720p20",
                 kind="transcode",
@@ -1623,10 +1714,36 @@ async def test_engine_reports_runtime_report_media_capture_backend_and_encoder_m
     assert report.runtime_state.value == "running"
     assert report.runtime_artifact_id == runtime_artifact.id
     assert report.scene_contract_hash == "c" * 64
+    assert report.source_profile_hash == "b" * 64
     assert report.selected_provider == "tensorrt_engine"
     assert report.media_pipeline_mode == "jetson_gstreamer_native"
     assert report.media_capture_backend == "gstreamer_appsink"
     assert report.encoder_mode == "software"
+
+
+@pytest.mark.asyncio
+async def test_engine_uses_detector_captured_frame_fast_path_before_bgr_materialization() -> None:
+    camera_id = uuid4()
+    frame = _GpuOnlyFrame()
+    detector = _GpuFrameDetector(frame)
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=_FakeFrameSource([frame]),
+        detector=detector,
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    await engine.start()
+    await engine.run_once()
+    await engine.close()
+
+    assert detector.used_gpu_frame is True
+    assert frame.materialized is True
 
 
 def test_annotated_stream_frame_reports_drawn_pixels(
@@ -2364,7 +2481,182 @@ async def test_engine_reconfigures_capture_source_when_stream_profile_changes() 
             "target_width": 1920,
             "target_height": 1080,
             "fps_cap": 20,
+            "source_uri": "rtsp://camera.internal/live",
+            "source_profile_hash": None,
         }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_engine_reconfigures_capture_source_when_camera_source_profile_changes() -> None:
+    camera_id = uuid4()
+    stream_client = _FakeStreamClient()
+    frame_source = _ReconfigurableFrameSource([np.zeros((64, 64, 3), dtype=np.uint8)])
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=frame_source,
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=stream_client,
+    )
+
+    await engine.start()
+    await engine.apply_command(
+        CameraCommand(
+            camera=CameraSettings(
+                source_uri="rtsp://new-camera/live",
+                frame_skip=1,
+                fps_cap=20,
+            ),
+            stream=StreamSettings(
+                profile_id="720p20",
+                kind="transcode",
+                width=1280,
+                height=720,
+                fps=20,
+            ),
+            source_profile_hash="c" * 64,
+        )
+    )
+    await engine.close()
+
+    assert engine.config.camera.source_uri == "rtsp://new-camera/live"
+    assert engine.config.source_profile_hash == "c" * 64
+    assert frame_source.reconfigure_calls == [
+        {
+            "target_width": 1280,
+            "target_height": 720,
+            "fps_cap": 20,
+            "source_uri": "rtsp://new-camera/live",
+            "source_profile_hash": "c" * 64,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_engine_rolls_back_source_config_when_reconfigure_fails() -> None:
+    camera_id = uuid4()
+    stream_client = _FakeStreamClient()
+    old_config = _engine_config(camera_id).model_copy(
+        update={"source_profile_hash": "a" * 64}
+    )
+    frame_source = _FailingReconfigurableFrameSource([
+        np.zeros((64, 64, 3), dtype=np.uint8)
+    ])
+    engine = InferenceEngine(
+        config=old_config,
+        frame_source=frame_source,
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=stream_client,
+    )
+    previous_camera = engine.config.camera
+    previous_stream = engine.config.stream
+
+    await engine.start()
+    with pytest.raises(RuntimeError, match="simulated reopen failure"):
+        await engine.apply_command(
+            CameraCommand(
+                camera=CameraSettings(
+                    source_uri="rtsp://new-camera/live",
+                    frame_skip=1,
+                    fps_cap=20,
+                ),
+                stream=StreamSettings(
+                    profile_id="720p20",
+                    kind="transcode",
+                    width=1280,
+                    height=720,
+                    fps=20,
+                ),
+                source_profile_hash="b" * 64,
+            )
+        )
+    await engine.close()
+
+    assert engine.config.camera == previous_camera
+    assert engine.config.stream == previous_stream
+    assert engine.config.source_profile_hash == "a" * 64
+    assert frame_source.reconfigure_calls[-1]["source_profile_hash"] == "b" * 64
+    assert stream_client.register_stream_calls == [
+        {
+            "profile_id": "native",
+            "stream_kind": "passthrough",
+            "target_fps": 25,
+            "target_width": None,
+            "target_height": None,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_engine_rolls_back_source_config_when_stream_registration_fails() -> None:
+    camera_id = uuid4()
+    old_config = _engine_config(camera_id).model_copy(
+        update={"source_profile_hash": "a" * 64}
+    )
+    frame_source = _ReconfigurableFrameSource([np.zeros((64, 64, 3), dtype=np.uint8)])
+    engine = InferenceEngine(
+        config=old_config,
+        frame_source=frame_source,
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FailingRegisterStreamClient(),
+    )
+    previous_camera = engine.config.camera
+    previous_stream = engine.config.stream
+
+    await engine.start()
+    with pytest.raises(RuntimeError, match="stream registration unavailable"):
+        await engine.apply_command(
+            CameraCommand(
+                camera=CameraSettings(
+                    source_uri="rtsp://new-camera/live",
+                    frame_skip=1,
+                    fps_cap=20,
+                ),
+                stream=StreamSettings(
+                    profile_id="720p20",
+                    kind="transcode",
+                    width=1280,
+                    height=720,
+                    fps=20,
+                ),
+                source_profile_hash="b" * 64,
+            )
+        )
+    await engine.close()
+
+    assert engine.config.camera == previous_camera
+    assert engine.config.stream == previous_stream
+    assert engine.config.source_profile_hash == "a" * 64
+    assert frame_source.reconfigure_calls == [
+        {
+            "target_width": 1280,
+            "target_height": 720,
+            "fps_cap": 20,
+            "source_uri": "rtsp://new-camera/live",
+            "source_profile_hash": "b" * 64,
+        },
+        {
+            "target_width": None,
+            "target_height": None,
+            "fps_cap": 25,
+            "source_uri": "rtsp://camera.internal/live",
+            "source_profile_hash": "a" * 64,
+        },
     ]
 
 

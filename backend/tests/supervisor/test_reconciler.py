@@ -162,7 +162,7 @@ async def test_reconciler_recovers_desired_worker_after_restart() -> None:
 
 
 @pytest.mark.asyncio
-async def test_reconciler_recovers_desired_worker_from_running_report_after_restart() -> None:
+async def test_reconciler_recovers_worker_source_profile_hash_from_report() -> None:
     tenant_id = uuid4()
     edge_node_id = uuid4()
     admission = _admission_response(
@@ -191,6 +191,7 @@ async def test_reconciler_recovers_desired_worker_from_running_report_after_rest
         last_error=None,
         runtime_artifact_id=admission.runtime_artifact_id,
         scene_contract_hash=None,
+        source_profile_hash="b" * 64,
         selected_provider=admission.selected_backend,
         media_pipeline_mode="jetson_gstreamer_native",
         media_capture_backend="gstreamer_rawvideo_pipe",
@@ -220,6 +221,7 @@ async def test_reconciler_recovers_desired_worker_from_running_report_after_rest
     assert operations.runtime_reports[0]["request_payload"]["media_capture_backend"] == (
         "gstreamer_rawvideo_pipe"
     )
+    assert operations.runtime_reports[0]["request_payload"]["source_profile_hash"] == "b" * 64
 
 
 @pytest.mark.asyncio

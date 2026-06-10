@@ -296,6 +296,7 @@ class _FakeOperationsService:
             last_error=payload.last_error,
             runtime_artifact_id=payload.runtime_artifact_id,
             scene_contract_hash=payload.scene_contract_hash,
+            source_profile_hash=payload.source_profile_hash,
             selected_provider=payload.selected_provider,
             media_pipeline_mode=payload.media_pipeline_mode,
             media_capture_backend=payload.media_capture_backend,
@@ -731,6 +732,7 @@ async def test_runtime_report_route_records_supervisor_truth() -> None:
                 "restart_count": 2,
                 "last_error": "previous restart recovered",
                 "scene_contract_hash": "a" * 64,
+                "source_profile_hash": "b" * 64,
                 "selected_provider": "TensorrtExecutionProvider",
                 "media_pipeline_mode": "jetson_gstreamer_native",
                 "media_capture_backend": "gstreamer_rawvideo_pipe",
@@ -745,12 +747,14 @@ async def test_runtime_report_route_records_supervisor_truth() -> None:
     assert body["restart_count"] == 2
     assert body["last_error"] == "previous restart recovered"
     assert body["scene_contract_hash"] == "a" * 64
+    assert body["source_profile_hash"] == "b" * 64
     assert body["selected_provider"] == "TensorrtExecutionProvider"
     assert body["media_pipeline_mode"] == "jetson_gstreamer_native"
     assert body["media_capture_backend"] == "gstreamer_rawvideo_pipe"
     assert body["encoder_mode"] == "hardware"
     assert operations.runtime_report_payload is not None
     assert operations.runtime_report_payload.camera_id == camera_id
+    assert operations.runtime_report_payload.source_profile_hash == "b" * 64
     assert operations.runtime_report_payload.selected_provider == "TensorrtExecutionProvider"
     assert operations.runtime_report_payload.media_capture_backend == "gstreamer_rawvideo_pipe"
 
