@@ -25,6 +25,9 @@ together the lab guide and runbook.
   install and pair the node locally, then manage model registration,
   distribution, TensorRT/open-vocab artifacts, and edge configuration from the
   master UI.
+- For normal Jetson edge installs, the installer resolves the Jetson GPU ONNX
+  Runtime wheel from the release manifest and Jetson preflight data. Manual
+  `JETSON_ORT_WHEEL_URL` values are overrides, not the operator path.
 
 ## UI-Driven Model Lifecycle Checklist
 
@@ -39,6 +42,8 @@ Use this checklist for normal installs after the master and edge node are
 paired. The CLI sections below remain useful for local development,
 break-glass registration, and comparing generated artifacts, but they should not
 be the normal operator path after an edge installer completes.
+
+For the full UI walkthrough, see [vezor-user-guide.md](vezor-user-guide.md).
 
 ## Supported Model Catalog
 

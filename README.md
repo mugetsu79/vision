@@ -12,7 +12,7 @@ Vezor separates **native ingest for analytics** from **browser delivery for oper
 
 The Operations workbench at `/settings` shows the current fleet model: desired camera workers, node/runtime state, delivery diagnostics, hardware/model admission, and edge bootstrap material. The Deployment workbench at `/deployment` shows install health, node pairing, credential status, service reports, edge configuration revision state, and support bundles. The Models workspace centralizes source model registration/download, edge assignment, model sync, runtime artifact builds, and node inventory. Local development can still use copyable worker commands, but installed product operation should use paired central or edge supervisors with node-local credential stores.
 
-The current codebase has moved beyond a pure dev scaffold. The main operator workflows exist, including Live, History, Operations, Deployment, Link Performance, FleetOps, and the Evidence Desk incident review queue. The installer-managed path now includes local macOS master, Linux master, and Jetson edge package artifacts plus first-run bootstrap. The remaining production gap is field hardening: signed packages, backup/restore posture, TLS/OIDC production configuration, pinned production image manifests, edge-agent packaging/pairing, and deferred Task 24 DeepStream work are still outside the portable demo path.
+The current codebase has moved beyond a pure dev scaffold. The main operator workflows exist, including Live, History, Operations, Deployment, Link Performance, FleetOps, Users, and the Evidence Desk incident review queue. The installer-managed path now includes local macOS master, Linux master, Jetson edge package artifacts, first-run tenant bootstrap, platform superadmin bootstrap, paired supervisor credentials, and packaged edge-agent service material. The remaining production gap is field hardening: signed packages, backup/restore posture, TLS/OIDC production configuration, pinned production image manifests, Kubernetes rollout proof, and deferred Task 24 DeepStream work are still outside the portable demo path.
 
 ## What’s In This Repo
 
@@ -35,19 +35,13 @@ The current codebase has moved beyond a pure dev scaffold. The main operator wor
   - edge inference: Jetson Orin Nano Super 8 GB is the hardened packaged target
   - lab/dev: macOS or Linux workstations are fine for bring-up and functional testing
 
-The central/backend image and local development environment use Python 3.12. The
-current `infra/docker-compose.edge.yml` path builds `backend/Dockerfile.edge`,
-which is a Jetson-oriented edge worker image that uses the Jetson base image's
-system Python 3.10 so cp310 Jetson ONNX Runtime GPU wheels can be installed.
-There is not currently a separate generic non-Jetson edge image that preserves
-Python 3.12.
-
-For the current JetPack 6 / Python 3.10 lab path, use this wheel URL before
-building the edge image when validating Jetson GPU providers:
-
-```bash
-export JETSON_ORT_WHEEL_URL="https://github.com/ultralytics/assets/releases/download/v0.0.0/onnxruntime_gpu-1.23.0-cp310-cp310-linux_aarch64.whl"
-```
+The central/backend image and local development environment use Python 3.12.
+The current Jetson edge image uses `backend/Dockerfile.edge`, the Jetson base
+image's system Python 3.10, verified Jetson PyTorch/TorchVision wheels, and a
+GPU ONNX Runtime wheel resolved from the installer manifest plus Jetson
+preflight data. `--jetson-ort-wheel-url` is an override for exceptional
+validation; it is not the normal install path. There is not currently a
+separate generic non-Jetson edge image that preserves Python 3.12.
 
 ## Installer Quick Start
 
@@ -81,12 +75,15 @@ and worker runtime policy from the UI instead of changing installer flags or
 running per-node model commands.
 
 For complete product-mode validation, start with
-[docs/product-installer-and-first-run-guide.md](/Users/yann.moren/vision/docs/product-installer-and-first-run-guide.md). It covers:
+[docs/full-installation-guide.md](/Users/yann.moren/vision/docs/full-installation-guide.md)
+or the expanded
+[docs/product-installer-and-first-run-guide.md](/Users/yann.moren/vision/docs/product-installer-and-first-run-guide.md). They cover:
 
 - Linux master installer
 - macOS master installer for the portable MacBook Pro pilot path
 - Jetson edge installer
 - first-run bootstrap
+- platform superadmin bootstrap
 - node pairing and credential rotation
 - UI lifecycle, reboot, support bundle, upgrade, and uninstall checks
 
@@ -177,6 +174,11 @@ The full validation flow is implemented in [scripts/run-full-validation.sh](/Use
 Start here if you are new to the repo:
 
 - [product-spec-v4.md](/Users/yann.moren/vision/product-spec-v4.md): current architecture and product spec
+- [docs/README.md](/Users/yann.moren/vision/docs/README.md): documentation index and reading path
+- [docs/vezor-user-guide.md](/Users/yann.moren/vision/docs/vezor-user-guide.md): operator UI guide with current screenshots
+- [docs/full-installation-guide.md](/Users/yann.moren/vision/docs/full-installation-guide.md): full product-mode installation guide
+- [docs/admin-and-operations-guide.md](/Users/yann.moren/vision/docs/admin-and-operations-guide.md): tenant, user, role, deployment, and operations guide
+- [docs/release-notes/2026.1.md](/Users/yann.moren/vision/docs/release-notes/2026.1.md): first release notes
 - [docs/runbook.md](/Users/yann.moren/vision/docs/runbook.md): operations starting point
 - [docs/deployment-modes-and-matrix.md](/Users/yann.moren/vision/docs/deployment-modes-and-matrix.md): short decision guide for `central`, `edge`, and `hybrid`
 - [docs/operator-deployment-playbook.md](/Users/yann.moren/vision/docs/operator-deployment-playbook.md): operator-ready deployment guidance

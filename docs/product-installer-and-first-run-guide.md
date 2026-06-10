@@ -1139,7 +1139,6 @@ On the Jetson:
 ```bash
 MASTER_API_URL="http://MASTER_HOST_OR_IP:8000"
 JETSON_STREAM_HOST="JETSON_HOST_OR_IP_REACHABLE_FROM_MASTER"
-JETSON_ORT_WHEEL_URL="https://github.com/ultralytics/assets/releases/download/v0.0.0/onnxruntime_gpu-1.23.0-cp310-cp310-linux_aarch64.whl"
 
 sudo ./bin/vezor install edge \
   --version "portable-demo" \
@@ -1149,9 +1148,15 @@ sudo ./bin/vezor install edge \
   --pairing-code "PAIRING_CODE" \
   --edge-name "jetson-portable-1" \
   --model-dir /var/lib/vezor/models \
-  --public-stream-host "$JETSON_STREAM_HOST" \
-  --jetson-ort-wheel-url "$JETSON_ORT_WHEEL_URL"
+  --public-stream-host "$JETSON_STREAM_HOST"
 ```
+
+For dev manifests, the edge installer runs Jetson preflight, resolves the
+Jetson GPU ONNX Runtime wheel from `installer/manifests/dev-example.json`, and
+passes the verified URL and SHA256 into `backend/Dockerfile.edge`. Use
+`--jetson-ort-wheel-url` only as a manual override for exceptional validation.
+Use `--allow-cpu-onnx-runtime` only for diagnostic runs that are explicitly not
+product smokes.
 
 The edge installer writes `/etc/vezor/edge.json`,
 `/etc/vezor/supervisor.json`, `/etc/vezor/edge.env`, MediaMTX config, local
@@ -1191,9 +1196,9 @@ that leaf node connects back to the master leaf listener at
 container itself and will produce `ConnectionRefusedError`.
 
 The Jetson ONNX Runtime GPU wheel is required for the portable product path.
-For the current JetPack 6 / Python 3.10 installer image, use a compatible
-`cp310` Linux `aarch64` wheel such as the URL above. The installer only allows a
-CPU ONNX Runtime fallback when you explicitly pass
+For dev manifests, the installer resolves the compatible `cp310` Linux
+`aarch64` wheel from the manifest and Jetson preflight JSON. The installer only
+allows a CPU ONNX Runtime fallback when you explicitly pass
 `--allow-cpu-onnx-runtime`; treat that as a diagnostic escape hatch, not as a
 demo or production mode.
 
@@ -1680,8 +1685,7 @@ sudo ./bin/vezor install edge \
   --unpaired \
   --edge-name "jetson-portable-1" \
   --model-dir /var/lib/vezor/models \
-  --public-stream-host "$JETSON_STREAM_HOST" \
-  --jetson-ort-wheel-url "$JETSON_ORT_WHEEL_URL"
+  --public-stream-host "$JETSON_STREAM_HOST"
 ```
 
 Use the same source ref on the master and Jetson. While validating a pre-merge
@@ -1982,8 +1986,9 @@ If an older installer expired the pairing session after a long Jetson image
 build, that attempt usually built `vezor/edge-worker:portable-demo` but did not
 claim a credential or complete the systemd service install. Pull the latest
 source ref or `main` on the Jetson, create a fresh Pair Jetson edge session in
-the UI, and rerun `./bin/vezor install edge` with the new session id, new
-pairing code, and required `--jetson-ort-wheel-url`.
+the UI, and rerun `./bin/vezor install edge` with the new session id and pairing
+code. The current dev-manifest installer resolves the Jetson GPU ONNX Runtime
+wheel automatically from manifest and preflight data.
 
 ### The edge node pairs but has no heartbeat
 

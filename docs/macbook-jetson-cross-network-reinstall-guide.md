@@ -240,11 +240,9 @@ Use the returned `vzboot_...` token only in `/first-run`.
 
 ## 4. Rerun The Jetson Edge Installer
 
-The dev manifest still requires the Jetson Python 3.10 ONNX Runtime GPU wheel:
-
-```bash
-JETSON_ORT_WHEEL_URL="https://github.com/ultralytics/assets/releases/download/v0.0.0/onnxruntime_gpu-1.23.0-cp310-cp310-linux_aarch64.whl"
-```
+The dev manifest resolves the Jetson Python 3.10 GPU ONNX Runtime wheel from
+the release manifest and Jetson preflight JSON. Use `--jetson-ort-wheel-url`
+only as an exceptional manual override.
 
 ### Existing Paired Jetson After A Network Change
 
@@ -262,8 +260,7 @@ sudo ./bin/vezor install edge \
   --unpaired \
   --edge-name "jetson-portable-1" \
   --model-dir /var/lib/vezor/models \
-  --public-stream-host "$JETSON_STREAM_HOST" \
-  --jetson-ort-wheel-url "$JETSON_ORT_WHEEL_URL"
+  --public-stream-host "$JETSON_STREAM_HOST"
 ```
 
 If the Jetson stream uses a forwarded RTSP port, use this variant:
@@ -276,8 +273,7 @@ sudo ./bin/vezor install edge \
   --unpaired \
   --edge-name "jetson-portable-1" \
   --model-dir /var/lib/vezor/models \
-  --public-mediamtx-rtsp-url "$PUBLIC_MEDIAMTX_RTSP_URL" \
-  --jetson-ort-wheel-url "$JETSON_ORT_WHEEL_URL"
+  --public-mediamtx-rtsp-url "$PUBLIC_MEDIAMTX_RTSP_URL"
 ```
 
 If the master frontend uses a non-standard port or URL that cannot be derived
@@ -313,8 +309,7 @@ sudo ./bin/vezor install edge \
   --pairing-code "PAIRING_CODE" \
   --edge-name "jetson-portable-1" \
   --model-dir /var/lib/vezor/models \
-  --public-stream-host "$JETSON_STREAM_HOST" \
-  --jetson-ort-wheel-url "$JETSON_ORT_WHEEL_URL"
+  --public-stream-host "$JETSON_STREAM_HOST"
 ```
 
 After either Jetson install path, confirm edge MediaMTX points back to the

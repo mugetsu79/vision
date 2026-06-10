@@ -114,9 +114,11 @@ redact `reflector_secret` from logs and support bundles, and do not commit it.
 
 For installed edge nodes, use `./bin/vezor install edge` from the release
 checkout after creating the one-time pairing session in Control -> Deployment.
-The direct `python -m argus.link.edge_agent ... --bearer-token ...` examples in
-this guide are validation and break-glass probes until paired edge-agent
-credential packaging is complete.
+The installer writes scoped edge-agent configuration and installs
+`vezor-edge-agent.service` material that uses the node credential file instead
+of an admin bearer token. The direct `python -m argus.link.edge_agent
+... --bearer-token ...` examples in this guide are validation and break-glass
+probes.
 
 ICMP can be filtered or deprioritized by networks. Treat it as useful
 source-side evidence, not a universal proof of application-path loss.
@@ -239,6 +241,7 @@ UDP sequence samples also preserve:
 
 ## Current Gaps
 
-- Edge-agent pairing credentials and service installation are not packaged yet.
 - STAMP/TWAMP/provider SD-WAN responder modes are not operational yet.
 - Continuous throughput measurement is intentionally out of scope.
+- The packaged edge-agent service should be started and service-manager
+  evidence recorded after each rebuilt edge install.

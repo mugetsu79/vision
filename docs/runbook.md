@@ -697,15 +697,10 @@ The current edge Compose path is Jetson-specific:
 - `infra/docker-compose.edge.yml` builds `backend/Dockerfile.edge`
 - that image uses the Jetson base image's system Python 3.10 virtualenv
 - the Python 3.10 runtime is intentional because the accelerated Jetson ONNX Runtime wheels available for this lab are `cp310`
-- `JETSON_ORT_WHEEL_URL` is passed as a build argument and should point to the Jetson accelerated `onnxruntime-gpu` wheel
-- if `JETSON_ORT_WHEEL_URL` is unset, the image build fails unless `ALLOW_CPU_ONNX_RUNTIME=1` is explicitly set for CPU-only diagnostics
+- dev-manifest installs resolve the Jetson GPU ONNX Runtime wheel from the release manifest and Jetson preflight JSON
+- `JETSON_ORT_WHEEL_URL` remains a build-argument override for exceptional validation
+- if no manifest match or override exists, the image build fails unless `ALLOW_CPU_ONNX_RUNTIME=1` is explicitly set for CPU-only diagnostics
 - processed annotated/reduced profiles publish through FFmpeg/libx264 on Orin Nano because the device has NVDEC but no NVENC
-
-For the current JetPack 6 / Python 3.10 lab path:
-
-```bash
-export JETSON_ORT_WHEEL_URL="https://github.com/ultralytics/assets/releases/download/v0.0.0/onnxruntime_gpu-1.23.0-cp310-cp310-linux_aarch64.whl"
-```
 
 The central/backend image remains Python 3.12. There is no separate generic
 non-Jetson edge image still using Python 3.12 in the current Compose stack. For
@@ -726,8 +721,9 @@ For a single-node edge deployment:
    - `ARGUS_NATS_URL`
    - `ARGUS_MINIO_ENDPOINT`
    - `ARGUS_EDGE_CAMERA_ID`
-3. Export the required Jetson GPU ONNX Runtime wheel before building the image:
-   `export JETSON_ORT_WHEEL_URL="https://github.com/ultralytics/assets/releases/download/v0.0.0/onnxruntime_gpu-1.23.0-cp310-cp310-linux_aarch64.whl"`
+3. For product-mode edge installs, prefer `./bin/vezor install edge` so the
+   manifest/preflight resolver supplies the Jetson GPU ONNX Runtime wheel.
+   Export `JETSON_ORT_WHEEL_URL` only when manually overriding the resolver.
 4. From the same shell, run `docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml config` to verify Compose can see the required variables.
 5. Start the stack with `docker compose -f /Users/yann.moren/vision/infra/docker-compose.edge.yml up -d --build`.
 6. Confirm MediaMTX, OTEL Collector, the worker metrics endpoint, and the Operations workbench state are reachable.
