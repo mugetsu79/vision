@@ -2082,6 +2082,11 @@ class OperationsService:
                     else controls.lifecycle_owner
                 )
                 detail = controls.detail
+                if (
+                    controls.lifecycle_owner == "central_supervisor"
+                    and controls.supervisor_mode is not SupervisorMode.DISABLED
+                ):
+                    desired = WorkerDesiredState.SUPERVISED
             runtime_passport_summary = (
                 _runtime_passport_summary(runtime_passport)
                 if (runtime_passport := runtime_passports_by_camera.get(camera.id)) is not None

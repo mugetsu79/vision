@@ -506,6 +506,47 @@ async def test_runner_refreshes_runtime_report_for_already_running_worker() -> N
 
 
 @pytest.mark.asyncio
+async def test_runner_refreshes_central_runtime_report_without_assignment() -> None:
+    tenant_id = uuid4()
+    worker = _fleet_worker(
+        tenant_id=tenant_id,
+        edge_node_id=None,
+        desired_state=WorkerDesiredState.SUPERVISED,
+        runtime_status=WorkerRuntimeStatus.STALE,
+        admission_status=ModelAdmissionStatus.RECOMMENDED,
+    )
+    worker.assignment = None
+    operations = _FakeOperations(
+        requests=[],
+        fleet=_fleet_overview(worker),
+        admission_status=ModelAdmissionStatus.RECOMMENDED,
+    )
+    adapter = _FakeProcessAdapter()
+    adapter.running.add(worker.camera_id)
+    runner = SupervisorRunner(
+        supervisor_id="central-supervisor",
+        edge_node_id=None,
+        hardware_probe=_FakeHardwareProbe(),
+        metrics_probe=_FakeMetricsProbe([]),
+        operations=operations,
+        process_adapter=adapter,
+        tenant_id=tenant_id,
+    )
+
+    processed = await runner.run_once()
+
+    assert processed == 0
+    assert adapter.calls == []
+    assert operations.runtime_reports == [
+        {
+            "camera_id": worker.camera_id,
+            "runtime_state": "running",
+            "last_error": None,
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_runner_recovers_desired_worker_from_unknown_running_report_after_restart() -> None:
     tenant_id = uuid4()
     edge_node_id = uuid4()

@@ -1,10 +1,10 @@
-# Jetson DeepStream Edge Installer Implementation Plan
+# Jetson No-DeepStream And DeepStream Edge Runtime Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add an optional Jetson DeepStream edge installer/runtime family that deploys Ultralytics YOLO fixed-vocabulary models through NVIDIA Metropolis / DeepStream while preserving the current Python edge runtime.
+**Goal:** First optimize the current no-DeepStream Jetson Python worker so the existing edge installer can use NVIDIA media/inference acceleration where available, then add an optional Jetson DeepStream edge installer/runtime family that deploys Ultralytics YOLO fixed-vocabulary models through NVIDIA Metropolis / DeepStream.
 
-**Architecture:** Keep `python` as the default edge runtime family and add `deepstream` as an explicit installer/runtime family. DeepStream scenes use a `deepstream_bundle` runtime artifact, a DeepStream-specific edge image, generated `nvinfer`/pipeline configs, a native YOLO parser library, and a Vezor bridge that publishes the same detections/history/evidence/billing signals as the current worker.
+**Architecture:** Keep `python` as the default edge runtime family. Add a `media_acceleration` policy inside that family (`auto`, `jetson-hw`, `software`) and make runtime reports expose the actual media and inference path. Add `deepstream` later as an explicit installer/runtime family. DeepStream scenes use a `deepstream_bundle` runtime artifact, a DeepStream-specific edge image, generated `nvinfer`/pipeline configs, a native YOLO parser library, and a Vezor bridge that publishes the same detections/history/evidence/billing signals as the current worker.
 
 **Tech Stack:** Bash installer, Pydantic manifest models, Docker/Compose/systemd, NVIDIA DeepStream 7.1 `deepstream-l4t`, GStreamer, `nvinfer`, TensorRT, C++ custom parser library, Python bridge/orchestration, FastAPI/Pydantic contracts, React/TypeScript UI, pytest/vitest, real Jetson smoke.
 
@@ -12,6 +12,13 @@
 
 ## File Map
 
+- Modify `backend/src/argus/vision/camera.py`: make Jetson native/software/FFmpeg capture selection deterministic and truthfully reported.
+- Modify `backend/src/argus/vision/stream_publisher.py` or the current processed-stream publisher module: prefer Jetson hardware H.264 encode when available.
+- Modify `backend/src/argus/inference/engine.py`: pass selected media pipeline and encoder mode into runtime reports.
+- Modify `backend/src/argus/supervisor/hardware_probe.py` or equivalent probe module: report NVIDIA media plugins, TensorRT/CUDA providers, and central provider capabilities.
+- Modify `backend/src/argus/services/supervisor_operations.py`: persist/report runtime media pipeline, encoder mode, selected provider, runtime artifact id, scene contract hash, and heartbeat freshness.
+- Modify `frontend/src/components/cameras/CameraWizard.tsx`: scope runtime-artifact display by scene target/profile so central Mac scenes do not show a Jetson TensorRT artifact as their effective runtime.
+- Modify `docs/core-link-performance-guide.md`: document the installed `.bin` throughput fixture and installation-time link sample.
 - Modify `installer/vezor_installer/manifest.py`: add runtime-family and DeepStream compatibility manifest schema.
 - Modify `installer/manifests/dev-example.json`: add `edge-worker-deepstream` image and DeepStream compatibility metadata.
 - Modify `installer/linux/install-edge.sh`: add `--runtime-family`, DeepStream compatibility preflight, image/Dockerfile selection, and config persistence.
@@ -37,7 +44,126 @@
 - Modify `docs/product-installer-and-first-run-guide.md`: document `--runtime-family deepstream`.
 - Modify `docs/operator-deployment-playbook.md`: document DeepStream live smoke and service evidence.
 
-## Task 1: Manifest Contract For DeepStream Runtime Family
+## Preflight Fixes Already Applied In Current Session
+
+These fixes unblock the supervised central-worker poll path before performance work starts:
+
+- `backend/src/argus/services/app.py` now promotes a central camera to `WorkerDesiredState.SUPERVISED` when operations mode resolves to `central_supervisor` and supervisor mode is enabled.
+- `backend/tests/services/test_operations_service.py` asserts the central-supervisor fleet row is supervised, not manual.
+- `backend/tests/supervisor/test_runner.py` asserts a running central worker without an assignment row still refreshes runtime reports.
+
+Next implementation should preserve these invariants while changing media/inference performance.
+
+## Task 0: No-DeepStream Jetson Python Runtime Optimization
+
+**Files:**
+- Modify: `backend/tests/vision/test_camera_capture.py` or nearest existing camera pipeline tests
+- Modify: `backend/tests/vision/test_stream_publisher.py` or nearest existing processed-stream publisher tests
+- Modify: `backend/tests/supervisor/test_hardware_probe.py`
+- Modify: `backend/tests/supervisor/test_runner.py`
+- Modify: `backend/src/argus/vision/camera.py`
+- Modify: current processed-stream publisher module
+- Modify: hardware probe module
+- Modify: runtime report contracts/services as needed
+
+- [ ] **Step 1: Write failing Jetson media pipeline tests**
+
+Cover these cases:
+
+```python
+def test_jetson_rtsp_capture_prefers_nvv4l2decoder_and_nvvidconv_when_available() -> None:
+    ...
+
+
+def test_jetson_rtsp_capture_labels_software_gstreamer_fallback_truthfully() -> None:
+    ...
+
+
+def test_jetson_processed_stream_prefers_nvv4l2h264enc_when_available() -> None:
+    ...
+```
+
+Expected initial state: at least the fallback-label test fails because current logs can report a software fallback as native.
+
+- [ ] **Step 2: Add runtime-report contract tests**
+
+Runtime reports must include or derive these fields without exposing secrets:
+
+- selected inference provider
+- runtime artifact id
+- scene contract hash
+- media pipeline mode: `jetson_gstreamer_native`, `jetson_gstreamer_software`, or `ffmpeg_software`
+- encoder mode: `hardware` or `software`
+- heartbeat timestamp refreshed by the supervisor poll loop
+
+- [ ] **Step 3: Implement deterministic Jetson media selection**
+
+In the current camera capture module:
+
+- Probe `nvv4l2decoder`, `nvvidconv`, and `nvv4l2h264enc` inside the running container.
+- Prefer the native Jetson GStreamer path for RTSP/H.264.
+- Resize in the NVIDIA media path before frames enter Python when the scene profile requests lower resolution.
+- Fall back to software GStreamer only when native path fails to produce a first frame.
+- Fall back to FFmpeg only when both GStreamer paths fail.
+- Emit distinct runtime diagnostics for each path. Do not log raw RTSP credentials.
+
+- [ ] **Step 4: Implement hardware processed-stream encode**
+
+Use `nvv4l2h264enc` for processed browser renditions when available. If it is missing or fails first-frame smoke, fall back to software encode and report that fallback.
+
+- [ ] **Step 5: Add the Core Link installation throughput fixture**
+
+Create a local `.bin` fixture during edge installation, store it under the edge appliance data directory, and run one manual-trigger-compatible throughput sample at install time. Core Link UI/API must display a meaningful measured Mbps value after the first install sample instead of `0 Mbps` when the link has actually been tested.
+
+- [ ] **Step 6: Run local tests**
+
+Run:
+
+```bash
+backend/.venv/bin/pytest backend/tests/vision backend/tests/supervisor -q
+```
+
+- [ ] **Step 7: Run Jetson live performance smoke**
+
+Before and after the optimization, capture:
+
+- `docker stats --no-stream` for edge containers
+- sanitized `docker top vezor-supervisor -eo pid,ppid,pcpu,pmem,rss,etime,comm`
+- `tegrastats`
+- worker runtime report payloads
+- processed stream availability
+- detections/history/evidence/billing usage
+
+PASS requires real RTSP frames, TensorRT artifact selected, hardware decode active, runtime reports heartbeating after restart, and measurable CPU reduction. Provider availability alone is not a pass.
+
+## Task 1: Central Runtime Target Scoping And Mac Acceleration Design
+
+**Files:**
+- Modify: `frontend/src/components/cameras/CameraWizard.tsx`
+- Modify: backend runtime summary/model option tests
+- Modify: docs/model-loading-and-configuration-guide.md
+- Modify: docs/operator-deployment-playbook.md
+
+- [ ] **Step 1: Write failing UI/runtime summary test**
+
+Central scenes running in Docker on a MacBook Pro M4 must not show a Jetson TensorRT artifact as the effective runtime. Shared model records may still list that artifact in model management, but scene setup must filter by scene target profile and selected node.
+
+- [ ] **Step 2: Fix runtime artifact display scoping**
+
+Filter runtime artifact summaries by:
+
+- processing mode
+- assigned node id
+- target profile
+- selected backend/provider
+
+For central Docker mode on M4, display the ONNX Runtime CPU provider honestly unless a native macOS/CoreML worker package has reported CoreML capability.
+
+- [ ] **Step 3: Document native central acceleration lane**
+
+Add a future `central-native-macos` lane that probes `CoreMLExecutionProvider` outside Docker. Mark this NOT RUN until a native supervisor/worker package is implemented and live-smoked.
+
+## Task 2: Manifest Contract For DeepStream Runtime Family
 
 **Files:**
 - Modify: `installer/tests/test_manifest.py`
@@ -207,7 +333,7 @@ git add installer/vezor_installer/manifest.py installer/manifests/dev-example.js
 git commit -m "feat: add deepstream manifest contract"
 ```
 
-## Task 2: Edge Installer Runtime-Family Switch
+## Task 3: Edge Installer Runtime-Family Switch
 
 **Files:**
 - Modify: `installer/tests/test_edge_installer_artifacts.py`
@@ -386,7 +512,7 @@ git add installer/linux/install-edge.sh installer/tests/test_edge_installer_arti
 git commit -m "feat: add edge runtime family installer switch"
 ```
 
-## Task 3: DeepStream Edge Image And Parser Build
+## Task 4: DeepStream Edge Image And Parser Build
 
 **Files:**
 - Create: `backend/tests/core/test_deepstream_dockerfile.py`
@@ -626,7 +752,7 @@ git add backend/Dockerfile.edge.deepstream backend/deepstream backend/tests/core
 git commit -m "feat: scaffold deepstream edge image"
 ```
 
-## Task 4: DeepStream Runtime Artifact Schema
+## Task 5: DeepStream Runtime Artifact Schema
 
 **Files:**
 - Modify: `backend/tests/vision/test_runtime_selection.py`
@@ -772,7 +898,7 @@ git add backend/src/argus/models/enums.py backend/src/argus/migrations/versions/
 git commit -m "feat: add deepstream runtime artifact kind"
 ```
 
-## Task 5: DeepStream Bundle Renderer
+## Task 6: DeepStream Bundle Renderer
 
 **Files:**
 - Create: `backend/tests/vision/test_deepstream_bundle.py`
@@ -1016,7 +1142,7 @@ git add backend/src/argus/vision/deepstream_bundle.py backend/tests/vision/test_
 git commit -m "feat: render deepstream runtime bundles"
 ```
 
-## Task 6: Worker Launcher Runtime Family Routing
+## Task 7: Worker Launcher Runtime Family Routing
 
 **Files:**
 - Modify: `backend/tests/supervisor/test_process_adapter.py`
@@ -1183,7 +1309,7 @@ git add backend/src/argus/supervisor/process_adapter.py backend/src/argus/infere
 git commit -m "feat: route deepstream worker launches"
 ```
 
-## Task 7: Worker Config And Readiness Reasons
+## Task 8: Worker Config And Readiness Reasons
 
 **Files:**
 - Modify: `backend/tests/services/test_camera_worker_config.py`
@@ -1292,7 +1418,7 @@ git add backend/src/argus/services/app.py backend/tests/services/test_camera_wor
 git commit -m "feat: expose deepstream worker readiness"
 ```
 
-## Task 8: DeepStream Hardware Probe And Service Evidence
+## Task 9: DeepStream Hardware Probe And Service Evidence
 
 **Files:**
 - Modify: `backend/tests/supervisor/test_hardware_probe.py`
@@ -1384,7 +1510,7 @@ git add scripts/jetson-preflight.sh backend/src/argus/supervisor/runner.py backe
 git commit -m "feat: report deepstream edge capabilities"
 ```
 
-## Task 9: UI DeepStream Readiness And Model Management
+## Task 10: UI DeepStream Readiness And Model Management
 
 **Files:**
 - Modify: `frontend/src/components/cameras/CameraWizard.test.tsx`
@@ -1505,7 +1631,7 @@ git add frontend/src/components/cameras/CameraWizard.tsx frontend/src/components
 git commit -m "feat: surface deepstream runtime readiness"
 ```
 
-## Task 10: Release Gate And Documentation
+## Task 11: Release Gate And Documentation
 
 **Files:**
 - Modify: `installer/tests/test_release_gate.py`
@@ -1573,7 +1699,7 @@ git add installer/tests/test_release_gate.py scripts/validate-installers.sh docs
 git commit -m "docs: document optional deepstream edge lane"
 ```
 
-## Task 11: Real YOLO Parser And Fixture Validation
+## Task 12: Real YOLO Parser And Fixture Validation
 
 **Files:**
 - Create: `backend/tests/vision/fixtures/deepstream_yolo26_output.json`
@@ -1636,7 +1762,7 @@ git add backend/deepstream/yolo_parser backend/tests/vision/fixtures/deepstream_
 git commit -m "feat: parse yolo detections for deepstream"
 ```
 
-## Task 12: Whole-Product DeepStream Live Smoke
+## Task 13: Whole-Product DeepStream Live Smoke
 
 **Files:**
 - Create: `docs/superpowers/status/YYYY-MM-DD-deepstream-jetson-live-smoke-report.md`

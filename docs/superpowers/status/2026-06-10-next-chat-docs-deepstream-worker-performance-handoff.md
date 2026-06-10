@@ -1,15 +1,17 @@
-# Docs, DeepStream Plan, And Jetson Worker Performance Handoff
+# Docs, No-DeepStream Optimization, DeepStream Plan, And Worker Performance Handoff
 
 Date: 2026-06-10
 Branch: `codex/sceneops-pack-registry`
-Last completed docs/spec commit before this handoff: `ddb67478`
+Last completed docs/spec commit before this handoff update: `47c4b105`
 
 ## Purpose
 
-The next chat should pick up from the committed documentation refresh and the
-new optional Jetson DeepStream edge-runtime design. It should also continue from
-the current Jetson worker performance observation: the active worker is running,
-but the path is CPU-heavy and mostly not using Jetson GPU/GR3D.
+The next chat should pick up from the committed documentation refresh, the
+optional Jetson DeepStream edge-runtime design, and the newer no-DeepStream
+Jetson optimization path. It should also continue from the current worker
+performance observation: the active Jetson worker is running, but the path is
+CPU-heavy in media decode/encode, while the central Docker worker on the MacBook
+Pro M4 is CPU-only today.
 
 Use Superpowers. For implementation work, read the relevant spec/plan first,
 write failing tests before code changes, and verify before claiming pass.
@@ -39,6 +41,22 @@ Commit `ddb67478` was pushed to `origin/codex/sceneops-pack-registry` with:
 - DeepStream Jetson edge installer design spec
 - DeepStream Jetson edge installer implementation plan
 
+Commit `47c4b105` was pushed after that with:
+
+- this handoff
+- DeepStream handoff additions
+- Jetson worker performance snapshot
+
+Current session changes after `47c4b105`:
+
+- Central supervised state fix in `backend/src/argus/services/app.py`
+- Regression in `backend/tests/services/test_operations_service.py` proving
+  central-supervisor fleet rows are `supervised`, not `manual`
+- Regression in `backend/tests/supervisor/test_runner.py` proving a running
+  central worker without an assignment row still refreshes runtime reports
+- Spec/plan updates making the current no-DeepStream Jetson optimization path
+  the immediate next implementation target before the optional DeepStream lane
+
 This workspace still has unrelated local untracked scratch files and folders
 such as `.claude/`, `.codex/`, `.playwright-*`, `.superpowers/brainstorm/...`,
 old screenshots, strategy drafts, `output/`, and `taste-skill/`. Do not stage
@@ -64,6 +82,17 @@ them. Use explicit `git add -- path ...`; do not use `git add -A`.
 
 Research and design are complete; implementation has not started.
 
+The plan now has two implementation tracks:
+
+1. Optimize the current `python` Jetson runtime without DeepStream.
+2. Add the optional `deepstream` runtime family after the narrower path is
+   measured.
+
+The no-DeepStream path should be implemented first because current live evidence
+shows the Orin has TensorRT/CUDA providers and Jetson media plugins, but the
+active worker is CPU-heavy in RTSP/H.264 decode, raw frame transfer, and preview
+encode.
+
 The chosen design is an optional second Jetson edge runtime family:
 
 - default remains `python`
@@ -79,6 +108,142 @@ The chosen design is an optional second Jetson edge runtime family:
 Do not treat a plain TensorRT `.engine` as enough for DeepStream. The bundle
 must include engine, labels, `nvinfer` config, parser shared library, pipeline
 template, and ABI/version metadata.
+
+## Fix Applied In This Session
+
+Problem:
+
+- The central worker UI showed `MANUAL` while also saying Central Supervisor
+  owns the process.
+- The central worker had no `worker_assignments` row, so the fleet summary kept
+  `desired_state=manual`.
+- Because the supervisor poller only heartbeats workers whose desired state is
+  `desired` or `supervised`, runtime reports could stop refreshing after a
+  manual restart even though the process was running.
+
+Change:
+
+- `OperationsService.get_fleet_overview` now promotes central workers to
+  `WorkerDesiredState.SUPERVISED` when operations mode resolves to
+  `central_supervisor` and supervisor mode is enabled.
+- Manual and disabled-supervisor modes stay manual/disabled.
+
+Verification:
+
+```bash
+backend/.venv/bin/pytest backend/tests/services/test_operations_service.py \
+  -k "central_start_when_supervisor_hardware_is_fresh"
+backend/.venv/bin/pytest backend/tests/supervisor/test_runner.py \
+  -k "refreshes_runtime_report_for_already_running_worker or refreshes_central_runtime_report_without_assignment or recovers_desired_worker_from_unknown_running_report_after_restart"
+backend/.venv/bin/pytest backend/tests/supervisor/test_reconciler.py \
+  -k "recovers_desired_worker_after_restart"
+```
+
+All three focused verification runs passed.
+
+## Current No-DeepStream Optimization Findings
+
+Jetson EDGE after the user changed scene settings:
+
+- Host: `orin1`, address used: `192.168.1.203`, SSH user `ai-user`
+- 5-sample window: 2026-06-10 08:07:08 to 08:07:36 UTC
+- `vezor-supervisor` CPU samples: about 185%, 211%, 222%, 216%, 259%
+- `vezor-supervisor` memory: about 1.56 GiB of 7.43 GiB
+- Sanitized process breakdown:
+  - supervisor runner Python: about 0.5% CPU
+  - inference Python: about 48% CPU
+  - GStreamer media process: about 90% CPU
+  - FFmpeg preview process: about 36% CPU
+- `tegrastats`: RAM about 2685 to 2700 MiB of 7607 MiB, GR3D mostly 0%,
+  temperatures about 51 C to 52 C
+- Inside the edge container, ONNX Runtime providers include
+  `TensorrtExecutionProvider`, `CUDAExecutionProvider`, and
+  `CPUExecutionProvider`
+- PyTorch CUDA is available
+- GStreamer plugin check:
+  - `nvv4l2decoder`: present
+  - `nvvidconv`: present
+  - `nvv4l2h264enc`: present
+  - `nvvideoconvert`: missing
+  - `omxh264dec`: missing
+  - `avdec_h264`: present
+  - `x264enc`: present
+
+Interpretation:
+
+- No-DeepStream optimization is possible and should target hardware
+  decode/resize/encode in the existing Python runtime.
+- The current logs can mislabel a software GStreamer fallback as native; fix
+  this before measuring PASS/FAIL.
+- Expected win is lower decode/resize/encode CPU and visible NVIDIA media/GPU
+  activity, not full DeepStream zero-copy batching.
+
+Central reference after the central worker was restarted:
+
+- Host: MacBook Pro M4 running the central stack in Linux Docker containers
+- `vezor-master-vezor-supervisor-1` CPU samples averaged about 281%
+- Process breakdown showed Python inference about 264% CPU and FFmpeg about 9%
+- ONNX Runtime providers inside the central container were
+  `AzureExecutionProvider` and `CPUExecutionProvider`
+- Runtime policy selected `CPUExecutionProvider`
+
+Interpretation:
+
+- Central can be optimized, but the current Linux Docker mode on MacBook Pro M4
+  is CPU-only.
+- Apple GPU/Neural Engine acceleration requires a separate native macOS
+  supervisor/worker lane that can probe and use CoreML outside Docker.
+- Until that lane exists and is live-smoked, central M4 GPU acceleration is
+  NOT RUN/BLOCKED, not PASS.
+
+## Known UI Runtime Display Issue
+
+The central scene's Models & Tracking step can show a valid Jetson TensorRT
+artifact because the model option currently summarizes all runtime artifacts on
+the shared model row. It does not scope the artifact summary by selected scene
+target/profile.
+
+This is display scoping, not proof the central Docker worker used TensorRT. The
+latest central runtime evidence selected ONNX Runtime CPU.
+
+Next fix should filter runtime artifact display by processing mode, assigned
+node, target profile, and selected provider.
+
+## Registry Publishing Todo
+
+Future packaging/release work is BLOCKED until a registry target and credentials
+are provided.
+
+Needed inputs:
+
+- registry host and namespace, for example GHCR, Docker Hub, or a private
+  registry
+- repository/image names for master backend, frontend, and edge images
+- authentication method, preferably an existing local `docker login` session or
+  local-only token file/environment variable
+- tag policy, such as branch SHA, release candidate, `portable-demo`, or stable
+  release tag
+
+Once available, rebuild and publish the master and edge images from the final
+committed branch. Do not rely on live container hot patches for closure.
+
+## Central Runtime Status Recommendation
+
+Central-supervisor-owned cameras should not emit `runtime_status=running` from
+central node health alone. A healthy central supervisor proves the control
+process is alive; it does not prove a specific camera worker is running.
+
+Recommended behavior:
+
+- Fleet rows should show `desired_state=supervised` when operations mode assigns
+  the scene to the central supervisor.
+- `runtime_status=running` should require a fresh per-camera runtime report from
+  the worker/supervisor poll loop.
+- If no per-camera runtime report exists, keep `runtime_status=not_reported`
+  and improve UI copy to `awaiting first heartbeat` or equivalent.
+- If a report exists but is stale, show stale/unknown rather than running.
+- Keep central node health visible separately from per-camera worker runtime
+  health.
 
 ## Current Jetson Worker Performance Snapshot
 
@@ -165,16 +330,24 @@ redact RTSP credentials and JWTs immediately, and do not commit it.
 
 ## Recommended Next Work
 
-1. If the user wants implementation, execute the DeepStream plan task-by-task
+1. Execute Task 0 in the implementation plan first: optimize the current
+   no-DeepStream Jetson Python runtime media path with failing tests, then live
+   smoke it on the Orin.
+2. Fix the runtime artifact display scoping so central scenes do not show a
+   Jetson TensorRT artifact as the effective central runtime.
+3. Add a clearer central worker `awaiting first heartbeat` UI/API presentation
+   for supervised cameras that do not yet have a per-camera runtime report.
+4. Keep central M4 acceleration as a native macOS/CoreML design lane until a
+   native worker exists; do not claim Dockerized central GPU acceleration.
+5. Provide registry target/credentials, then rebuild and publish master/edge
+   images from the final committed branch.
+6. If the user wants DeepStream implementation, execute the DeepStream tasks
    with `superpowers:subagent-driven-development` or
    `superpowers:executing-plans`.
-2. Before DeepStream, a narrower optimization option is to add hardware
-   decode/resize/encode support to the current edge worker:
-   `nvv4l2decoder`, `nvvidconv`/`nvvideoconvert`, and `nvv4l2h264enc`.
-3. For any worker performance change, write a regression/performance smoke that
+7. For any worker performance change, write a regression/performance smoke that
    captures CPU, memory, GR3D, frame rate, and stream availability before and
    after the change.
-4. Do not mark DeepStream, TensorRT, billing, evidence, RTSP, or fresh-stack
+8. Do not mark DeepStream, TensorRT, billing, evidence, RTSP, or fresh-stack
    behavior as PASS without live evidence.
 
 ## Secrets And Safety

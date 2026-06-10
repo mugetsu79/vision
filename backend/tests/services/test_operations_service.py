@@ -787,6 +787,7 @@ async def test_fleet_overview_allows_central_start_when_supervisor_hardware_is_f
 
     worker = response.camera_workers[0]
     assert response.mode == "supervised"
+    assert worker.desired_state == WorkerDesiredState.SUPERVISED
     assert worker.lifecycle_owner == "central_supervisor"
     assert worker.dev_run_command is None
     assert OperationsLifecycleAction.START in worker.allowed_lifecycle_actions
