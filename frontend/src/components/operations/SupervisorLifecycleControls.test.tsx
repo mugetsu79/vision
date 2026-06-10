@@ -36,6 +36,7 @@ function supervisedWorker(overrides: Partial<Worker> = {}): Worker {
     processing_mode: "edge",
     desired_state: "supervised",
     runtime_status: "running",
+    runtime_presentation: "running",
     lifecycle_owner: "edge_supervisor",
     dev_run_command: null,
     detail: "Edge supervisor owns this worker process.",
