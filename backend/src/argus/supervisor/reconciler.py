@@ -368,7 +368,8 @@ def _restart_policy_allows_recovery(worker: FleetCameraWorkerSummary) -> bool:
         }:
             return True
         if (
-            worker.runtime_status is WorkerRuntimeStatus.RUNNING
+            worker.runtime_status
+            in {WorkerRuntimeStatus.RUNNING, WorkerRuntimeStatus.STARTING}
             and runtime_report.runtime_state is WorkerRuntimeState.RUNNING
         ):
             return True

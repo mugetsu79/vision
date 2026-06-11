@@ -24,21 +24,28 @@ export function TelemetryTerrain({
   const { buckets, latestValues, loading, error } = useLiveSparkline(cameraId);
 
   const rankedRows = useMemo<SignalCountRow[]>(() => {
-    if (signalRows.length > 0) {
-      return signalRows.slice(0, 3);
+    const rowsByClass = new Map(
+      signalRows.map((row) => [row.className, row] as const),
+    );
+
+    for (const className of activeClasses) {
+      if (rowsByClass.has(className)) {
+        continue;
+      }
+      rowsByClass.set(className, {
+        className,
+        color: colorForClass(className),
+        liveCount: 0,
+        heldCount: 0,
+        totalCount: 0,
+        state: "held",
+      });
     }
 
-    return activeClasses.slice(0, 3).map((className) => ({
-      className,
-      color: colorForClass(className),
-      liveCount: 0,
-      heldCount: 0,
-      totalCount: 0,
-      state: "held",
-    }));
+    return Array.from(rowsByClass.values());
   }, [activeClasses, signalRows]);
 
-  const trendRows = rankedRows.slice(0, 3).map((row) => ({
+  const displayRows = rankedRows.map((row) => ({
     row,
     latestValue: latestValues[row.className] ?? 0,
   })).map(({ row, latestValue }) => {
@@ -52,6 +59,7 @@ export function TelemetryTerrain({
       ),
     };
   });
+  const trendRows = displayRows.slice(0, 3);
   const primaryTrend = trendRows[0];
   const terrainId = `telemetry-terrain-${sanitizeId(cameraId)}`;
 
@@ -86,7 +94,7 @@ export function TelemetryTerrain({
           Signal trend
         </h3>
         <div className="flex flex-wrap justify-end gap-1.5">
-          {trendRows.map(({ row, currentCount }) => (
+          {displayRows.map(({ row, currentCount }) => (
             <span
               key={row.className}
               className="inline-flex items-center gap-1 rounded border border-white/10 px-1.5 py-0.5 text-[11px] font-medium"
@@ -160,7 +168,7 @@ export function TelemetryTerrain({
       </div>
 
       <div className="grid gap-2 sm:grid-cols-3">
-        {trendRows.map(({ row, currentCount }) => {
+        {displayRows.map(({ row, currentCount }) => {
           return (
             <div
               key={row.className}

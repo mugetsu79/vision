@@ -103,6 +103,31 @@ def test_engine_detector_uses_artifact_classes_when_result_names_are_missing() -
     assert detections[0].class_name == "forklift"
 
 
+def test_engine_detector_uses_artifact_classes_when_engine_names_are_placeholders() -> None:
+    model = _FakeModel(
+        [
+            _result(
+                xyxy=[[1, 2, 3, 4]],
+                conf=[0.8],
+                cls=[0],
+                names={0: "class0"},
+            )
+        ]
+    )
+    detector = UltralyticsEngineDetector(
+        _artifact(classes=["person"]),
+        model_loader=lambda path: model,
+    )
+
+    detections = detector.detect(
+        np.zeros((8, 8, 3), dtype=np.uint8),
+        allowed_classes=["person"],
+    )
+
+    assert len(detections) == 1
+    assert detections[0].class_name == "person"
+
+
 def test_engine_detector_empty_results_return_empty_list() -> None:
     detector = UltralyticsEngineDetector(_artifact(), model_loader=lambda path: _FakeModel([]))
 

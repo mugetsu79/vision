@@ -108,11 +108,17 @@ def _class_name(
     artifact_classes: list[str],
 ) -> str:
     name = names.get(class_id)
+    if _is_placeholder_class_name(name, class_id) and class_id < len(artifact_classes):
+        return str(artifact_classes[class_id])
     if name is not None:
         return str(name)
     if class_id < len(artifact_classes):
         return str(artifact_classes[class_id])
     return str(class_id)
+
+
+def _is_placeholder_class_name(name: object, class_id: int) -> bool:
+    return str(name).strip().lower() == f"class{class_id}"
 
 
 def _to_numpy(value: Any, *, dtype: type[np.floating[Any]]) -> NDArray[np.float32]:

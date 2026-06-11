@@ -226,6 +226,63 @@ async def test_reconciler_recovers_worker_source_profile_hash_from_report() -> N
 
 
 @pytest.mark.asyncio
+async def test_reconciler_recovers_starting_worker_when_running_report_is_orphaned() -> None:
+    tenant_id = uuid4()
+    edge_node_id = uuid4()
+    admission = _admission_response(
+        tenant_id=tenant_id,
+        camera_id=uuid4(),
+        edge_node_id=edge_node_id,
+        assignment_id=uuid4(),
+        status=ModelAdmissionStatus.RECOMMENDED,
+    )
+    worker = _fleet_worker(
+        tenant_id=tenant_id,
+        edge_node_id=edge_node_id,
+        desired_state=WorkerDesiredState.SUPERVISED,
+        runtime_status=WorkerRuntimeStatus.STARTING,
+        admission=admission,
+    )
+    worker.runtime_report = SupervisorRuntimeReportResponse(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        camera_id=worker.camera_id,
+        edge_node_id=edge_node_id,
+        assignment_id=worker.assignment.id if worker.assignment is not None else None,
+        heartbeat_at=datetime(2026, 5, 13, 11, 50, tzinfo=UTC),
+        runtime_state=WorkerRuntimeState.RUNNING,
+        restart_count=0,
+        last_error=None,
+        runtime_artifact_id=admission.runtime_artifact_id,
+        scene_contract_hash="a" * 64,
+        source_profile_hash="b" * 64,
+        selected_provider=admission.selected_backend,
+        media_pipeline_mode="jetson_gstreamer_native",
+        media_capture_backend="gstreamer_appsink",
+        encoder_mode="software",
+        created_at=datetime(2026, 5, 13, 11, 50, tzinfo=UTC),
+    )
+    worker.restart_policy = "on_failure"
+    operations = _FakeSupervisorOperations(requests=[], admission=admission)
+    adapter = _FakeProcessAdapter()
+    reconciler = SupervisorReconciler(
+        operations=operations,
+        process_adapter=adapter,
+        tenant_id=tenant_id,
+        supervisor_id="edge-supervisor-1",
+        edge_node_id=edge_node_id,
+    )
+
+    processed = await reconciler.reconcile_once(fleet=_fleet_overview(worker))
+
+    assert processed == 1
+    assert adapter.calls == [("start", worker.camera_id)]
+    assert operations.admission_evaluations == [worker.camera_id]
+    assert operations.runtime_reports[0]["camera_id"] == worker.camera_id
+    assert operations.runtime_reports[0]["request_payload"]["source_profile_hash"] == "b" * 64
+
+
+@pytest.mark.asyncio
 async def test_reconciler_does_not_recover_artifact_for_non_artifact_provider() -> None:
     tenant_id = uuid4()
     artifact_id = uuid4()

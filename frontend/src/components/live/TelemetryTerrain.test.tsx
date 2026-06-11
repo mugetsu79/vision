@@ -120,6 +120,24 @@ describe("TelemetryTerrain", () => {
     expect(within(terrain).getByTestId("signal-lane-car")).toHaveTextContent("1");
   });
 
+  test("renders every configured active class when no tracks have reported yet", () => {
+    render(
+      <TelemetryTerrain
+        cameraId="camera-1"
+        cameraName="North Gate"
+        activeClasses={["car", "truck", "bus", "motorcycle", "person"]}
+        signalRows={[]}
+      />,
+    );
+
+    const terrain = screen.getByTestId("telemetry-terrain");
+    expect(within(terrain).getByTestId("signal-lane-car")).toBeInTheDocument();
+    expect(within(terrain).getByTestId("signal-lane-truck")).toBeInTheDocument();
+    expect(within(terrain).getByTestId("signal-lane-bus")).toBeInTheDocument();
+    expect(within(terrain).getByTestId("signal-lane-motorcycle")).toBeInTheDocument();
+    expect(within(terrain).getByTestId("signal-lane-person")).toBeInTheDocument();
+  });
+
   test("renders live-now activity when history buckets are empty for an active class", () => {
     const rows: SignalCountRow[] = [
       {
