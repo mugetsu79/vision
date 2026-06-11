@@ -10,11 +10,12 @@ from argus.vision.types import BoundingBox, Detection
 TrackLifecycleState = Literal["tentative", "active", "coasting", "lost"]
 PublishedTrackState = Literal["active", "coasting"]
 CandidateContextTrackState = Literal["tentative", "active", "coasting"]
+DEFAULT_TRACK_COAST_TTL_MS = 2_500
 
 
 @dataclass(frozen=True, slots=True)
 class TrackLifecycleConfig:
-    coast_ttl_ms: int = 2_500
+    coast_ttl_ms: int = DEFAULT_TRACK_COAST_TTL_MS
     tentative_hits: int = 2
     instant_activation_confidence: float = 0.75
     duplicate_iou_threshold: float = 0.60

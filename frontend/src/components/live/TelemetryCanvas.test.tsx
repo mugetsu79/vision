@@ -188,7 +188,7 @@ describe("TelemetryCanvas", () => {
       camera_id: "11111111-1111-1111-1111-111111111111",
       ts: "2026-04-19T09:15:00Z",
       profile: "central-gpu",
-      stream_mode: "filtered-preview",
+      stream_mode: "passthrough",
       stream_profile_id: "native",
       counts: { bus: 1, car: 1 },
       tracks: [
@@ -256,6 +256,43 @@ describe("TelemetryCanvas", () => {
           frame={frame}
           activeClasses={null}
           sourceSize={{ width: 640, height: 360 }}
+        />
+      </div>,
+    );
+
+    await waitFor(() => expect(clearRectMock).toHaveBeenCalled());
+    expect(strokeRectMock).not.toHaveBeenCalled();
+    expect(fillTextMock).not.toHaveBeenCalled();
+  });
+
+  test("does not fall back to raw frame overlays on filtered preview streams", async () => {
+    const frame: TelemetryFrame = {
+      camera_id: "11111111-1111-1111-1111-111111111111",
+      ts: "2026-04-19T09:15:00Z",
+      profile: "jetson-nano",
+      stream_mode: "filtered-preview",
+      stream_profile_id: "720p20",
+      counts: { person: 1 },
+      tracks: [
+        {
+          class_name: "person",
+          confidence: 0.93,
+          bbox: { x1: 640, y1: 240, x2: 960, y2: 620 },
+          track_id: 3,
+          speed_kph: 0,
+          direction_deg: null,
+          zone_id: null,
+          attributes: {},
+        },
+      ],
+    };
+
+    render(
+      <div style={{ width: 640, height: 360 }}>
+        <TelemetryCanvas
+          frame={frame}
+          activeClasses={null}
+          sourceSize={{ width: 1280, height: 720 }}
         />
       </div>,
     );
@@ -379,6 +416,80 @@ describe("TelemetryCanvas", () => {
     expect(strokeRectMock).toHaveBeenCalledWith(320, 120, 160, 190);
   });
 
+  test("prefers the frame source size over the camera source size", async () => {
+    const frame: TelemetryFrame = {
+      camera_id: "11111111-1111-1111-1111-111111111111",
+      ts: "2026-04-19T09:15:00Z",
+      profile: "central-gpu",
+      stream_mode: "passthrough",
+      stream_profile_id: "native",
+      source_size: { width: 1280, height: 720 },
+      counts: { person: 1 },
+      tracks: [
+        {
+          class_name: "person",
+          confidence: 0.93,
+          bbox: { x1: 640, y1: 240, x2: 960, y2: 620 },
+          track_id: 3,
+          speed_kph: 0,
+          direction_deg: null,
+          zone_id: null,
+          attributes: {},
+        },
+      ],
+    };
+
+    render(
+      <div style={{ width: 640, height: 360 }}>
+        <TelemetryCanvas
+          frame={frame}
+          activeClasses={null}
+          sourceSize={{ width: 2304, height: 1296 }}
+        />
+      </div>,
+    );
+
+    await waitFor(() => expect(strokeRectMock).toHaveBeenCalled());
+    expect(strokeRectMock).toHaveBeenCalledWith(320, 120, 160, 190);
+  });
+
+  test("does not draw a center endpoint dot for default frame overlays", async () => {
+    const frame: TelemetryFrame = {
+      camera_id: "11111111-1111-1111-1111-111111111111",
+      ts: "2026-04-19T09:15:00Z",
+      profile: "central-gpu",
+      stream_mode: "passthrough",
+      stream_profile_id: "native",
+      counts: { person: 1 },
+      tracks: [
+        {
+          class_name: "person",
+          confidence: 0.93,
+          bbox: { x1: 100, y1: 100, x2: 200, y2: 200 },
+          track_id: 3,
+          stable_track_id: 3,
+          speed_kph: 0,
+          direction_deg: null,
+          zone_id: null,
+          attributes: {},
+        },
+      ],
+    };
+
+    render(
+      <div style={{ width: 640, height: 360 }}>
+        <TelemetryCanvas
+          frame={frame}
+          activeClasses={null}
+          sourceSize={{ width: 400, height: 300 }}
+        />
+      </div>,
+    );
+
+    await waitFor(() => expect(strokeRectMock).toHaveBeenCalled());
+    expect(arcMock).not.toHaveBeenCalled();
+  });
+
   test("draws scalable motion trails between stable object centers", async () => {
     const firstFrame: TelemetryFrame = {
       camera_id: "11111111-1111-1111-1111-111111111111",
@@ -427,7 +538,6 @@ describe("TelemetryCanvas", () => {
 
     moveToMock.mockClear();
     lineToMock.mockClear();
-    arcMock.mockClear();
 
     view.rerender(
       <div style={{ width: 640, height: 360 }}>
@@ -443,7 +553,6 @@ describe("TelemetryCanvas", () => {
     await waitFor(() => expect(lineToMock).toHaveBeenCalled());
     expect(moveToMock).toHaveBeenCalledWith(260, 180);
     expect(lineToMock).toHaveBeenCalledWith(380, 204);
-    expect(arcMock).toHaveBeenCalledWith(380, 204, expect.any(Number), 0, Math.PI * 2);
   });
 
   test("moves labels below top-band boxes to avoid stream status collisions", async () => {

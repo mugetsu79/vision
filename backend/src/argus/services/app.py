@@ -2113,7 +2113,8 @@ class OperationsService:
                 self.settings,
             )
             if (
-                runtime_report is not None
+                not assignment_removed
+                and runtime_report is not None
                 and current_source_profile_hash is not None
                 and runtime_report.source_profile_hash != current_source_profile_hash
             ):
@@ -2125,7 +2126,9 @@ class OperationsService:
             runtime_presentation = _fleet_worker_runtime_presentation(
                 runtime_status=runtime,
                 runtime_report=runtime_report,
-                current_source_profile_hash=current_source_profile_hash,
+                current_source_profile_hash=(
+                    None if assignment_removed else current_source_profile_hash
+                ),
             )
             controls = None
             if self.runtime_configuration is not None and not assignment_removed:
@@ -2170,7 +2173,10 @@ class OperationsService:
                         "Central supervisor owns this worker process; "
                         "awaiting first per-camera heartbeat."
                     )
-            if runtime_presentation == "awaiting_profile_heartbeat":
+            if (
+                not assignment_removed
+                and runtime_presentation == "awaiting_profile_heartbeat"
+            ):
                 detail = (
                     "Worker is awaiting a fresh per-camera heartbeat for the current "
                     "source profile."

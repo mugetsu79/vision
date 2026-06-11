@@ -8018,6 +8018,10 @@ export interface components {
                 [key: string]: number;
             };
             profile: components["schemas"]["PublishProfile"];
+            /** Source Size */
+            source_size?: {
+                [key: string]: number;
+            } | null;
             stream_mode: components["schemas"]["StreamMode"];
             /**
              * Stream Profile Id

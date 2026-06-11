@@ -102,7 +102,7 @@ from argus.vision.detector_factory import build_detector as _build_detector
 from argus.vision.frames import is_captured_frame
 from argus.vision.homography import Homography
 from argus.vision.privacy import PrivacyConfig, PrivacyFilter
-from argus.vision.profiles import resolve_scene_vision_profile
+from argus.vision.profiles import ResolvedSceneVisionProfile, resolve_scene_vision_profile
 from argus.vision.rules import RuleDefinition, RuleEngine, RuleEventRecord, RuleStore
 from argus.vision.runtime import (
     RuntimeExecutionPolicy,
@@ -110,7 +110,12 @@ from argus.vision.runtime import (
     resolve_execution_policy,
 )
 from argus.vision.runtime_selection import RuntimeSelection, select_runtime_artifact
-from argus.vision.track_lifecycle import LifecycleTrack, TrackLifecycleManager
+from argus.vision.track_lifecycle import (
+    DEFAULT_TRACK_COAST_TTL_MS,
+    LifecycleTrack,
+    TrackLifecycleConfig,
+    TrackLifecycleManager,
+)
 from argus.vision.tracker import TrackerConfig, create_tracker
 from argus.vision.types import Detection
 from argus.vision.vocabulary import hash_vocabulary
@@ -147,6 +152,10 @@ _COASTING_ANNOTATION_COLORS_BGR: dict[str, tuple[int, int, int]] = {
 }
 _DEFAULT_COASTING_ANNOTATION_COLOR_BGR = (140, 154, 178)
 _DASHED_BOX_SEGMENT_PX = 8
+_COASTING_VISUAL_GRACE_MS = 700
+_TRACK_LIFECYCLE_BASE_MEMORY_FRAMES = 24
+_TRACK_LIFECYCLE_MIN_COAST_TTL_MS = 500
+_TRACK_LIFECYCLE_MAX_COAST_TTL_MS = 5_000
 _TIMEOUT_ERRORS: tuple[type[BaseException], ...] = (TimeoutError,)
 _asyncio_timeout_error = getattr(asyncio, "TimeoutError", None)
 if (
@@ -366,7 +375,11 @@ class Tracker(Protocol):
 
 
 class TrackerFactory(Protocol):
-    def __call__(self, tracker_type: TrackerType) -> Tracker: ...
+    def __call__(
+        self,
+        tracker_type: TrackerType,
+        tracker_config: TrackerConfig | None = None,
+    ) -> Tracker: ...
 
 
 class Publisher(Protocol):
@@ -876,6 +889,80 @@ def _capture_fps_cap(camera_fps_cap: int, stream_fps: int) -> int:
     return min(camera_fps_cap, stream_fps)
 
 
+def _tracker_config_from_resolved_profile(
+    config: EngineConfig,
+    tracker_type: TrackerType,
+    resolved_profile: ResolvedSceneVisionProfile,
+) -> TrackerConfig:
+    frame_rate = max(1, int(config.tracker.frame_rate))
+    memory_frames = resolved_profile.candidate_quality.memory_frames
+    use_difficult_profile = (
+        tracker_type is TrackerType.BOTSORT
+        and (
+            resolved_profile.tracker.appearance_ready
+            or resolved_profile.tracker.new_track_min_hits >= 3
+            or memory_frames > _TRACK_LIFECYCLE_BASE_MEMORY_FRAMES
+        )
+    )
+    scene_profile = "difficult" if use_difficult_profile else "efficient"
+    return TrackerConfig.for_scene_profile(
+        scene_profile,
+        tracker_type=tracker_type,
+        frame_rate=frame_rate,
+    )
+
+
+def _track_lifecycle_config_from_resolved_profile(
+    config: EngineConfig,
+    resolved_profile: ResolvedSceneVisionProfile,
+) -> TrackLifecycleConfig:
+    del config
+    memory_frames = max(1, int(resolved_profile.candidate_quality.memory_frames))
+    coast_ttl_ms = round(
+        DEFAULT_TRACK_COAST_TTL_MS
+        * memory_frames
+        / _TRACK_LIFECYCLE_BASE_MEMORY_FRAMES
+    )
+    coast_ttl_ms = min(
+        max(coast_ttl_ms, _TRACK_LIFECYCLE_MIN_COAST_TTL_MS),
+        _TRACK_LIFECYCLE_MAX_COAST_TTL_MS,
+    )
+    return TrackLifecycleConfig(
+        coast_ttl_ms=coast_ttl_ms,
+        tentative_hits=max(1, int(resolved_profile.tracker.new_track_min_hits)),
+    )
+
+
+def _call_tracker_factory(
+    tracker_factory: TrackerFactory,
+    tracker_type: TrackerType,
+    tracker_config: TrackerConfig,
+) -> Tracker:
+    try:
+        parameters = inspect.signature(tracker_factory).parameters
+    except (TypeError, ValueError):
+        return tracker_factory(tracker_type, tracker_config)
+
+    accepts_config = False
+    positional_parameters = 0
+    for parameter in parameters.values():
+        if parameter.kind is inspect.Parameter.VAR_POSITIONAL:
+            accepts_config = True
+            break
+        if parameter.kind in {
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        }:
+            positional_parameters += 1
+        if parameter.kind is inspect.Parameter.KEYWORD_ONLY and parameter.name == "tracker_config":
+            accepts_config = True
+            break
+    accepts_config = accepts_config or positional_parameters >= 2
+    if accepts_config:
+        return tracker_factory(tracker_type, tracker_config)
+    return tracker_factory(tracker_type)
+
+
 class InferenceEngine:
     def __init__(
         self,
@@ -956,8 +1043,8 @@ class InferenceEngine:
             vision_profile=vision_profile,
             detection_regions=list(config.detection_regions),
         )
-        self._tracker = self._tracker_factory(self._state.tracker_type)
-        self._track_lifecycle = TrackLifecycleManager()
+        self._tracker = self._build_tracker(self._state.tracker_type)
+        self._track_lifecycle = self._build_track_lifecycle()
         self._candidate_quality_gate = CandidateQualityGate.from_profile_candidate_quality(
             self._resolved_vision_profile.candidate_quality,
         )
@@ -1026,6 +1113,21 @@ class InferenceEngine:
                 await close_result
         await self.publisher.close()
         self.frame_source.close()
+
+    def _build_tracker(self, tracker_type: TrackerType) -> Tracker:
+        tracker_config = _tracker_config_from_resolved_profile(
+            self.config,
+            tracker_type,
+            self._resolved_vision_profile,
+        )
+        return _call_tracker_factory(self._tracker_factory, tracker_type, tracker_config)
+
+    def _build_track_lifecycle(self) -> TrackLifecycleManager:
+        lifecycle_config = _track_lifecycle_config_from_resolved_profile(
+            self.config,
+            self._resolved_vision_profile,
+        )
+        return TrackLifecycleManager(lifecycle_config)
 
     async def _maybe_record_runtime_report(
         self,
@@ -1230,7 +1332,7 @@ class InferenceEngine:
         tracked = self._tracker.update(quality_filtered, frame=processed)
         stage_timer.record_stage("track", ended_at=loop.time())
         if (
-            self._state.vision_profile.motion_metrics.speed_enabled
+            self._resolved_vision_profile.motion_metrics.speed_enabled
             and self.homography is not None
         ):
             tracked = self._apply_speed(tracked, ts=current_ts)
@@ -1329,6 +1431,7 @@ class InferenceEngine:
                 else StreamMode.PASSTHROUGH
             ),
             stream_profile_id=self.config.stream.profile_id,
+            source_size=_source_size_for_frame(processed),
             counts=_counts_by_lifecycle_tracks(stable_tracks),
             tracks=[_telemetry_track_from_lifecycle_track(track) for track in stable_tracks],
         )
@@ -1469,8 +1572,9 @@ class InferenceEngine:
                     )
         if command.tracker_type is not None and command.tracker_type != self._state.tracker_type:
             self._state.tracker_type = command.tracker_type
-            self._tracker = self._tracker_factory(command.tracker_type)
-            self._track_lifecycle.reset()
+            self._tracker = self._build_tracker(command.tracker_type)
+            self._track_lifecycle = self._build_track_lifecycle()
+            self._track_history.clear()
             self._count_event_processor = self._build_count_event_processor()
         elif visible_classes_before != self._visible_class_key():
             self._track_lifecycle.reset()
@@ -1565,6 +1669,9 @@ class InferenceEngine:
             self._candidate_quality_gate = CandidateQualityGate.from_profile_candidate_quality(
                 self._resolved_vision_profile.candidate_quality,
             )
+            self._tracker = self._build_tracker(self._state.tracker_type)
+            self._track_lifecycle = self._build_track_lifecycle()
+            self._track_history.clear()
 
     @property
     def active_classes(self) -> list[str]:
@@ -1715,7 +1822,7 @@ class InferenceEngine:
     def _record_motion_speed_disabled(self) -> None:
         reason = (
             "profile_disabled"
-            if not self._state.vision_profile.motion_metrics.speed_enabled
+            if not self._resolved_vision_profile.motion_metrics.speed_enabled
             else "missing_homography"
         )
         MOTION_SPEED_DISABLED_TOTAL.labels(
@@ -1759,7 +1866,7 @@ class InferenceEngine:
         return enriched
 
     def _apply_speed(self, detections: list[Detection], *, ts: datetime) -> list[Detection]:
-        if not self._state.vision_profile.motion_metrics.speed_enabled:
+        if not self._resolved_vision_profile.motion_metrics.speed_enabled:
             return [detection.with_updates(speed_kph=None) for detection in detections]
         if self.homography is None:
             return [detection.with_updates(speed_kph=None) for detection in detections]
@@ -1833,7 +1940,7 @@ class InferenceEngine:
             detection = track.detection
             x1, y1, x2, y2 = (int(value) for value in detection.bbox)
             color = _annotation_color_for_track(track)
-            if track.state == "coasting":
+            if _track_is_visually_held(track):
                 _draw_dashed_rectangle(
                     frame,
                     top_left=(x1, y1),
@@ -2252,12 +2359,17 @@ async def build_runtime_engine(
         runtime_selection=runtime_selection,
     )
 
-    def tracker_factory(tracker_type: TrackerType) -> Tracker:
-        tracker_config = TrackerConfig(
-            tracker_type=tracker_type,
-            frame_rate=config.tracker.frame_rate,
+    def tracker_factory(
+        tracker_type: TrackerType,
+        tracker_config: TrackerConfig | None = None,
+    ) -> Tracker:
+        return create_tracker(
+            tracker_config
+            or TrackerConfig(
+                tracker_type=tracker_type,
+                frame_rate=config.tracker.frame_rate,
+            )
         )
-        return create_tracker(tracker_config)
 
     if config.secondary_model is not None:
         attribute_classifier = AttributeClassifier(
@@ -2477,7 +2589,7 @@ def _rule_definitions_from_worker_rules(
 
 def _annotation_color_for_track(track: LifecycleTrack) -> tuple[int, int, int]:
     class_name = track.detection.class_name.strip().lower()
-    if track.state == "coasting":
+    if _track_is_visually_held(track):
         return _COASTING_ANNOTATION_COLORS_BGR.get(
             class_name,
             _DEFAULT_COASTING_ANNOTATION_COLOR_BGR,
@@ -2490,10 +2602,17 @@ def _annotation_color_for_track(track: LifecycleTrack) -> tuple[int, int, int]:
 
 def _annotation_label_for_track(track: LifecycleTrack) -> str:
     class_name = track.detection.class_name
-    if track.state != "coasting":
+    if not _track_is_visually_held(track):
         return class_name
     age_seconds = max(0.0, track.last_seen_age_ms / 1000.0)
     return f"{class_name} held {age_seconds:.1f}s"
+
+
+def _track_is_visually_held(track: LifecycleTrack) -> bool:
+    return (
+        track.state == "coasting"
+        and track.last_seen_age_ms > _COASTING_VISUAL_GRACE_MS
+    )
 
 
 def _draw_dashed_rectangle(
@@ -2557,6 +2676,15 @@ def _counts_by_lifecycle_tracks(tracks: list[LifecycleTrack]) -> dict[str, int]:
         class_name = track.detection.class_name
         counts[class_name] = counts.get(class_name, 0) + 1
     return counts
+
+
+def _source_size_for_frame(frame: Frame) -> dict[str, int] | None:
+    if len(frame.shape) < 2:
+        return None
+    height, width = frame.shape[:2]
+    if width <= 0 or height <= 0:
+        return None
+    return {"width": int(width), "height": int(height)}
 
 
 def _privacy_detections_for_stream(

@@ -51,6 +51,7 @@ class TelemetryFrame(BaseModel):
     profile: PublishProfile
     stream_mode: StreamMode
     stream_profile_id: str = "native"
+    source_size: dict[str, int] | None = None
     counts: dict[str, int]
     tracks: list[TelemetryTrack]
 

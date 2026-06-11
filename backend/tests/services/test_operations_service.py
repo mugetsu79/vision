@@ -507,6 +507,98 @@ async def test_fleet_overview_removed_assignment_suppresses_worker_owner() -> No
 
 
 @pytest.mark.asyncio
+async def test_fleet_overview_removed_assignment_does_not_await_profile_heartbeat() -> None:
+    tenant_id = uuid4()
+    site = _site(tenant_id)
+    camera_id = uuid4()
+    camera = Camera(
+        id=camera_id,
+        site_id=site.id,
+        edge_node_id=None,
+        name="Central Room",
+        rtsp_url_encrypted="encrypted-rtsp-url",
+        source_config={
+            "kind": "rtsp",
+            "capture_uri": "rtsp://current-camera/live",
+            "redacted_uri": "rtsp://***@current-camera/live",
+        },
+        processing_mode=ProcessingMode.CENTRAL,
+        primary_model_id=uuid4(),
+        secondary_model_id=None,
+        tracker_type=TrackerType.BYTETRACK,
+        active_classes=["person"],
+        attribute_rules=[],
+        zones=[],
+        homography=None,
+        privacy={},
+        browser_delivery={
+            "default_profile": "720p20",
+            "allow_native_on_demand": True,
+            "profiles": [
+                {"id": "720p20", "kind": "transcode", "w": 1280, "h": 720, "fps": 20}
+            ],
+        },
+        source_capability={"width": 1280, "height": 720, "fps": 20, "codec": "h264"},
+        frame_skip=1,
+        fps_cap=25,
+    )
+    assignment = WorkerAssignment(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        camera_id=camera.id,
+        edge_node_id=None,
+        desired_state=WorkerDesiredState.NOT_DESIRED.value,
+        active=True,
+        supersedes_assignment_id=None,
+        assigned_by_subject="operator-1",
+        created_at=datetime.now(tz=UTC),
+        updated_at=datetime.now(tz=UTC),
+    )
+    runtime_report = WorkerRuntimeReport(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        camera_id=camera_id,
+        edge_node_id=None,
+        assignment_id=assignment.id,
+        heartbeat_at=datetime.now(tz=UTC),
+        runtime_state=WorkerRuntimeState.STOPPED,
+        restart_count=0,
+        last_error=None,
+        runtime_artifact_id=None,
+        scene_contract_hash=None,
+        source_profile_hash="f" * 64,
+        created_at=datetime.now(tz=UTC),
+    )
+    session_factory = _FakeSessionFactory([], [(camera, site)], [], [], [])
+    service = OperationsService(
+        session_factory=session_factory,
+        settings=Settings(_env_file=None),
+        supervisor_operations=_FakeSupervisorOperations(
+            assignments_by_camera={camera.id: assignment},
+            runtime_reports_by_camera={camera.id: runtime_report},
+        ),
+        runtime_configuration=_FakeRuntimeConfiguration(
+            {
+                "lifecycle_owner": "central_supervisor",
+                "supervisor_mode": "polling",
+                "restart_policy": "on_failure",
+            }
+        ),
+    )
+
+    response = await service.get_fleet_overview(_tenant_context(tenant_id))
+
+    worker = response.camera_workers[0]
+    assert worker.desired_state == WorkerDesiredState.NOT_DESIRED
+    assert worker.runtime_status == WorkerRuntimeStatus.OFFLINE
+    assert worker.runtime_presentation == "failed"
+    assert worker.lifecycle_owner == "none"
+    assert worker.detail == (
+        "Worker assignment removed. Assign a worker location to enable processing again."
+    )
+
+
+@pytest.mark.asyncio
 async def test_fleet_overview_uses_deployment_heartbeat_status_and_hides_duplicate_edges() -> None:
     tenant_id = uuid4()
     site = _site(tenant_id)

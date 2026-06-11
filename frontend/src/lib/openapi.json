@@ -13999,6 +13999,20 @@
           "profile": {
             "$ref": "#/components/schemas/PublishProfile"
           },
+          "source_size": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Size"
+          },
           "stream_mode": {
             "$ref": "#/components/schemas/StreamMode"
           },

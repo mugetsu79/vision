@@ -111,6 +111,48 @@ describe("live signal stability", () => {
     });
   });
 
+  test("renders short backend coasting as live and longer coasting as held", () => {
+    const shortCoast = updateSignalTracks({
+      previous: [],
+      frame: frame([
+        track("person", 12, undefined, {
+          stable_track_id: 12,
+          source_track_id: 4,
+          track_state: "coasting",
+          last_seen_age_ms: 300,
+        }),
+      ]),
+      activeClasses: null,
+      nowMs: 2_000,
+    });
+    const longCoast = updateSignalTracks({
+      previous: [],
+      frame: frame([
+        track("person", 12, undefined, {
+          stable_track_id: 12,
+          source_track_id: 4,
+          track_state: "coasting",
+          last_seen_age_ms: 900,
+        }),
+      ]),
+      activeClasses: null,
+      nowMs: 2_000,
+    });
+
+    expect(shortCoast).toHaveLength(1);
+    expect(shortCoast[0]).toMatchObject({
+      key: "person:12",
+      state: "live",
+      ageMs: 300,
+    });
+    expect(longCoast).toHaveLength(1);
+    expect(longCoast[0]).toMatchObject({
+      key: "person:12",
+      state: "held",
+      ageMs: 900,
+    });
+  });
+
   test("expires held tracks after the hold window", () => {
     const first = updateSignalTracks({
       previous: [],
@@ -171,11 +213,11 @@ describe("live signal stability", () => {
     expect(selectDrawableSignalTracks([live, held], "annotated-whip")).toEqual([]);
   });
 
-  test("draws all frontend overlays on unannotated streams", () => {
+  test("draws no frontend overlays on server filtered preview streams", () => {
     const live = signalTrack("person", 12, "live");
     const held = signalTrack("person", 13, "held");
 
-    expect(selectDrawableSignalTracks([live, held], "filtered-preview")).toEqual([live, held]);
+    expect(selectDrawableSignalTracks([live, held], "filtered-preview")).toEqual([]);
   });
 });
 

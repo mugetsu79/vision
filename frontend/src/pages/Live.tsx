@@ -61,6 +61,7 @@ type CameraResponse = components["schemas"]["CameraResponse"];
 type TelemetryFrame = components["schemas"]["TelemetryFrame"];
 type BrowserDeliverySettings = components["schemas"]["BrowserDeliverySettings"];
 type BrowserDeliveryProfile = NonNullable<BrowserDeliverySettings["profiles"]>[number];
+type SourceSize = { width: number; height: number };
 type LiveRenditionOption = {
   id: string;
   label: string;
@@ -978,7 +979,8 @@ function ScenePortalCard({
   );
   const [stagedProfile, setStagedProfile] =
     useState<string>(effectiveProfile);
-  const sourceSize = getCameraSourceSize(camera);
+  const cameraSourceSize = getCameraSourceSize(camera);
+  const sourceSize = getFrameSourceSize(frame) ?? cameraSourceSize;
   const overlayTracks = useMemo(
     () => selectDrawableSignalTracks(stableSignal.tracks, frame?.stream_mode),
     [frame?.stream_mode, stableSignal.tracks],
@@ -1583,7 +1585,7 @@ function readFrameStreamProfileId(frame: TelemetryFrame | undefined): string | n
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-function getCameraSourceSize(camera: CameraResponse): { width: number; height: number } | null {
+function getCameraSourceSize(camera: CameraResponse): SourceSize | null {
   const source = camera.source_capability;
   if (!source || source.width <= 0 || source.height <= 0) {
     return null;
@@ -1592,8 +1594,35 @@ function getCameraSourceSize(camera: CameraResponse): { width: number; height: n
   return { width: source.width, height: source.height };
 }
 
+function getFrameSourceSize(frame: TelemetryFrame | null | undefined): SourceSize | null {
+  return normalizeSourceSize(frame?.source_size);
+}
+
+function normalizeSourceSize(source: unknown): SourceSize | null {
+  if (!source || typeof source !== "object") {
+    return null;
+  }
+
+  const { width, height } = source as {
+    width?: unknown;
+    height?: unknown;
+  };
+  if (
+    typeof width === "number" &&
+    Number.isFinite(width) &&
+    width > 0 &&
+    typeof height === "number" &&
+    Number.isFinite(height) &&
+    height > 0
+  ) {
+    return { width, height };
+  }
+
+  return null;
+}
+
 function getLiveMediaGeometry(
-  sourceSize: { width: number; height: number } | null,
+  sourceSize: SourceSize | null,
 ): { aspectRatio: string; sourceWidth: number } {
   const width = sourceSize?.width ?? 1280;
   const height = sourceSize?.height ?? 720;

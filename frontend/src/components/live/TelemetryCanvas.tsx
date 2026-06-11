@@ -89,6 +89,7 @@ export function TelemetryCanvas({
 
     const source = resolveSourceSize(
       visibleSignals,
+      frameRef.current,
       sourceSizeRef.current,
     );
     const transform = resolveCoordinateTransform(width, height, source);
@@ -270,7 +271,7 @@ function drawSignalTrail(
   signal: SignalTrack,
   transform: CoordinateTransform,
 ) {
-  if (trail.length === 0) {
+  if (trail.length < 2) {
     return;
   }
 
@@ -278,30 +279,17 @@ function drawSignalTrail(
     x: projectCoordinate(point.x, transform.scaleX, transform.offsetX),
     y: projectCoordinate(point.y, transform.scaleY, transform.offsetY),
   }));
-  const latest = projected.at(-1);
-  if (!latest) {
-    return;
-  }
-
-  if (projected.length > 1) {
-    context.beginPath();
-    context.setLineDash?.(signal.state === "held" ? [3, 5] : []);
-    context.globalAlpha = signal.state === "held" ? 0.22 : 0.34;
-    context.lineWidth = 2.4;
-    context.strokeStyle = signal.color.stroke;
-    context.moveTo(projected[0].x, projected[0].y);
-    for (const point of projected.slice(1)) {
-      context.lineTo(point.x, point.y);
-    }
-    context.stroke();
-  }
 
   context.beginPath();
-  context.setLineDash?.([]);
-  context.globalAlpha = signal.state === "held" ? 0.36 : 0.82;
-  context.fillStyle = signal.color.stroke;
-  context.arc(latest.x, latest.y, signal.state === "held" ? 2.2 : 3, 0, Math.PI * 2);
-  context.fill();
+  context.setLineDash?.(signal.state === "held" ? [3, 5] : []);
+  context.globalAlpha = signal.state === "held" ? 0.22 : 0.34;
+  context.lineWidth = 2.4;
+  context.strokeStyle = signal.color.stroke;
+  context.moveTo(projected[0].x, projected[0].y);
+  for (const point of projected.slice(1)) {
+    context.lineTo(point.x, point.y);
+  }
+  context.stroke();
 }
 
 function sourceCenterForTrack(track: TelemetryFrame["tracks"][number]): TrailPoint {
@@ -337,18 +325,14 @@ function resolveVisibleSignals(
 
 function resolveSourceSize(
   visibleSignals: SignalTrack[],
+  frame: TelemetryFrame | null | undefined,
   sourceSize: SourceSize | null | undefined,
 ): ResolvedSourceSize {
-  if (
-    sourceSize &&
-    Number.isFinite(sourceSize.width) &&
-    sourceSize.width > 0 &&
-    Number.isFinite(sourceSize.height) &&
-    sourceSize.height > 0
-  ) {
+  const explicitSourceSize = readFrameSourceSize(frame) ?? normalizeSourceSize(sourceSize);
+  if (explicitSourceSize) {
     return {
-      width: sourceSize.width,
-      height: sourceSize.height,
+      width: explicitSourceSize.width,
+      height: explicitSourceSize.height,
       explicit: true,
     };
   }
@@ -364,6 +348,33 @@ function resolveSourceSize(
     ),
     explicit: false,
   };
+}
+
+function readFrameSourceSize(frame: TelemetryFrame | null | undefined): SourceSize | null {
+  return normalizeSourceSize(frame?.source_size);
+}
+
+function normalizeSourceSize(source: unknown): SourceSize | null {
+  if (!source || typeof source !== "object") {
+    return null;
+  }
+
+  const { width, height } = source as {
+    width?: unknown;
+    height?: unknown;
+  };
+  if (
+    typeof width === "number" &&
+    Number.isFinite(width) &&
+    width > 0 &&
+    typeof height === "number" &&
+    Number.isFinite(height) &&
+    height > 0
+  ) {
+    return { width, height };
+  }
+
+  return null;
 }
 
 function resolveCoordinateTransform(

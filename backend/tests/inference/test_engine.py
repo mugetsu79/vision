@@ -58,6 +58,7 @@ from argus.vision.runtime import (
 )
 from argus.vision.runtime_selection import RuntimeSelection
 from argus.vision.track_lifecycle import LifecycleTrack
+from argus.vision.tracker import TrackerConfig
 from argus.vision.types import Detection
 
 
@@ -358,6 +359,19 @@ class _RecordingTracker:
             detection.with_updates(track_id=index + 1)
             for index, detection in enumerate(detections)
         ]
+
+
+class _RecordingTrackerFactory:
+    def __init__(self) -> None:
+        self.calls: list[tuple[TrackerType, TrackerConfig | None]] = []
+
+    def __call__(
+        self,
+        tracker_type: TrackerType,
+        tracker_config: TrackerConfig | None = None,
+    ) -> _FakeTracker:
+        self.calls.append((tracker_type, tracker_config))
+        return _FakeTracker(tracker_type=tracker_type)
 
 
 class _FakePublisher:
@@ -2176,6 +2190,83 @@ async def test_engine_publishes_stable_count_and_coasting_track_after_missed_det
 
 
 @pytest.mark.asyncio
+async def test_engine_telemetry_reports_source_size_from_processed_frame() -> None:
+    camera_id = uuid4()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "model": ModelSettings(
+                name="coco",
+                path="/models/yolo26n.onnx",
+                classes=["person"],
+                input_shape={"width": 96, "height": 96},
+            ),
+            "active_classes": ["person"],
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource([np.zeros((720, 1280, 3), dtype=np.uint8)]),
+        detector=_SequenceDetector(
+            [
+                [
+                    Detection(
+                        class_name="person",
+                        confidence=0.96,
+                        bbox=(200.0, 120.0, 500.0, 680.0),
+                        class_id=0,
+                    )
+                ],
+            ]
+        ),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    telemetry = await engine.run_once(ts=datetime(2026, 5, 9, 12, 0, tzinfo=UTC))
+    await engine.close()
+
+    assert telemetry.source_size == {"width": 1280, "height": 720}
+
+
+def test_short_coasting_tracks_keep_active_annotation_label() -> None:
+    track = LifecycleTrack(
+        stable_track_id=1,
+        source_track_id=7,
+        state="coasting",
+        last_seen_age_ms=300,
+        detection=Detection(
+            class_name="person",
+            confidence=0.91,
+            bbox=(10.0, 10.0, 50.0, 90.0),
+            track_id=1,
+        ),
+    )
+
+    assert engine_module._annotation_label_for_track(track) == "person"
+
+
+def test_long_coasting_tracks_use_held_annotation_label() -> None:
+    track = LifecycleTrack(
+        stable_track_id=1,
+        source_track_id=7,
+        state="coasting",
+        last_seen_age_ms=900,
+        detection=Detection(
+            class_name="person",
+            confidence=0.91,
+            bbox=(10.0, 10.0, 50.0, 90.0),
+            track_id=1,
+        ),
+    )
+
+    assert engine_module._annotation_label_for_track(track) == "person held 0.9s"
+
+
+@pytest.mark.asyncio
 async def test_engine_keeps_coasting_track_after_noop_worker_config_refresh() -> None:
     camera_id = uuid4()
     publisher = _FakePublisher()
@@ -2233,6 +2324,85 @@ async def test_engine_keeps_coasting_track_after_noop_worker_config_refresh() ->
     assert second_track.stable_track_id == 1
     assert second_track.track_state == "coasting"
     assert second_track.last_seen_age_ms == 1000
+
+
+def test_engine_initializes_tracker_and_lifecycle_from_max_accuracy_jetson_profile() -> None:
+    camera_id = uuid4()
+    tracker_factory = _RecordingTrackerFactory()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "camera": CameraSettings(
+                rtsp_url="rtsp://camera.internal/live",
+                frame_skip=1,
+                fps_cap=18,
+            ),
+            "tracker": TrackerSettings(
+                tracker_type=TrackerType.BOTSORT,
+                frame_rate=18,
+            ),
+            "vision_profile": {
+                "accuracy_mode": "maximum_accuracy",
+                "compute_tier": "edge_advanced_jetson",
+                "scene_difficulty": "crowded",
+                "object_domain": "people",
+                "motion_metrics": {"speed_enabled": False},
+            },
+        }
+    )
+
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource([]),
+        detector=_FakeDetector(),
+        tracker_factory=tracker_factory,
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    tracker_type, tracker_config = tracker_factory.calls[0]
+    assert tracker_type is TrackerType.BOTSORT
+    assert tracker_config is not None
+    assert tracker_config.scene_profile == "difficult"
+    assert engine._track_lifecycle.config.tentative_hits == 3
+    assert engine._track_lifecycle.config.coast_ttl_ms >= 2_000
+
+
+@pytest.mark.asyncio
+async def test_engine_rebuilds_tracker_and_lifecycle_when_vision_profile_changes() -> None:
+    camera_id = uuid4()
+    tracker_factory = _RecordingTrackerFactory()
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=_FakeFrameSource([]),
+        detector=_FakeDetector(),
+        tracker_factory=tracker_factory,
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    await engine.apply_command(
+        CameraCommand(
+            vision_profile={
+                "accuracy_mode": "maximum_accuracy",
+                "compute_tier": "edge_advanced_jetson",
+                "scene_difficulty": "crowded",
+                "object_domain": "people",
+                "motion_metrics": {"speed_enabled": False},
+            }
+        )
+    )
+
+    assert len(tracker_factory.calls) == 2
+    tracker_config = tracker_factory.calls[-1][1]
+    assert tracker_config is not None
+    assert tracker_config.scene_profile == "difficult"
+    assert engine._track_lifecycle.config.tentative_hits == 3
 
 
 @pytest.mark.asyncio

@@ -8,7 +8,8 @@ type TelemetryFrame = components["schemas"]["TelemetryFrame"];
 type TelemetryTrack = components["schemas"]["TelemetryTrack"];
 
 export const DEFAULT_SIGNAL_HOLD_MS = 1_200;
-const DEFAULT_SIGNAL_LIVE_GRACE_MS = 500;
+export const DEFAULT_SIGNAL_COAST_GRACE_MS = 500;
+const DEFAULT_SIGNAL_LIVE_GRACE_MS = DEFAULT_SIGNAL_COAST_GRACE_MS;
 
 export type SignalState = "live" | "held";
 
@@ -50,6 +51,7 @@ export function updateSignalTracks({
   activeClasses,
   nowMs,
   holdMs = DEFAULT_SIGNAL_HOLD_MS,
+  coastGraceMs = DEFAULT_SIGNAL_COAST_GRACE_MS,
   liveGraceMs = DEFAULT_SIGNAL_LIVE_GRACE_MS,
 }: {
   previous: SignalTrack[];
@@ -57,6 +59,7 @@ export function updateSignalTracks({
   activeClasses: string[] | null;
   nowMs: number;
   holdMs?: number;
+  coastGraceMs?: number;
   liveGraceMs?: number;
 }): SignalTrack[] {
   const allowed = activeClasses && activeClasses.length > 0 ? new Set(activeClasses) : null;
@@ -71,7 +74,7 @@ export function updateSignalTracks({
 
     const key = trackKey(track);
     const existing = previousByKey.get(key);
-    const state = signalStateForTelemetryTrack(track);
+    const state = signalStateForTelemetryTrack(track, coastGraceMs);
     const ageMs = signalAgeMsForTelemetryTrack(track);
     nextByKey.set(key, {
       key,
@@ -170,11 +173,18 @@ export function selectDrawableSignalTracks(
 export function shouldDrawBrowserTelemetryOverlay(
   streamMode: TelemetryFrame["stream_mode"] | null | undefined,
 ): boolean {
-  return streamMode !== "annotated-whip";
+  return streamMode !== "annotated-whip" && streamMode !== "filtered-preview";
 }
 
-export function signalStateForTelemetryTrack(track: TelemetryTrack): SignalState {
-  return track.track_state === "coasting" ? "held" : "live";
+export function signalStateForTelemetryTrack(
+  track: TelemetryTrack,
+  coastGraceMs = DEFAULT_SIGNAL_COAST_GRACE_MS,
+): SignalState {
+  if (track.track_state !== "coasting") {
+    return "live";
+  }
+
+  return signalAgeMsForTelemetryTrack(track) <= coastGraceMs ? "live" : "held";
 }
 
 export function signalAgeMsForTelemetryTrack(track: TelemetryTrack): number {
