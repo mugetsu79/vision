@@ -93,6 +93,7 @@ class Settings(BaseSettings):
     metrics_namespace: str = "argus"
     enable_worker_metrics_server: bool = False
     worker_metrics_port: int = 9108
+    worker_metrics_bind_addr: str = "0.0.0.0"
     worker_diagnostics_enabled: bool = False
     worker_config_poll_interval_seconds: float = Field(default=2.0, gt=0)
     worker_runtime_report_interval_seconds: float = Field(default=10.0, gt=0)

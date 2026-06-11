@@ -32,6 +32,7 @@ from argus.supervisor.operations_client import (
     PasswordGrantTokenProvider,
     SupervisorClientError,
     SupervisorOperationsClient,
+    build_admission_request,
 )
 
 
@@ -262,6 +263,80 @@ async def test_client_calls_lifecycle_runtime_and_admission_routes() -> None:
     assert admission_body["preferred_backend"] == "CoreMLExecutionProvider"
     assert admission.status is ModelAdmissionStatus.RECOMMENDED
     assert json.loads(seen[5].content)["status"] == "completed"
+
+
+def test_admission_request_does_not_fallback_artifact_for_non_artifact_backend() -> None:
+    tenant_id = uuid4()
+    camera_id = uuid4()
+    edge_node_id = uuid4()
+    assignment_id = uuid4()
+    artifact_id = uuid4()
+    request = OperationsLifecycleRequestResponse.model_validate(
+        _lifecycle_request_json(
+            tenant_id=tenant_id,
+            camera_id=camera_id,
+            edge_node_id=edge_node_id,
+            assignment_id=assignment_id,
+            runtime_artifact_id=None,
+        )
+    )
+    fleet = FleetOverviewResponse.model_validate(
+        _fleet_overview_json(
+            tenant_id=tenant_id,
+            camera_id=camera_id,
+            edge_node_id=edge_node_id,
+            assignment_id=assignment_id,
+            runtime_artifact_id=artifact_id,
+        )
+    )
+    worker = fleet.camera_workers[0]
+    assert worker.runtime_passport is not None
+    assert worker.latest_model_admission is not None
+    worker.runtime_passport.selected_backend = "onnxruntime"
+    worker.latest_model_admission.selected_backend = "onnxruntime"
+
+    payload = build_admission_request(request, fleet=fleet)
+
+    assert payload.selected_backend == "onnxruntime"
+    assert payload.runtime_artifact_id is None
+
+
+def test_admission_request_does_not_use_stale_passport_artifact_over_latest_backend() -> None:
+    tenant_id = uuid4()
+    camera_id = uuid4()
+    edge_node_id = uuid4()
+    assignment_id = uuid4()
+    artifact_id = uuid4()
+    request = OperationsLifecycleRequestResponse.model_validate(
+        _lifecycle_request_json(
+            tenant_id=tenant_id,
+            camera_id=camera_id,
+            edge_node_id=edge_node_id,
+            assignment_id=assignment_id,
+            runtime_artifact_id=None,
+        )
+    )
+    fleet = FleetOverviewResponse.model_validate(
+        _fleet_overview_json(
+            tenant_id=tenant_id,
+            camera_id=camera_id,
+            edge_node_id=edge_node_id,
+            assignment_id=assignment_id,
+            runtime_artifact_id=artifact_id,
+        )
+    )
+    worker = fleet.camera_workers[0]
+    assert worker.runtime_passport is not None
+    assert worker.latest_model_admission is not None
+    worker.runtime_passport.selected_backend = "tensorrt_engine"
+    worker.runtime_passport.runtime_artifact_id = artifact_id
+    worker.latest_model_admission.selected_backend = "onnxruntime"
+    worker.latest_model_admission.runtime_artifact_id = None
+
+    payload = build_admission_request(request, fleet=fleet)
+
+    assert payload.selected_backend == "onnxruntime"
+    assert payload.runtime_artifact_id is None
 
 
 @pytest.mark.asyncio

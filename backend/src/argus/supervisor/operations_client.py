@@ -486,8 +486,8 @@ def build_admission_request(
     assignment = worker.assignment if worker is not None else None
     selected_backend = (
         _string(request_payload.get("selected_backend"))
-        or (passport.selected_backend if passport is not None else None)
         or (latest.selected_backend if latest is not None else None)
+        or (passport.selected_backend if passport is not None else None)
     )
     preferred_backend = (
         _string(request_payload.get("preferred_backend"))
@@ -498,6 +498,16 @@ def build_admission_request(
     stream_profile = request_payload.get("stream_profile")
     if not isinstance(stream_profile, dict):
         stream_profile = latest.stream_profile if latest is not None else {}
+    runtime_artifact_id = _uuid(request_payload.get("runtime_artifact_id"))
+    if runtime_artifact_id is None:
+        runtime_artifact_id = _fallback_runtime_artifact_id(
+            selected_backend or preferred_backend,
+            passport.runtime_artifact_id if passport is not None else None,
+            latest.runtime_artifact_id if latest is not None else None,
+        )
+    fallback_uses_runtime_artifact = _provider_uses_runtime_artifact(
+        selected_backend or preferred_backend
+    )
     return WorkerModelAdmissionRequest(
         camera_id=request.camera_id,
         edge_node_id=request.edge_node_id or (worker.node_id if worker is not None else None),
@@ -510,18 +520,28 @@ def build_admission_request(
             request_payload.get("model_capability"),
             latest.model_capability if latest is not None else None,
         ),
-        runtime_artifact_id=_uuid(request_payload.get("runtime_artifact_id"))
-        or (passport.runtime_artifact_id if passport is not None else None)
-        or (latest.runtime_artifact_id if latest is not None else None),
+        runtime_artifact_id=runtime_artifact_id,
         runtime_artifact_target_profile=_string(
             request_payload.get("runtime_artifact_target_profile")
         )
-        or (passport.target_profile if passport is not None else None),
+        or (
+            passport.target_profile
+            if fallback_uses_runtime_artifact and passport is not None
+            else None
+        ),
         runtime_selection_profile_id=_uuid(
             request_payload.get("runtime_selection_profile_id")
         )
-        or (passport.runtime_selection_profile_id if passport is not None else None)
-        or (latest.runtime_selection_profile_id if latest is not None else None),
+        or (
+            passport.runtime_selection_profile_id
+            if fallback_uses_runtime_artifact and passport is not None
+            else None
+        )
+        or (
+            latest.runtime_selection_profile_id
+            if fallback_uses_runtime_artifact and latest is not None
+            else None
+        ),
         selected_backend=selected_backend,
         preferred_backend=preferred_backend,
         stream_profile=stream_profile,
@@ -537,6 +557,22 @@ def _worker_for_camera(
         (worker for worker in fleet.camera_workers if worker.camera_id == camera_id),
         None,
     )
+
+
+def _fallback_runtime_artifact_id(
+    selected_provider: str | None,
+    *candidates: UUID | None,
+) -> UUID | None:
+    if not _provider_uses_runtime_artifact(selected_provider):
+        return None
+    return next((candidate for candidate in candidates if candidate is not None), None)
+
+
+def _provider_uses_runtime_artifact(selected_provider: str | None) -> bool:
+    if not selected_provider:
+        return False
+    normalized = selected_provider.lower()
+    return "tensorrt" in normalized or "trt" in normalized
 
 
 def _runtime_state(value: str) -> WorkerRuntimeState:

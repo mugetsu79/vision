@@ -310,23 +310,16 @@ def _runtime_report_payload_from_worker(worker: FleetCameraWorkerSummary) -> dic
     passport = worker.runtime_passport
     latest = worker.latest_model_admission
     report = worker.runtime_report
-    runtime_artifact_id = (
-        passport.runtime_artifact_id
-        if passport is not None and passport.runtime_artifact_id is not None
-        else latest.runtime_artifact_id
-        if latest is not None and latest.runtime_artifact_id is not None
-        else report.runtime_artifact_id
-        if report is not None
-        else None
-    )
     selected_provider = (
-        passport.selected_backend
-        if passport is not None and passport.selected_backend is not None
-        else latest.selected_backend
-        if latest is not None and latest.selected_backend is not None
-        else report.selected_provider
-        if report is not None
-        else None
+        (latest.selected_backend if latest is not None else None)
+        or (report.selected_provider if report is not None else None)
+        or (passport.selected_backend if passport is not None else None)
+    )
+    runtime_artifact_id = _fallback_runtime_artifact_id(
+        selected_provider,
+        passport.runtime_artifact_id if passport is not None else None,
+        latest.runtime_artifact_id if latest is not None else None,
+        report.runtime_artifact_id if report is not None else None,
     )
     return {
         "source": "desired_state_recovery",
@@ -342,6 +335,22 @@ def _runtime_report_payload_from_worker(worker: FleetCameraWorkerSummary) -> dic
         ),
         "encoder_mode": report.encoder_mode if report is not None else None,
     }
+
+
+def _fallback_runtime_artifact_id(
+    selected_provider: str | None,
+    *candidates: UUID | None,
+) -> UUID | None:
+    if not _provider_uses_runtime_artifact(selected_provider):
+        return None
+    return next((candidate for candidate in candidates if candidate is not None), None)
+
+
+def _provider_uses_runtime_artifact(selected_provider: str | None) -> bool:
+    if not selected_provider:
+        return False
+    normalized = selected_provider.lower()
+    return "tensorrt" in normalized or "trt" in normalized
 
 
 def _restart_policy_allows_recovery(worker: FleetCameraWorkerSummary) -> bool:

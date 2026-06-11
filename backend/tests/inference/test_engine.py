@@ -67,7 +67,8 @@ def test_worker_metrics_server_port_collision_is_non_fatal(
 ) -> None:
     calls: list[int] = []
 
-    def fake_start_http_server(port: int) -> None:
+    def fake_start_http_server(port: int, addr: str = "0.0.0.0") -> None:
+        del addr
         calls.append(port)
         raise OSError(errno.EADDRINUSE, "Address already in use")
 
@@ -80,10 +81,26 @@ def test_worker_metrics_server_port_collision_is_non_fatal(
     assert "Worker metrics server port 9108 is already in use" in caplog.text
 
 
+def test_worker_metrics_server_uses_configured_bind_address(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[int, str]] = []
+
+    def fake_start_http_server(port: int, addr: str = "0.0.0.0") -> None:
+        calls.append((port, addr))
+
+    monkeypatch.setattr(engine_module, "start_http_server", fake_start_http_server)
+
+    engine_module._start_worker_metrics_server(19108, addr="127.0.0.1")
+
+    assert calls == [(19108, "127.0.0.1")]
+
+
 def test_worker_metrics_server_unexpected_os_error_is_fatal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fake_start_http_server(port: int) -> None:
+    def fake_start_http_server(port: int, addr: str = "0.0.0.0") -> None:
+        del port, addr
         raise OSError(errno.EACCES, "Permission denied")
 
     monkeypatch.setattr(engine_module, "start_http_server", fake_start_http_server)

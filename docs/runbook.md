@@ -250,14 +250,22 @@ paths, for example:
   "supervisor_id": "central-macos-1",
   "role": "central",
   "api_base_url": "https://vezor.example.com",
-  "credential_store_path": "/var/lib/vezor/supervisor/credential.json",
-  "worker_metrics_url": "http://127.0.0.1:9108/metrics"
+  "credential_store_path": "/var/lib/vezor/supervisor/credential.json"
 }
 ```
 
 The pairing claim writes the credential to that local store with owner-only
 permissions. Service units, launch daemons, and production Compose services
 reference the config and credential location; they do not embed access tokens.
+
+Installed central supervisors enable per-worker metrics by default on
+supervisor-container-local loopback endpoints. These ports are for the
+supervisor to scrape child workers and must not be published on the LAN. The
+installed Compose path accepts `VEZOR_SUPERVISOR_WORKER_METRICS_*` overrides in
+`master.env` and falls back to the underlying `ARGUS_SUPERVISOR_WORKER_METRICS_*`
+runtime variables when set. The single `worker_metrics_url` config value remains
+a legacy/pilot fallback for manual runners that expose one metrics endpoint.
+
 Rotating node credentials from Control -> Deployment revokes the old credential
 version, creates the next node credential version, and returns the replacement
 material only once. Write that material through the local credential store and
@@ -368,6 +376,12 @@ The hardware-admission MVP stores two operational facts:
   samples
 - `worker_model_admission_reports`: the latest decision for a camera worker,
   including status, rationale, selected backend, and safer recommendation fields
+
+After the supervisor scrapes child worker metrics, central FPS and stage-latency
+evidence is reported through
+`edge_node_hardware_reports.observed_performance`. For troubleshooting, use
+sanitized service logs and DB/API report fields. Do not collect raw process
+arguments or paste secrets, RTSP URLs, bearer tokens, or JWTs into tickets.
 
 Central supervisors should report with a stable `supervisor_id` and no
 `edge_node_id`. Edge supervisors should report with both `supervisor_id` and

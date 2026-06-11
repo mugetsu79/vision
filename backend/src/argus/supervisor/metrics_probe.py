@@ -28,6 +28,7 @@ class WorkerMetricsContext:
     input_width: int
     input_height: int
     target_fps: float
+    metrics_url: str | None = None
 
 
 @dataclass(slots=True)
@@ -50,14 +51,18 @@ class WorkerMetricsProbe:
         self.clock = clock or (lambda: datetime.now(tz=UTC))
         self.previous_snapshot: MetricsSnapshot | None = None
         self.latest_snapshot: MetricsSnapshot | None = None
+        self.previous_snapshots: dict[str, MetricsSnapshot] = {}
 
     async def scrape(self) -> MetricsSnapshot | None:
         if not self.metrics_url:
             return None
+        return await self._scrape_url(self.metrics_url)
+
+    async def _scrape_url(self, metrics_url: str) -> MetricsSnapshot | None:
         owns_client = self.http_client is None
         client = self.http_client or httpx.AsyncClient()
         try:
-            response = await client.get(self.metrics_url, timeout=5.0)
+            response = await client.get(metrics_url, timeout=5.0)
             response.raise_for_status()
         except httpx.HTTPError:
             return None
@@ -71,18 +76,44 @@ class WorkerMetricsProbe:
         worker_contexts: Iterable[WorkerMetricsContext],
         previous_snapshot: MetricsSnapshot | None = None,
     ) -> list[HardwarePerformanceSample]:
-        snapshot = await self.scrape()
-        if snapshot is None or not snapshot.histograms:
-            return []
-        previous = previous_snapshot or self.previous_snapshot
         contexts = list(worker_contexts)
-        samples = [
-            self._sample_for_context(context, snapshot=snapshot, previous=previous)
-            for context in contexts
-        ]
-        self.previous_snapshot = snapshot
-        self.latest_snapshot = snapshot
-        return [sample for sample in samples if sample is not None]
+        contexts_by_url: dict[str, list[WorkerMetricsContext]] = {}
+        for context in contexts:
+            metrics_url = context.metrics_url or self.metrics_url
+            if not metrics_url:
+                continue
+            contexts_by_url.setdefault(metrics_url, []).append(context)
+
+        samples: list[HardwarePerformanceSample] = []
+        for metrics_url, url_contexts in contexts_by_url.items():
+            snapshot = await self._scrape_url(metrics_url)
+            if snapshot is None or not snapshot.histograms:
+                continue
+            previous = self.previous_snapshots.get(metrics_url)
+            uses_legacy_metrics_url = _uses_legacy_metrics_url(
+                metrics_url,
+                url_contexts,
+                self.metrics_url,
+            )
+            if previous is None and uses_legacy_metrics_url:
+                previous = previous_snapshot or self.previous_snapshot
+            samples.extend(
+                sample
+                for context in url_contexts
+                if (
+                    sample := self._sample_for_context(
+                        context,
+                        snapshot=snapshot,
+                        previous=previous,
+                    )
+                )
+                is not None
+            )
+            self.previous_snapshots[metrics_url] = snapshot
+            if uses_legacy_metrics_url:
+                self.previous_snapshot = snapshot
+            self.latest_snapshot = snapshot
+        return samples
 
     def _sample_for_context(
         self,
@@ -127,6 +158,18 @@ class WorkerMetricsProbe:
             stage_p99_ms=p99,
             captured_at=snapshot.captured_at,
         )
+
+
+def _uses_legacy_metrics_url(
+    metrics_url: str,
+    contexts: Iterable[WorkerMetricsContext],
+    legacy_metrics_url: str | None,
+) -> bool:
+    return (
+        legacy_metrics_url is not None
+        and metrics_url == legacy_metrics_url
+        and all(context.metrics_url is None for context in contexts)
+    )
 
 
 def parse_prometheus_metrics(text: str, *, captured_at: datetime) -> MetricsSnapshot:

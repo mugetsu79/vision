@@ -34,7 +34,7 @@ from argus.models.enums import (
     WorkerRuntimeState,
 )
 from argus.supervisor.edge_configuration import EdgeConfigurationApplyReport
-from argus.supervisor.process_adapter import WorkerProcessResult
+from argus.supervisor.process_adapter import WorkerLaunchConfig, WorkerProcessResult
 from argus.supervisor.runner import SupervisorRunner, parse_args
 
 
@@ -129,6 +129,144 @@ def test_parse_args_labels_password_grant_as_dev_only() -> None:
     assert config.auth_mode == "password_grant_dev"
 
 
+def test_parse_args_reads_worker_metrics_settings_from_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ARGUS_SUPERVISOR_WORKER_METRICS_ENABLED", "true")
+    monkeypatch.setenv("ARGUS_SUPERVISOR_WORKER_METRICS_BIND_ADDR", "0.0.0.0")
+    monkeypatch.setenv("ARGUS_SUPERVISOR_WORKER_METRICS_SCRAPE_HOST", "edge.local")
+    monkeypatch.setenv("ARGUS_SUPERVISOR_WORKER_METRICS_PORT_BASE", "19200")
+    monkeypatch.setenv("ARGUS_SUPERVISOR_WORKER_METRICS_PORT_COUNT", "17")
+
+    config = parse_args(
+        [
+            "--supervisor-id",
+            "central-imac",
+            "--role",
+            "central",
+            "--api-base-url",
+            "http://127.0.0.1:8000",
+            "--bearer-token",
+            "dev-token",
+        ]
+    )
+
+    assert config.worker_metrics_enabled is True
+    assert config.worker_metrics_bind_addr == "0.0.0.0"
+    assert config.worker_metrics_scrape_host == "edge.local"
+    assert config.worker_metrics_port_base == 19200
+    assert config.worker_metrics_port_count == 17
+
+
+def test_parse_args_rejects_invalid_worker_metrics_env_bool(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("ARGUS_SUPERVISOR_WORKER_METRICS_ENABLED", "treu")
+
+    with pytest.raises(SystemExit) as exc_info:
+        parse_args([])
+
+    assert exc_info.value.code == 2
+    assert "ARGUS_SUPERVISOR_WORKER_METRICS_ENABLED" in capsys.readouterr().err
+
+
+def test_parse_args_rejects_invalid_worker_metrics_env_int(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("ARGUS_SUPERVISOR_WORKER_METRICS_PORT_BASE", "not-a-port")
+
+    with pytest.raises(SystemExit) as exc_info:
+        parse_args([])
+
+    assert exc_info.value.code == 2
+    assert "ARGUS_SUPERVISOR_WORKER_METRICS_PORT_BASE" in capsys.readouterr().err
+
+
+def test_parse_args_config_worker_metrics_falls_back_to_cli_and_env(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("ARGUS_WORKER_METRICS_URL", "http://legacy.example/metrics")
+    config_path = tmp_path / "supervisor.json"
+    config_path.write_text(
+        """
+{
+  "supervisor_id": "central-imac",
+  "role": "central",
+  "api_base_url": "http://127.0.0.1:8000",
+  "credential_store_path": "supervisor.credential",
+  "worker_metrics_enabled": true,
+  "worker_metrics_bind_addr": "0.0.0.0",
+  "worker_metrics_scrape_host": "edge.local",
+  "worker_metrics_port_base": 19200,
+  "worker_metrics_port_count": 17
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    config = parse_args(["--config", str(config_path)])
+
+    assert config.worker_metrics_url == "http://legacy.example/metrics"
+    assert config.worker_metrics_enabled is True
+    assert config.worker_metrics_bind_addr == "0.0.0.0"
+    assert config.worker_metrics_scrape_host == "edge.local"
+    assert config.worker_metrics_port_base == 19200
+    assert config.worker_metrics_port_count == 17
+
+
+def test_parse_args_rejects_invalid_worker_metrics_config_bool(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config_path = tmp_path / "supervisor.json"
+    config_path.write_text(
+        """
+{
+  "supervisor_id": "central-imac",
+  "role": "central",
+  "api_base_url": "http://127.0.0.1:8000",
+  "credential_store_path": "supervisor.credential",
+  "worker_metrics_enabled": "treu"
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        parse_args(["--config", str(config_path)])
+
+    assert exc_info.value.code == 2
+    assert "worker_metrics_enabled" in capsys.readouterr().err
+
+
+def test_parse_args_rejects_invalid_worker_metrics_config_int(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config_path = tmp_path / "supervisor.json"
+    config_path.write_text(
+        """
+{
+  "supervisor_id": "central-imac",
+  "role": "central",
+  "api_base_url": "http://127.0.0.1:8000",
+  "credential_store_path": "supervisor.credential",
+  "worker_metrics_port_count": "a lot"
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        parse_args(["--config", str(config_path)])
+
+    assert exc_info.value.code == 2
+    assert "worker_metrics_port_count" in capsys.readouterr().err
+
+
 def test_build_runner_wires_tensorrt_builder_when_available(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -158,6 +296,50 @@ def test_build_runner_wires_tensorrt_builder_when_available(
 
     assert built.model_job_executor is not None
     assert built.model_job_executor.tensorrt_engine_builder is not None
+
+
+def test_build_runner_passes_worker_metrics_config_to_process_adapter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: list[WorkerLaunchConfig] = []
+
+    class _UnavailableTensorRTBuilder:
+        def available(self) -> bool:
+            return False
+
+    def _adapter_factory(config: WorkerLaunchConfig) -> _FakeProcessAdapter:
+        captured.append(config)
+        return _FakeProcessAdapter()
+
+    monkeypatch.setattr(
+        runner_module,
+        "TrtExecTensorRTEngineBuilder",
+        lambda: _UnavailableTensorRTBuilder(),
+    )
+    monkeypatch.setattr(runner_module, "LocalWorkerProcessAdapter", _adapter_factory)
+
+    built = runner_module.build_runner(
+        runner_module.RunnerConfig(
+            supervisor_id="central-imac",
+            role="central",
+            api_base_url="http://127.0.0.1:8000",
+            bearer_token="dev-token",
+            worker_metrics_enabled=True,
+            worker_metrics_bind_addr="0.0.0.0",
+            worker_metrics_scrape_host="edge.local",
+            worker_metrics_port_base=19200,
+            worker_metrics_port_count=17,
+        )
+    )
+
+    assert built.process_adapter is not None
+    assert len(captured) == 1
+    metrics = captured[0].worker_metrics
+    assert metrics.enabled is True
+    assert metrics.bind_addr == "0.0.0.0"
+    assert metrics.scrape_host == "edge.local"
+    assert metrics.port_base == 19200
+    assert metrics.port_count == 17
 
 
 @pytest.mark.asyncio
@@ -376,6 +558,36 @@ async def test_runner_includes_metrics_derived_performance_samples() -> None:
     await runner.run_once()
 
     assert operations.hardware_reports[0].observed_performance == [sample]
+
+
+@pytest.mark.asyncio
+async def test_runner_passes_adapter_metrics_urls_to_probe_contexts() -> None:
+    tenant_id = uuid4()
+    worker = _fleet_worker(
+        tenant_id=tenant_id,
+        edge_node_id=None,
+        desired_state=WorkerDesiredState.SUPERVISED,
+        runtime_status=WorkerRuntimeStatus.STALE,
+        admission_status=ModelAdmissionStatus.RECOMMENDED,
+    )
+    operations = _FakeOperations(requests=[], fleet=_fleet_overview(worker))
+    adapter = _FakeProcessAdapter()
+    adapter.running.add(worker.camera_id)
+    adapter.metrics_urls[worker.camera_id] = "http://127.0.0.1:19108/metrics"
+    metrics_probe = _FakeMetricsProbe([])
+    runner = SupervisorRunner(
+        supervisor_id="central-imac",
+        edge_node_id=None,
+        hardware_probe=_FakeHardwareProbe(),
+        metrics_probe=metrics_probe,
+        operations=operations,
+        process_adapter=adapter,
+        tenant_id=tenant_id,
+    )
+
+    await runner.run_once()
+
+    assert metrics_probe.worker_contexts[0].metrics_url == "http://127.0.0.1:19108/metrics"
 
 
 @pytest.mark.asyncio
@@ -637,6 +849,26 @@ async def test_runner_provisions_stream_paths_without_starting_not_desired_worke
     assert adapter.calls == []
 
 
+def test_worker_contexts_from_fleet_attaches_callback_metrics_url() -> None:
+    tenant_id = uuid4()
+    worker = _fleet_worker(
+        tenant_id=tenant_id,
+        edge_node_id=None,
+        desired_state=WorkerDesiredState.SUPERVISED,
+        runtime_status=WorkerRuntimeStatus.STALE,
+        admission_status=ModelAdmissionStatus.RECOMMENDED,
+    )
+
+    contexts = runner_module._worker_contexts_from_fleet(
+        _fleet_overview(worker),
+        metrics_url_for=lambda camera_id: (
+            "http://127.0.0.1:19108/metrics" if camera_id == worker.camera_id else None
+        ),
+    )
+
+    assert contexts[0].metrics_url == "http://127.0.0.1:19108/metrics"
+
+
 def _lifecycle_request(action: OperationsLifecycleAction) -> OperationsLifecycleRequestResponse:
     return OperationsLifecycleRequestResponse(
         id=uuid4(),
@@ -676,13 +908,15 @@ class _FakeHardwareProbe:
 class _FakeMetricsProbe:
     def __init__(self, samples: list[HardwarePerformanceSample]) -> None:
         self.samples = samples
+        self.worker_contexts: list[object] = []
 
     async def build_performance_samples(
         self,
         worker_contexts: object,
         previous_snapshot: object | None = None,
     ) -> list[HardwarePerformanceSample]:
-        del worker_contexts, previous_snapshot
+        del previous_snapshot
+        self.worker_contexts = list(worker_contexts)
         return self.samples
 
 
@@ -901,6 +1135,7 @@ class _FakeProcessAdapter:
     def __init__(self) -> None:
         self.calls: list[tuple[str, UUID]] = []
         self.running: set[UUID] = set()
+        self.metrics_urls: dict[UUID, str] = {}
 
     async def start(self, camera_id: UUID) -> WorkerProcessResult:
         self.calls.append(("start", camera_id))
@@ -923,6 +1158,11 @@ class _FakeProcessAdapter:
 
     def is_running(self, camera_id: UUID) -> bool:
         return camera_id in self.running
+
+    def metrics_url_for(self, camera_id: UUID) -> str | None:
+        if not self.is_running(camera_id):
+            return None
+        return self.metrics_urls.get(camera_id)
 
 
 class _FakeStreamProvisioner:

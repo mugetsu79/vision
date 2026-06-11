@@ -6,7 +6,7 @@ import json
 import logging
 import os
 import platform
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, cast
@@ -38,7 +38,11 @@ from argus.supervisor.operations_client import (
     SupervisorClientError,
     SupervisorOperationsClient,
 )
-from argus.supervisor.process_adapter import LocalWorkerProcessAdapter, WorkerLaunchConfig
+from argus.supervisor.process_adapter import (
+    LocalWorkerProcessAdapter,
+    WorkerLaunchConfig,
+    WorkerMetricsLaunchConfig,
+)
 from argus.supervisor.reconciler import SupervisorReconciler
 from argus.supervisor.stream_provisioner import SupervisorStreamProvisioner
 from argus.supervisor.tensorrt_builder import TrtExecTensorRTEngineBuilder
@@ -84,6 +88,11 @@ class RunnerConfig:
     credential_store_path: Path | None = None
     edge_node_id: UUID | None = None
     worker_metrics_url: str | None = None
+    worker_metrics_enabled: bool = False
+    worker_metrics_bind_addr: str = "127.0.0.1"
+    worker_metrics_scrape_host: str = "127.0.0.1"
+    worker_metrics_port_base: int = 19108
+    worker_metrics_port_count: int = 200
     token_url: str | None = None
     token_client_id: str = "argus-cli"
     token_username: str | None = None
@@ -139,6 +148,7 @@ class SupervisorRunner:
         self.hardware_probe = hardware_probe
         self.metrics_probe = metrics_probe
         self.operations = operations
+        self.process_adapter = process_adapter
         self.service_manager = service_manager
         self.supervisor_version = supervisor_version
         self.hostname = hostname or platform.node() or supervisor_id
@@ -165,7 +175,11 @@ class SupervisorRunner:
     async def run_once(self) -> int:
         fleet = await self._fetch_fleet_overview()
         await self._ensure_stream_paths(fleet)
-        worker_contexts = _worker_contexts_from_fleet(fleet)
+        metrics_url_for = getattr(self.process_adapter, "metrics_url_for", None)
+        worker_contexts = _worker_contexts_from_fleet(
+            fleet,
+            metrics_url_for=metrics_url_for if callable(metrics_url_for) else None,
+        )
         observed_performance = await self._performance_samples(worker_contexts)
         report = self.hardware_probe.build_hardware_report(
             edge_node_id=self.edge_node_id,
@@ -395,6 +409,13 @@ def build_runner(config: RunnerConfig) -> SupervisorRunner:
                 bearer_token=config.bearer_token,
                 bearer_token_provider=worker_token_provider,
                 edge_node_id=config.edge_node_id,
+                worker_metrics=WorkerMetricsLaunchConfig(
+                    enabled=config.worker_metrics_enabled,
+                    bind_addr=config.worker_metrics_bind_addr,
+                    scrape_host=config.worker_metrics_scrape_host,
+                    port_base=config.worker_metrics_port_base,
+                    port_count=config.worker_metrics_port_count,
+                ),
             )
         ),
         tenant_id=config.tenant_id,
@@ -470,6 +491,41 @@ def parse_args(argv: list[str] | None = None) -> RunnerConfig:
     parser.add_argument("--token-scope", default=os.getenv("ARGUS_API_TOKEN_SCOPE"))
     parser.add_argument("--worker-metrics-url", default=os.getenv("ARGUS_WORKER_METRICS_URL"))
     parser.add_argument(
+        "--worker-metrics-enabled",
+        action=argparse.BooleanOptionalAction,
+        default=_env_bool(
+            "ARGUS_SUPERVISOR_WORKER_METRICS_ENABLED",
+            False,
+            parser=parser,
+        ),
+    )
+    parser.add_argument(
+        "--worker-metrics-bind-addr",
+        default=os.getenv("ARGUS_SUPERVISOR_WORKER_METRICS_BIND_ADDR", "127.0.0.1"),
+    )
+    parser.add_argument(
+        "--worker-metrics-scrape-host",
+        default=os.getenv("ARGUS_SUPERVISOR_WORKER_METRICS_SCRAPE_HOST", "127.0.0.1"),
+    )
+    parser.add_argument(
+        "--worker-metrics-port-base",
+        type=int,
+        default=_env_int(
+            "ARGUS_SUPERVISOR_WORKER_METRICS_PORT_BASE",
+            19108,
+            parser=parser,
+        ),
+    )
+    parser.add_argument(
+        "--worker-metrics-port-count",
+        type=int,
+        default=_env_int(
+            "ARGUS_SUPERVISOR_WORKER_METRICS_PORT_COUNT",
+            200,
+            parser=parser,
+        ),
+    )
+    parser.add_argument(
         "--public-mediamtx-rtsp-url",
         default=os.getenv("ARGUS_PUBLIC_MEDIAMTX_RTSP_URL"),
     )
@@ -518,6 +574,11 @@ def parse_args(argv: list[str] | None = None) -> RunnerConfig:
         bearer_token=args.bearer_token,
         edge_node_id=edge_node_id,
         worker_metrics_url=args.worker_metrics_url,
+        worker_metrics_enabled=args.worker_metrics_enabled,
+        worker_metrics_bind_addr=args.worker_metrics_bind_addr,
+        worker_metrics_scrape_host=args.worker_metrics_scrape_host,
+        worker_metrics_port_base=args.worker_metrics_port_base,
+        worker_metrics_port_count=args.worker_metrics_port_count,
         token_url=args.token_url,
         token_client_id=args.token_client_id,
         token_username=args.token_username,
@@ -574,7 +635,34 @@ def _parse_config_file(args: argparse.Namespace, parser: argparse.ArgumentParser
         bearer_token=None,
         credential_store_path=credential_store_path,
         edge_node_id=edge_node_id,
-        worker_metrics_url=_optional_string(payload.get("worker_metrics_url")),
+        worker_metrics_url=_optional_string(payload.get("worker_metrics_url"))
+        or args.worker_metrics_url,
+        worker_metrics_enabled=_optional_bool(
+            payload.get("worker_metrics_enabled"),
+            args.worker_metrics_enabled,
+            parser=parser,
+            key="worker_metrics_enabled",
+        ),
+        worker_metrics_bind_addr=(
+            _optional_string(payload.get("worker_metrics_bind_addr"))
+            or args.worker_metrics_bind_addr
+        ),
+        worker_metrics_scrape_host=(
+            _optional_string(payload.get("worker_metrics_scrape_host"))
+            or args.worker_metrics_scrape_host
+        ),
+        worker_metrics_port_base=_optional_int(
+            payload.get("worker_metrics_port_base"),
+            args.worker_metrics_port_base,
+            parser=parser,
+            key="worker_metrics_port_base",
+        ),
+        worker_metrics_port_count=_optional_int(
+            payload.get("worker_metrics_port_count"),
+            args.worker_metrics_port_count,
+            parser=parser,
+            key="worker_metrics_port_count",
+        ),
         hardware_report_interval_seconds=float(
             payload.get(
                 "hardware_report_interval_seconds",
@@ -631,6 +719,49 @@ def _optional_string(value: object) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _optional_bool(
+    value: object,
+    fallback: bool,
+    *,
+    parser: argparse.ArgumentParser,
+    key: str,
+) -> bool:
+    if value is None:
+        return fallback
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    parser.error(f"{key} must be a boolean value")
+
+
+def _env_bool(name: str, fallback: bool, *, parser: argparse.ArgumentParser) -> bool:
+    return _optional_bool(os.getenv(name), fallback, parser=parser, key=name)
+
+
+def _optional_int(
+    value: object,
+    fallback: int,
+    *,
+    parser: argparse.ArgumentParser,
+    key: str,
+) -> int:
+    text = _optional_string(value)
+    if text is None:
+        return fallback
+    try:
+        return int(text)
+    except ValueError:
+        parser.error(f"{key} must be an integer")
+
+
+def _env_int(name: str, fallback: int, *, parser: argparse.ArgumentParser) -> int:
+    return _optional_int(os.getenv(name), fallback, parser=parser, key=name)
 
 
 def _optional_uuid(
@@ -719,6 +850,7 @@ def main() -> None:
 
 def _worker_contexts_from_fleet(
     fleet: FleetOverviewResponse | None,
+    metrics_url_for: Callable[[UUID], str | None] | None = None,
 ) -> list[WorkerMetricsContext]:
     if fleet is None or not hasattr(fleet, "camera_workers"):
         return []
@@ -733,6 +865,7 @@ def _worker_contexts_from_fleet(
             or (latest.recommended_backend if latest is not None else None)
             or "onnxruntime"
         )
+        metrics_url = metrics_url_for(worker.camera_id) if metrics_url_for is not None else None
         contexts.append(
             WorkerMetricsContext(
                 camera_id=worker.camera_id,
@@ -745,6 +878,7 @@ def _worker_contexts_from_fleet(
                     720,
                 ),
                 target_fps=_positive_float(stream.get("fps") or stream.get("target_fps"), 10.0),
+                metrics_url=metrics_url,
             )
         )
     return contexts

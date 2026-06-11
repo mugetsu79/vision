@@ -10,6 +10,7 @@ from argus.api.contracts import (
     FleetOverviewResponse,
     FleetSummary,
     OperationsLifecycleRequestResponse,
+    RuntimePassportSummary,
     SupervisorRuntimeReportResponse,
     WorkerAssignmentResponse,
     WorkerDesiredState,
@@ -222,6 +223,86 @@ async def test_reconciler_recovers_worker_source_profile_hash_from_report() -> N
         "gstreamer_rawvideo_pipe"
     )
     assert operations.runtime_reports[0]["request_payload"]["source_profile_hash"] == "b" * 64
+
+
+@pytest.mark.asyncio
+async def test_reconciler_does_not_recover_artifact_for_non_artifact_provider() -> None:
+    tenant_id = uuid4()
+    artifact_id = uuid4()
+    admission = _admission_response(
+        tenant_id=tenant_id,
+        camera_id=uuid4(),
+        edge_node_id=None,
+        assignment_id=uuid4(),
+        status=ModelAdmissionStatus.RECOMMENDED,
+    )
+    admission.selected_backend = "onnxruntime"
+    admission.runtime_artifact_id = artifact_id
+    worker = _fleet_worker(
+        tenant_id=tenant_id,
+        edge_node_id=None,
+        desired_state=WorkerDesiredState.SUPERVISED,
+        runtime_status=WorkerRuntimeStatus.OFFLINE,
+        admission=admission,
+    )
+    operations = _FakeSupervisorOperations(requests=[], admission=admission)
+    adapter = _FakeProcessAdapter()
+    reconciler = SupervisorReconciler(
+        operations=operations,
+        process_adapter=adapter,
+        tenant_id=tenant_id,
+        supervisor_id="central-supervisor-1",
+        edge_node_id=None,
+    )
+
+    processed = await reconciler.reconcile_once(fleet=_fleet_overview(worker))
+
+    assert processed == 1
+    assert operations.runtime_reports[0]["request_payload"]["selected_provider"] == "onnxruntime"
+    assert operations.runtime_reports[0]["request_payload"]["runtime_artifact_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_reconciler_does_not_let_stale_passport_artifact_override_latest_provider() -> None:
+    tenant_id = uuid4()
+    artifact_id = uuid4()
+    admission = _admission_response(
+        tenant_id=tenant_id,
+        camera_id=uuid4(),
+        edge_node_id=None,
+        assignment_id=uuid4(),
+        status=ModelAdmissionStatus.RECOMMENDED,
+    )
+    admission.selected_backend = "onnxruntime"
+    admission.runtime_artifact_id = None
+    worker = _fleet_worker(
+        tenant_id=tenant_id,
+        edge_node_id=None,
+        desired_state=WorkerDesiredState.SUPERVISED,
+        runtime_status=WorkerRuntimeStatus.OFFLINE,
+        admission=admission,
+    )
+    worker.runtime_passport = RuntimePassportSummary(
+        id=uuid4(),
+        passport_hash="c" * 64,
+        selected_backend="tensorrt_engine",
+        runtime_artifact_id=artifact_id,
+    )
+    operations = _FakeSupervisorOperations(requests=[], admission=admission)
+    adapter = _FakeProcessAdapter()
+    reconciler = SupervisorReconciler(
+        operations=operations,
+        process_adapter=adapter,
+        tenant_id=tenant_id,
+        supervisor_id="central-supervisor-1",
+        edge_node_id=None,
+    )
+
+    processed = await reconciler.reconcile_once(fleet=_fleet_overview(worker))
+
+    assert processed == 1
+    assert operations.runtime_reports[0]["request_payload"]["selected_provider"] == "onnxruntime"
+    assert operations.runtime_reports[0]["request_payload"]["runtime_artifact_id"] is None
 
 
 @pytest.mark.asyncio

@@ -9,6 +9,7 @@ import pytest
 from argus.supervisor.process_adapter import (
     LocalWorkerProcessAdapter,
     WorkerLaunchConfig,
+    WorkerMetricsLaunchConfig,
 )
 
 
@@ -188,6 +189,178 @@ async def test_start_reports_error_when_worker_exits_during_startup_probe() -> N
     assert result.runtime_state == "error"
     assert result.last_error == "Worker exited during startup with code 2."
     assert not adapter.is_running(camera_id)
+
+
+@pytest.mark.asyncio
+async def test_start_allocates_distinct_worker_metrics_ports_and_env() -> None:
+    camera_a = uuid4()
+    camera_b = uuid4()
+    calls: list[tuple[tuple[str, ...], Mapping[str, str]]] = []
+
+    async def _exec(*argv: str, env: Mapping[str, str]) -> _FakeProcess:
+        calls.append((argv, env))
+        return _FakeProcess()
+
+    adapter = LocalWorkerProcessAdapter(
+        WorkerLaunchConfig(
+            base_env={},
+            worker_metrics=WorkerMetricsLaunchConfig(
+                enabled=True,
+                bind_addr="127.0.0.1",
+                scrape_host="127.0.0.1",
+                port_base=19108,
+                port_count=2,
+            ),
+        ),
+        subprocess_exec=_exec,
+    )
+
+    assert (await adapter.start(camera_a)).runtime_state == "running"
+    assert (await adapter.start(camera_b)).runtime_state == "running"
+
+    assert calls[0][1]["ARGUS_ENABLE_WORKER_METRICS_SERVER"] == "true"
+    assert calls[0][1]["ARGUS_WORKER_METRICS_BIND_ADDR"] == "127.0.0.1"
+    assert calls[0][1]["ARGUS_WORKER_METRICS_PORT"] == "19108"
+    assert calls[1][1]["ARGUS_WORKER_METRICS_PORT"] == "19109"
+    assert adapter.metrics_url_for(camera_a) == "http://127.0.0.1:19108/metrics"
+    assert adapter.metrics_url_for(camera_b) == "http://127.0.0.1:19109/metrics"
+
+
+@pytest.mark.asyncio
+async def test_start_without_worker_metrics_config_does_not_inject_metrics_env() -> None:
+    calls: list[tuple[tuple[str, ...], Mapping[str, str]]] = []
+
+    async def _exec(*argv: str, env: Mapping[str, str]) -> _FakeProcess:
+        calls.append((argv, env))
+        return _FakeProcess()
+
+    adapter = LocalWorkerProcessAdapter(
+        WorkerLaunchConfig(base_env={}),
+        subprocess_exec=_exec,
+    )
+
+    result = await adapter.start(uuid4())
+
+    assert result.runtime_state == "running"
+    assert "ARGUS_ENABLE_WORKER_METRICS_SERVER" not in calls[0][1]
+    assert "ARGUS_WORKER_METRICS_BIND_ADDR" not in calls[0][1]
+    assert "ARGUS_WORKER_METRICS_PORT" not in calls[0][1]
+
+
+@pytest.mark.asyncio
+async def test_stop_releases_worker_metrics_url() -> None:
+    camera_id = uuid4()
+    adapter = LocalWorkerProcessAdapter(
+        WorkerLaunchConfig(
+            base_env={},
+            worker_metrics=WorkerMetricsLaunchConfig(
+                enabled=True,
+                port_base=19108,
+                port_count=1,
+            ),
+        ),
+        subprocess_exec=_exec_factory(_FakeProcess()),
+    )
+    await adapter.start(camera_id)
+
+    result = await adapter.stop(camera_id)
+
+    assert result.runtime_state == "stopped"
+    assert adapter.metrics_url_for(camera_id) is None
+
+
+@pytest.mark.asyncio
+async def test_start_releases_worker_metrics_port_when_startup_probe_fails() -> None:
+    camera_a = uuid4()
+    camera_b = uuid4()
+    failed_process = _FakeProcess()
+    failed_process.returncode = 2
+    calls: list[tuple[tuple[str, ...], Mapping[str, str]]] = []
+
+    async def _exec(*argv: str, env: Mapping[str, str]) -> _FakeProcess:
+        calls.append((argv, env))
+        return failed_process if len(calls) == 1 else _FakeProcess()
+
+    adapter = LocalWorkerProcessAdapter(
+        WorkerLaunchConfig(
+            base_env={},
+            startup_probe_seconds=0,
+            worker_metrics=WorkerMetricsLaunchConfig(
+                enabled=True,
+                port_base=19108,
+                port_count=1,
+            ),
+        ),
+        subprocess_exec=_exec,
+    )
+
+    failed = await adapter.start(camera_a)
+    started = await adapter.start(camera_b)
+
+    assert failed.runtime_state == "error"
+    assert started.runtime_state == "running"
+    assert calls[0][1]["ARGUS_WORKER_METRICS_PORT"] == "19108"
+    assert calls[1][1]["ARGUS_WORKER_METRICS_PORT"] == "19108"
+    assert adapter.metrics_url_for(camera_a) is None
+    assert adapter.metrics_url_for(camera_b) == "http://127.0.0.1:19108/metrics"
+
+
+@pytest.mark.asyncio
+async def test_start_reports_error_when_worker_metrics_ports_are_exhausted() -> None:
+    camera_a = uuid4()
+    camera_b = uuid4()
+    adapter = LocalWorkerProcessAdapter(
+        WorkerLaunchConfig(
+            base_env={},
+            worker_metrics=WorkerMetricsLaunchConfig(
+                enabled=True,
+                port_base=19108,
+                port_count=1,
+            ),
+        ),
+        subprocess_exec=_exec_factory(_FakeProcess()),
+    )
+
+    started = await adapter.start(camera_a)
+    exhausted = await adapter.start(camera_b)
+
+    assert started.runtime_state == "running"
+    assert exhausted.runtime_state == "error"
+    assert exhausted.last_error == "No worker metrics ports available in range 19108-19108."
+    assert adapter.metrics_url_for(camera_b) is None
+
+
+@pytest.mark.asyncio
+async def test_start_releases_dead_worker_metrics_port_before_starting_different_camera() -> None:
+    camera_a = uuid4()
+    camera_b = uuid4()
+    process_a = _FakeProcess()
+    calls: list[tuple[tuple[str, ...], Mapping[str, str]]] = []
+
+    async def _exec(*argv: str, env: Mapping[str, str]) -> _FakeProcess:
+        calls.append((argv, env))
+        return process_a if len(calls) == 1 else _FakeProcess()
+
+    adapter = LocalWorkerProcessAdapter(
+        WorkerLaunchConfig(
+            base_env={},
+            worker_metrics=WorkerMetricsLaunchConfig(
+                enabled=True,
+                port_base=19108,
+                port_count=1,
+            ),
+        ),
+        subprocess_exec=_exec,
+    )
+    assert (await adapter.start(camera_a)).runtime_state == "running"
+    process_a.returncode = 9
+
+    result = await adapter.start(camera_b)
+
+    assert result.runtime_state == "running"
+    assert calls[1][1]["ARGUS_WORKER_METRICS_PORT"] == "19108"
+    assert adapter.metrics_url_for(camera_a) is None
+    assert adapter.metrics_url_for(camera_b) == "http://127.0.0.1:19108/metrics"
 
 
 class _FakeProcess:

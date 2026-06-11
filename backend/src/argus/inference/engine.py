@@ -2355,7 +2355,10 @@ async def build_runtime_engine(
 async def run_engine_for_camera(camera_id: UUID, *, settings: Settings | None = None) -> None:
     resolved_settings = settings or Settings()
     if resolved_settings.enable_worker_metrics_server:
-        _start_worker_metrics_server(resolved_settings.worker_metrics_port)
+        _start_worker_metrics_server(
+            resolved_settings.worker_metrics_port,
+            addr=resolved_settings.worker_metrics_bind_addr,
+        )
     events_client = NatsJetStreamClient(resolved_settings)
     await events_client.connect()
     config = await load_engine_config(camera_id, settings=resolved_settings)
@@ -2417,9 +2420,9 @@ async def run_engine_for_camera(camera_id: UUID, *, settings: Settings | None = 
             await db_manager.dispose()
 
 
-def _start_worker_metrics_server(port: int) -> None:
+def _start_worker_metrics_server(port: int, *, addr: str = "0.0.0.0") -> None:
     try:
-        start_http_server(port)
+        start_http_server(port, addr=addr)
     except OSError as exc:
         if exc.errno in {errno.EADDRINUSE, 98, 48}:
             logger.warning(
