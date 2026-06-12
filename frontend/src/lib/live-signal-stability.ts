@@ -8,8 +8,8 @@ type TelemetryFrame = components["schemas"]["TelemetryFrame"];
 type TelemetryTrack = components["schemas"]["TelemetryTrack"];
 
 export const DEFAULT_SIGNAL_HOLD_MS = 1_200;
-export const DEFAULT_SIGNAL_COAST_GRACE_MS = 500;
-const DEFAULT_SIGNAL_LIVE_GRACE_MS = 900;
+export const DEFAULT_SIGNAL_COAST_GRACE_MS = 1_000;
+const DEFAULT_SIGNAL_LIVE_GRACE_MS = DEFAULT_SIGNAL_COAST_GRACE_MS;
 
 export type SignalState = "live" | "held";
 

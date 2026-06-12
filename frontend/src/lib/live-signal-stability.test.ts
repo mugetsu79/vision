@@ -111,7 +111,7 @@ describe("live signal stability", () => {
     });
   });
 
-  test("maps backend coasting lifecycle tracks to held display state", () => {
+  test("keeps normal edge backend coasting cadence as live display state", () => {
     const snapshot = updateSignalTracks({
       previous: [],
       frame: frame([
@@ -129,7 +129,7 @@ describe("live signal stability", () => {
     expect(snapshot).toHaveLength(1);
     expect(snapshot[0]).toMatchObject({
       key: "person:12",
-      state: "held",
+      state: "live",
       ageMs: 900,
     });
   });
@@ -155,7 +155,7 @@ describe("live signal stability", () => {
           stable_track_id: 12,
           source_track_id: 4,
           track_state: "coasting",
-          last_seen_age_ms: 900,
+          last_seen_age_ms: 1_100,
         }),
       ]),
       activeClasses: null,
@@ -172,7 +172,7 @@ describe("live signal stability", () => {
     expect(longCoast[0]).toMatchObject({
       key: "person:12",
       state: "held",
-      ageMs: 900,
+      ageMs: 1_100,
     });
   });
 

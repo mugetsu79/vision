@@ -2278,7 +2278,7 @@ def test_short_coasting_tracks_keep_active_annotation_label() -> None:
         stable_track_id=1,
         source_track_id=7,
         state="coasting",
-        last_seen_age_ms=300,
+        last_seen_age_ms=900,
         detection=Detection(
             class_name="person",
             confidence=0.91,
@@ -2295,7 +2295,7 @@ def test_long_coasting_tracks_use_held_annotation_label() -> None:
         stable_track_id=1,
         source_track_id=7,
         state="coasting",
-        last_seen_age_ms=900,
+        last_seen_age_ms=1100,
         detection=Detection(
             class_name="person",
             confidence=0.91,
@@ -2304,7 +2304,7 @@ def test_long_coasting_tracks_use_held_annotation_label() -> None:
         ),
     )
 
-    assert engine_module._annotation_label_for_track(track) == "person held 0.9s"
+    assert engine_module._annotation_label_for_track(track) == "person held 1.1s"
 
 
 @pytest.mark.asyncio
@@ -5454,7 +5454,7 @@ def test_draw_annotations_uses_dashed_subdued_box_for_coasting_tracks(
                 stable_track_id=1,
                 source_track_id=1,
                 state="coasting",
-                last_seen_age_ms=800,
+                last_seen_age_ms=1100,
                 detection=Detection(
                     class_name="person",
                     confidence=0.95,
@@ -5468,7 +5468,7 @@ def test_draw_annotations_uses_dashed_subdued_box_for_coasting_tracks(
     assert rectangle_calls == [((80, 255, 170), 2)]
     assert line_calls
     assert all(color == (72, 184, 128) and thickness == 1 for color, thickness in line_calls)
-    assert captured_labels == ["person", "person held 0.8s"]
+    assert captured_labels == ["person", "person held 1.1s"]
 
 
 def test_counts_by_lifecycle_tracks_reports_only_active_visible_tracks() -> None:
