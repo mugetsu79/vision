@@ -138,6 +138,33 @@ describe("TelemetryTerrain", () => {
     expect(within(terrain).getByTestId("signal-lane-person")).toBeInTheDocument();
   });
 
+  test("labels configured classes with no current tracks as idle instead of held", () => {
+    const rows: SignalCountRow[] = [
+      {
+        className: "person",
+        color: colorForClass("person"),
+        liveCount: 1,
+        heldCount: 0,
+        totalCount: 1,
+        state: "live",
+      },
+    ];
+
+    render(
+      <TelemetryTerrain
+        cameraId="camera-1"
+        cameraName="North Gate"
+        activeClasses={["person", "car"]}
+        signalRows={rows}
+      />,
+    );
+
+    const terrain = screen.getByTestId("telemetry-terrain");
+    expect(within(terrain).getByText(/person active 1/i)).toBeInTheDocument();
+    expect(within(terrain).getByText(/car idle 0/i)).toBeInTheDocument();
+    expect(within(terrain).queryByText(/car held 0/i)).not.toBeInTheDocument();
+  });
+
   test("renders live-now activity when history buckets are empty for an active class", () => {
     const rows: SignalCountRow[] = [
       {

@@ -88,6 +88,29 @@ describe("live signal stability", () => {
     });
   });
 
+  test("keeps live tracks active across normal edge telemetry cadence", () => {
+    const first = updateSignalTracks({
+      previous: [],
+      frame: frame([track("person", 12)]),
+      activeClasses: null,
+      nowMs: 1_000,
+    });
+
+    const second = updateSignalTracks({
+      previous: first,
+      frame: null,
+      activeClasses: null,
+      nowMs: 1_600,
+    });
+
+    expect(second).toHaveLength(1);
+    expect(second[0]).toMatchObject({
+      key: "person:12",
+      state: "live",
+      ageMs: 600,
+    });
+  });
+
   test("maps backend coasting lifecycle tracks to held display state", () => {
     const snapshot = updateSignalTracks({
       previous: [],

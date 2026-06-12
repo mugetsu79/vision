@@ -105,7 +105,7 @@ export function TelemetryTerrain({
                 className="h-1.5 w-1.5 rounded-full"
                 style={{ backgroundColor: row.color.stroke }}
               />
-              {row.className} {row.state === "live" ? "active" : "held"}{" "}
+              {row.className} {signalStatusLabel(row, currentCount)}{" "}
               {currentCount}
             </span>
           ))}
@@ -253,6 +253,14 @@ function displaySeriesForCurrentActivity(series: number[], currentCount: number)
 function currentCountForRow(row: SignalCountRow, latestValue: number): number {
   const liveOrHeldCount = row.state === "live" ? row.liveCount : row.heldCount;
   return liveOrHeldCount > 0 ? liveOrHeldCount : latestValue;
+}
+
+function signalStatusLabel(row: SignalCountRow, currentCount: number): string {
+  if (currentCount <= 0) {
+    return "idle";
+  }
+
+  return row.state === "live" ? "active" : "held";
 }
 
 function laneWidthPercent(count: number, rows: SignalCountRow[]): number {

@@ -1914,7 +1914,7 @@ class InferenceEngine:
                     else [track.detection for track in tracks]
                 ),
             )
-        if self._stream_registration.mode is StreamMode.ANNOTATED_WHIP:
+        if _stream_mode_draws_worker_annotations(self._stream_registration.mode):
             before_frame = stream_frame.copy() if self._diagnostics_enabled else None
             self._draw_annotations(stream_frame, tracks)
             if self._diagnostics_enabled:
@@ -2598,6 +2598,10 @@ def _annotation_color_for_track(track: LifecycleTrack) -> tuple[int, int, int]:
         class_name,
         _DEFAULT_ACTIVE_ANNOTATION_COLOR_BGR,
     )
+
+
+def _stream_mode_draws_worker_annotations(mode: StreamMode) -> bool:
+    return mode in {StreamMode.ANNOTATED_WHIP, StreamMode.FILTERED_PREVIEW}
 
 
 def _annotation_label_for_track(track: LifecycleTrack) -> str:

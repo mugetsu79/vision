@@ -2125,6 +2125,47 @@ async def test_engine_draws_annotations_when_processed_stream_uses_annotated_mod
 
 
 @pytest.mark.asyncio
+async def test_engine_draws_annotations_when_processed_stream_uses_filtered_preview_mode() -> None:
+    camera_id = uuid4()
+    stream_client = _FakeStreamClient()
+    publisher = _FakePublisher()
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "profile": PublishProfile.JETSON_NANO,
+            "privacy": PrivacyPolicy(blur_faces=True, blur_plates=False),
+            "stream": StreamSettings(
+                profile_id="720p20",
+                kind="transcode",
+                width=1280,
+                height=720,
+                fps=20,
+            ),
+        }
+    )
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource([np.zeros((64, 64, 3), dtype=np.uint8)]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=publisher,
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=stream_client,
+    )
+
+    await engine.start()
+    await engine.run_once(ts=datetime(2026, 5, 1, 14, 30, tzinfo=UTC))
+    await engine.close()
+
+    assert stream_client.pushed_modes == [StreamMode.FILTERED_PREVIEW]
+    assert np.any(stream_client.pushed_frames[0] != 0)
+    assert publisher.frames[0].stream_mode is StreamMode.FILTERED_PREVIEW
+    assert len(publisher.frames[0].tracks) == 1
+    assert publisher.frames[0].tracks[0].class_name == "car"
+
+
+@pytest.mark.asyncio
 async def test_engine_publishes_stable_count_and_coasting_track_after_missed_detection() -> None:
     camera_id = uuid4()
     publisher = _FakePublisher()
