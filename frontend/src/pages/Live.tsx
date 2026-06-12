@@ -49,6 +49,7 @@ import type { components } from "@/lib/api.generated";
 import { formatHeartbeat, getHeartbeatStatus } from "@/lib/live";
 import {
   selectDrawableSignalTracks,
+  shouldDrawBrowserTelemetryOverlay,
   type SignalCountRow,
 } from "@/lib/live-signal-stability";
 import {
@@ -985,6 +986,10 @@ function ScenePortalCard({
     () => selectDrawableSignalTracks(stableSignal.tracks, frame?.stream_mode),
     [frame?.stream_mode, stableSignal.tracks],
   );
+  const browserOverlayAvailable =
+    shouldDrawBrowserTelemetryOverlay(frame?.stream_mode) ||
+    (frame === undefined && effectiveProfile === "native");
+  const browserOverlayChecked = browserOverlayAvailable && browserOverlayEnabled;
   const visibleCopy =
     stableSignal.counts.total > 0
       ? `${stableSignal.counts.total} visible now`
@@ -1230,7 +1235,7 @@ function ScenePortalCard({
             activeClasses={classFilter}
             tracks={overlayTracks}
             sourceSize={sourceSize}
-            disabled={!browserOverlayEnabled}
+            disabled={!browserOverlayChecked}
           />
           <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-wrap items-end justify-between gap-3 bg-[linear-gradient(180deg,transparent,rgba(2,4,8,0.92))] px-4 pb-3 pt-12">
             <div>
@@ -1253,11 +1258,19 @@ function ScenePortalCard({
           }
         >
           <div className="grid gap-3 rounded-[0.75rem] bg-[#07101c]/60 p-3">
-            <label className="flex items-center gap-2 text-xs font-medium text-[#c7d8f2]">
+            <label
+              className={[
+                "flex items-center gap-2 text-xs font-medium",
+                browserOverlayAvailable
+                  ? "text-[#c7d8f2]"
+                  : "cursor-not-allowed text-[#7287a7]",
+              ].join(" ")}
+            >
               <input
                 type="checkbox"
-                className="h-4 w-4 accent-[#6ebdff]"
-                checked={browserOverlayEnabled}
+                className="h-4 w-4 accent-[#6ebdff] disabled:opacity-45"
+                checked={browserOverlayChecked}
+                disabled={!browserOverlayAvailable}
                 onChange={(event) => setBrowserOverlayEnabled(event.target.checked)}
               />
               Browser overlay

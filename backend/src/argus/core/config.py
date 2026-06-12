@@ -107,6 +107,7 @@ class Settings(BaseSettings):
     tracking_persistence_batch_flush_interval_seconds: float = Field(default=0.1, gt=0)
     tracking_persistence_shutdown_timeout_seconds: float = Field(default=5.0, gt=0)
     telemetry_publish_queue_size: int = Field(default=64, ge=1)
+    edge_telemetry_flush_interval_seconds: float = Field(default=0.1, gt=0)
     telemetry_publish_shutdown_timeout_seconds: float = Field(default=2.0, gt=0)
     websocket_telemetry_buffer_size: int = 32
     video_feed_max_concurrent_per_user: int = 10

@@ -173,7 +173,7 @@ export function selectDrawableSignalTracks(
 export function shouldDrawBrowserTelemetryOverlay(
   streamMode: TelemetryFrame["stream_mode"] | null | undefined,
 ): boolean {
-  return streamMode !== "annotated-whip" && streamMode !== "filtered-preview";
+  return streamMode === "passthrough";
 }
 
 export function signalStateForTelemetryTrack(

@@ -5,6 +5,7 @@ import {
   colorForClass,
   deriveSignalCounts,
   selectDrawableSignalTracks,
+  shouldDrawBrowserTelemetryOverlay,
   trackKey,
   updateSignalTracks,
   type SignalTrack,
@@ -241,6 +242,14 @@ describe("live signal stability", () => {
     const held = signalTrack("person", 13, "held");
 
     expect(selectDrawableSignalTracks([live, held], "filtered-preview")).toEqual([]);
+  });
+
+  test("allows browser overlays only on passthrough streams", () => {
+    expect(shouldDrawBrowserTelemetryOverlay("passthrough")).toBe(true);
+    expect(shouldDrawBrowserTelemetryOverlay("annotated-whip")).toBe(false);
+    expect(shouldDrawBrowserTelemetryOverlay("filtered-preview")).toBe(false);
+    expect(shouldDrawBrowserTelemetryOverlay(null)).toBe(false);
+    expect(shouldDrawBrowserTelemetryOverlay(undefined)).toBe(false);
   });
 });
 

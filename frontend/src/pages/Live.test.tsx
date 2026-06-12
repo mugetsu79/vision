@@ -1675,6 +1675,107 @@ describe("LivePage", () => {
     );
   });
 
+  test("disables browser-only overlays for processed transcoded tiles", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(global, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          {
+            id: "22222222-2222-2222-2222-222222222222",
+            site_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            edge_node_id: "99999999-9999-9999-9999-999999999999",
+            name: "Depot Yard",
+            rtsp_url_masked: "rtsp://***",
+            processing_mode: "edge",
+            primary_model_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            secondary_model_id: null,
+            tracker_type: "botsort",
+            active_classes: ["person"],
+            attribute_rules: [],
+            zones: [],
+            homography: null,
+            privacy: {
+              blur_faces: true,
+              blur_plates: true,
+              method: "gaussian",
+              strength: 7,
+            },
+            browser_delivery: {
+              default_profile: "720p20",
+              allow_native_on_demand: true,
+              profiles: [
+                { id: "native", kind: "passthrough", label: "Native edge passthrough" },
+                { id: "720p20", kind: "transcode", label: "720p20 edge bandwidth saver" },
+              ],
+              native_status: { available: false, reason: "privacy_required" },
+            },
+            frame_skip: 1,
+            fps_cap: 20,
+            created_at: "2026-04-18T10:00:00Z",
+            updated_at: "2026-04-18T10:00:00Z",
+          },
+        ]),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <LivePage />
+      </QueryClientProvider>,
+    );
+
+    await focusLiveScenes(["Depot Yard"], user);
+    await screen.findByRole("heading", { name: "Depot Yard" });
+
+    const checkbox = screen.getByRole("checkbox", {
+      name: /browser overlay/i,
+    });
+    expect(checkbox).toBeDisabled();
+    expect(checkbox).not.toBeChecked();
+    expect(telemetryCanvasMock.mock.calls.at(-1)?.[0]).toMatchObject({
+      disabled: true,
+    });
+
+    act(() => {
+      FakeWebSocket.instances[0]?.emit({
+        camera_id: "22222222-2222-2222-2222-222222222222",
+        ts: new Date().toISOString(),
+        profile: "jetson-nano",
+        stream_mode: "filtered-preview",
+        stream_profile_id: "720p20",
+        counts: { person: 1 },
+        tracks: [
+          {
+            class_name: "person",
+            confidence: 0.9,
+            bbox: { x1: 80, y1: 100, x2: 220, y2: 250 },
+            track_id: 3,
+            stable_track_id: 3,
+            track_state: "active",
+            last_seen_age_ms: 0,
+            source_track_id: 30,
+            speed_kph: null,
+            direction_deg: null,
+            zone_id: null,
+            attributes: {},
+          },
+        ],
+      });
+    });
+
+    await waitFor(() =>
+      expect(telemetryCanvasMock.mock.calls.at(-1)?.[0]).toMatchObject({
+        disabled: true,
+      }),
+    );
+    expect(checkbox).toBeDisabled();
+    expect(checkbox).not.toBeChecked();
+  });
+
   test("shows telemetry stale instead of offline when the last worker frame is old", async () => {
     vi.spyOn(global, "fetch").mockResolvedValueOnce(
       new Response(
