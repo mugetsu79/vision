@@ -5,6 +5,9 @@ import { formatHeartbeat, type TelemetryFrame } from "@/lib/live";
 function frameAt(ts: string): TelemetryFrame {
   return {
     camera_id: "11111111-1111-1111-1111-111111111111",
+    frame_id: "test-frame-1",
+    frame_sequence: 1,
+    worker_origin: "central",
     ts,
     profile: "central-gpu",
     stream_mode: "passthrough",

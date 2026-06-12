@@ -437,8 +437,45 @@ class TrackingEvent(UUIDPrimaryKeyMixin, Base):
     zone_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     attributes: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     bbox: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    frame_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    frame_sequence: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    stable_track_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_track_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    track_state: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    last_seen_age_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    telemetry_transport: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    worker_origin: Mapped[str | None] = mapped_column(String(32), nullable=True)
     vocabulary_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     vocabulary_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+class TrackingFrame(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "tracking_frames"
+    __table_args__ = (
+        UniqueConstraint("camera_id", "frame_id", name="uq_tracking_frames_camera_frame"),
+        Index("ix_tracking_frames_camera_ts", "camera_id", "ts"),
+    )
+
+    camera_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("cameras.id"),
+        nullable=False,
+    )
+    frame_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    frame_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    profile: Mapped[str] = mapped_column(String(64), nullable=False)
+    stream_mode: Mapped[str] = mapped_column(String(64), nullable=False)
+    stream_profile_id: Mapped[str] = mapped_column(String(255), nullable=False, default="native")
+    source_size: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    counts: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    track_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    telemetry_transport: Mapped[str] = mapped_column(String(64), nullable=False)
+    worker_origin: Mapped[str] = mapped_column(String(32), nullable=False)
+    live_broadcast_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
 
 class CameraVocabularySnapshot(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -692,6 +729,17 @@ class WorkerRuntimeReport(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     media_pipeline_mode: Mapped[str | None] = mapped_column(String(64), nullable=True)
     media_capture_backend: Mapped[str | None] = mapped_column(String(64), nullable=True)
     encoder_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    worker_origin: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    processing_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    telemetry_transport: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    telemetry_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    telemetry_cadence_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    telemetry_fallback_active: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    telemetry_publish_drops: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    telemetry_pending_frames: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    telemetry_ingest_lag_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    telemetry_duplicate_frames: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    telemetry_last_error: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
 
 class OperationsLifecycleRequest(UUIDPrimaryKeyMixin, TimestampMixin, UpdatedAtMixin, Base):

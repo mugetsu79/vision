@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     nats_url: str = "nats://127.0.0.1:4222"
     nats_nkey_seed: SecretStr | None = None
+    nats_manage_streams: bool = True
     nats_connect_timeout_seconds: float = 5.0
 
     api_base_url: str = "http://localhost:8000"

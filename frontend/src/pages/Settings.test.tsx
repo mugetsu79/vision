@@ -133,6 +133,8 @@ const fleetOverview = {
         runtime_artifact_id: "00000000-0000-0000-0000-000000000601",
         scene_contract_hash:
           "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        telemetry_pending_frames: 0,
+        telemetry_publish_drops: 0,
         created_at: "2026-05-13T08:01:00Z",
       },
       latest_lifecycle_request: {

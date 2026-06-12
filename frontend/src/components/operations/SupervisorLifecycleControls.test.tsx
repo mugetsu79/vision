@@ -75,6 +75,9 @@ function supervisedWorker(overrides: Partial<Worker> = {}): Worker {
       selected_provider: "TensorrtExecutionProvider",
       media_pipeline_mode: "jetson_gstreamer_native",
       encoder_mode: "hardware",
+      telemetry_pending_frames: 0,
+      telemetry_publish_drops: 0,
+      telemetry_duplicate_frames: 0,
       created_at: "2026-05-13T08:01:00Z",
     },
     latest_lifecycle_request: {

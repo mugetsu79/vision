@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
 from math import hypot
@@ -10,6 +11,15 @@ from argus.vision.types import BoundingBox, Detection
 TrackLifecycleState = Literal["tentative", "active", "coasting", "lost"]
 PublishedTrackState = Literal["active", "coasting"]
 CandidateContextTrackState = Literal["tentative", "active", "coasting"]
+TrackLifecycleReason = Literal[
+    "source_id_match",
+    "spatial_reassociation",
+    "new_track",
+    "coasting",
+    "forgotten",
+    "duplicate_suppressed",
+    "duplicate_replaced",
+]
 DEFAULT_TRACK_COAST_TTL_MS = 2_500
 
 
@@ -33,6 +43,23 @@ class LifecycleTrack:
     state: CandidateContextTrackState
     last_seen_age_ms: int
     detection: Detection
+    lifecycle_reason: TrackLifecycleReason | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class TrackLifecycleDecision:
+    stable_track_id: int
+    source_track_id: int | None
+    state: TrackLifecycleState
+    reason: TrackLifecycleReason
+    last_seen_age_ms: int
+    detection: Detection
+
+
+@dataclass(frozen=True, slots=True)
+class _LifecycleMatch:
+    stable_id: int
+    reason: TrackLifecycleReason
 
 
 @dataclass(slots=True)
@@ -48,6 +75,7 @@ class _TrackMemory:
     hits: int = 0
     missing_updates: int = 0
     velocity: BoundingBox = (0.0, 0.0, 0.0, 0.0)
+    lifecycle_reason: TrackLifecycleReason | None = None
 
 
 class TrackLifecycleManager:
@@ -58,6 +86,7 @@ class TrackLifecycleManager:
         self._stable_id_by_source: dict[int, int] = {}
         self._last_visible_tracks: list[LifecycleTrack] = []
         self._last_candidate_context_tracks: list[LifecycleTrack] = []
+        self._last_diagnostics: list[TrackLifecycleDecision] = []
 
     def reset(self) -> None:
         self._next_stable_track_id = 1
@@ -65,12 +94,16 @@ class TrackLifecycleManager:
         self._stable_id_by_source.clear()
         self._last_visible_tracks.clear()
         self._last_candidate_context_tracks.clear()
+        self._last_diagnostics.clear()
 
     def visible_tracks(self) -> list[LifecycleTrack]:
         return [_copy_lifecycle_track(track) for track in self._last_visible_tracks]
 
     def candidate_context_tracks(self) -> list[LifecycleTrack]:
         return [_copy_lifecycle_track(track) for track in self._last_candidate_context_tracks]
+
+    def last_diagnostics(self) -> list[TrackLifecycleDecision]:
+        return [_copy_lifecycle_decision(decision) for decision in self._last_diagnostics]
 
     def update(
         self,
@@ -79,18 +112,29 @@ class TrackLifecycleManager:
         ts: datetime,
         frame_shape: tuple[int, ...] | None = None,
     ) -> list[LifecycleTrack]:
+        self._last_diagnostics = []
         matched_stable_ids: set[int] = set()
         seen_this_frame: list[int] = []
 
         for detection in sorted(detections, key=self._detection_sort_key):
-            stable_id = self._match_existing_track(
+            match = self._match_existing_track(
                 detection,
                 matched_stable_ids,
                 frame_shape,
             )
-            if stable_id is None:
+            if match is None:
                 stable_id = self._create_track(detection, ts)
-            self._apply_detection(stable_id, detection, ts, frame_shape)
+                lifecycle_reason: TrackLifecycleReason = "new_track"
+            else:
+                stable_id = match.stable_id
+                lifecycle_reason = match.reason
+            self._apply_detection(stable_id, detection, ts, frame_shape, lifecycle_reason)
+            self._record_decision(
+                self._tracks[stable_id],
+                reason=lifecycle_reason,
+                ts=ts,
+                last_seen_age_ms=0,
+            )
             matched_stable_ids.add(stable_id)
             seen_this_frame.append(stable_id)
 
@@ -111,9 +155,22 @@ class TrackLifecycleManager:
                 age_ms = _elapsed_ms(memory.last_seen_ts, ts)
                 if age_ms <= self.config.coast_ttl_ms:
                     self._coast_track(memory, ts, frame_shape)
+                    self._record_decision(
+                        memory,
+                        reason="coasting",
+                        ts=ts,
+                        last_seen_age_ms=age_ms,
+                    )
                     visible.append(self._to_lifecycle_track(memory, last_seen_age_ms=age_ms))
                     continue
-            self._forget_track(stable_id)
+            forgotten = self._forget_track(stable_id)
+            if forgotten is not None:
+                self._record_decision(
+                    forgotten,
+                    reason="forgotten",
+                    ts=ts,
+                    state="lost",
+                )
 
         self._last_visible_tracks = sorted(visible, key=lambda track: track.stable_track_id)
         self._last_candidate_context_tracks = self._candidate_context_snapshot(ts)
@@ -138,7 +195,7 @@ class TrackLifecycleManager:
         detection: Detection,
         matched_stable_ids: set[int],
         frame_shape: tuple[int, ...] | None,
-    ) -> int | None:
+    ) -> _LifecycleMatch | None:
         bbox = _clamp_bbox(detection.bbox, frame_shape)
         source_track_id = detection.track_id
         if source_track_id is not None:
@@ -150,7 +207,7 @@ class TrackLifecycleManager:
                 and stable_id not in matched_stable_ids
                 and self._source_match_is_plausible(memory, bbox)
             ):
-                return stable_id
+                return _LifecycleMatch(stable_id=stable_id, reason="source_id_match")
 
         return self._find_spatial_reassociation(detection, bbox, matched_stable_ids)
 
@@ -170,7 +227,7 @@ class TrackLifecycleManager:
         detection: Detection,
         bbox: BoundingBox,
         matched_stable_ids: set[int],
-    ) -> int | None:
+    ) -> _LifecycleMatch | None:
         best_stable_id: int | None = None
         best_score = float("-inf")
         for stable_id, memory in self._tracks.items():
@@ -190,7 +247,12 @@ class TrackLifecycleManager:
             if score > best_score:
                 best_score = score
                 best_stable_id = stable_id
-        return best_stable_id
+        if best_stable_id is None:
+            return None
+        return _LifecycleMatch(
+            stable_id=best_stable_id,
+            reason="spatial_reassociation",
+        )
 
     def _create_track(self, detection: Detection, ts: datetime) -> int:
         stable_id = self._next_stable_track_id
@@ -216,6 +278,7 @@ class TrackLifecycleManager:
         detection: Detection,
         ts: datetime,
         frame_shape: tuple[int, ...] | None,
+        lifecycle_reason: TrackLifecycleReason,
     ) -> None:
         memory = self._tracks[stable_id]
         old_source_track_id = memory.source_track_id
@@ -244,6 +307,7 @@ class TrackLifecycleManager:
         memory.detection = _copy_detection(
             detection.with_updates(track_id=stable_id, bbox=bbox)
         )
+        memory.lifecycle_reason = lifecycle_reason
         memory.last_seen_ts = ts
         memory.updated_ts = ts
         memory.missing_updates = 0
@@ -274,6 +338,13 @@ class TrackLifecycleManager:
                     candidate=memory,
                     selected=selected_memory,
                 )
+                memory.lifecycle_reason = "duplicate_suppressed"
+                self._record_decision(
+                    memory,
+                    reason="duplicate_suppressed",
+                    ts=ts,
+                    last_seen_age_ms=0,
+                )
                 suppressed.add(stable_id)
                 self._forget_track(stable_id)
                 if replace_selected:
@@ -282,6 +353,13 @@ class TrackLifecycleManager:
                     self._replace_with_duplicate(
                         selected=selected_memory,
                         duplicate=memory,
+                    )
+                    selected_memory.lifecycle_reason = "duplicate_replaced"
+                    self._record_decision(
+                        selected_memory,
+                        reason="duplicate_replaced",
+                        ts=ts,
+                        last_seen_age_ms=0,
                     )
                 continue
             selected.append(stable_id)
@@ -357,6 +435,7 @@ class TrackLifecycleManager:
         frame_shape: tuple[int, ...] | None,
     ) -> None:
         memory.state = "coasting"
+        memory.lifecycle_reason = "coasting"
         memory.updated_ts = ts
         memory.missing_updates += 1
         damping = self.config.velocity_damping ** memory.missing_updates
@@ -386,6 +465,7 @@ class TrackLifecycleManager:
             detection=_copy_detection(
                 memory.detection.with_updates(track_id=memory.stable_track_id)
             ),
+            lifecycle_reason=memory.lifecycle_reason,
         )
 
     def _candidate_context_snapshot(self, ts: datetime) -> list[LifecycleTrack]:
@@ -403,18 +483,46 @@ class TrackLifecycleManager:
                     detection=_copy_detection(
                         memory.detection.with_updates(track_id=memory.stable_track_id)
                     ),
+                    lifecycle_reason=memory.lifecycle_reason,
                 )
             )
         return sorted(tracks, key=lambda track: track.stable_track_id)
 
-    def _forget_track(self, stable_id: int) -> None:
+    def _forget_track(self, stable_id: int) -> _TrackMemory | None:
         memory = self._tracks.pop(stable_id, None)
         if memory is not None and memory.source_track_id is not None:
             self._forget_source_mapping(memory.source_track_id, stable_id)
+        return memory
 
     def _forget_source_mapping(self, source_track_id: int, stable_id: int) -> None:
         if self._stable_id_by_source.get(source_track_id) == stable_id:
             self._stable_id_by_source.pop(source_track_id, None)
+
+    def _record_decision(
+        self,
+        memory: _TrackMemory,
+        *,
+        reason: TrackLifecycleReason,
+        ts: datetime,
+        last_seen_age_ms: int | None = None,
+        state: TrackLifecycleState | None = None,
+    ) -> None:
+        self._last_diagnostics.append(
+            TrackLifecycleDecision(
+                stable_track_id=memory.stable_track_id,
+                source_track_id=memory.source_track_id,
+                state=state or memory.state,
+                reason=reason,
+                last_seen_age_ms=(
+                    last_seen_age_ms
+                    if last_seen_age_ms is not None
+                    else _elapsed_ms(memory.last_seen_ts, ts)
+                ),
+                detection=_copy_detection(
+                    memory.detection.with_updates(track_id=memory.stable_track_id)
+                ),
+            )
+        )
 
 
 def _elapsed_ms(start: datetime, end: datetime) -> int:
@@ -470,7 +578,7 @@ def _clamp_bbox(
 
 
 def _copy_detection(detection: Detection) -> Detection:
-    return detection.with_updates(attributes=dict(detection.attributes))
+    return detection.with_updates(attributes=deepcopy(detection.attributes))
 
 
 def _copy_lifecycle_track(track: LifecycleTrack) -> LifecycleTrack:
@@ -480,4 +588,16 @@ def _copy_lifecycle_track(track: LifecycleTrack) -> LifecycleTrack:
         state=track.state,
         last_seen_age_ms=track.last_seen_age_ms,
         detection=_copy_detection(track.detection),
+        lifecycle_reason=track.lifecycle_reason,
+    )
+
+
+def _copy_lifecycle_decision(decision: TrackLifecycleDecision) -> TrackLifecycleDecision:
+    return TrackLifecycleDecision(
+        stable_track_id=decision.stable_track_id,
+        source_track_id=decision.source_track_id,
+        state=decision.state,
+        reason=decision.reason,
+        last_seen_age_ms=decision.last_seen_age_ms,
+        detection=_copy_detection(decision.detection),
     )

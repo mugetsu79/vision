@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from argus.api.contracts import (
     EdgeNodeHardwareReportCreate,
@@ -31,6 +32,7 @@ from argus.models.enums import (
 from argus.services.supervisor_operations import (
     SupervisorOperationsService,
     resolve_worker_operations_controls,
+    supervisor_runtime_report_response,
 )
 from argus.supervisor.reconciler import SupervisorReconciler
 
@@ -107,12 +109,19 @@ async def test_records_worker_runtime_report_with_heartbeat_and_runtime_truth() 
             media_pipeline_mode="jetson_gstreamer_native",
             media_capture_backend="gstreamer_rawvideo_pipe",
             encoder_mode="hardware",
+            worker_origin="edge",
+            processing_mode=ProcessingMode.EDGE,
+            telemetry_ingest_lag_ms=42.5,
+            telemetry_duplicate_frames=2,
         ),
     )
+    report.id = uuid4()
+    report.created_at = datetime(2026, 5, 13, 9, 0, 1, tzinfo=UTC)
     latest = await service.latest_runtime_reports_by_camera(
         tenant_id=tenant_id,
         camera_ids=[camera_id],
     )
+    response = supervisor_runtime_report_response(report)
 
     assert report.heartbeat_at == datetime(2026, 5, 13, 9, 0, tzinfo=UTC)
     assert report.runtime_state is WorkerRuntimeState.RUNNING
@@ -124,8 +133,36 @@ async def test_records_worker_runtime_report_with_heartbeat_and_runtime_truth() 
     assert report.media_pipeline_mode == "jetson_gstreamer_native"
     assert report.media_capture_backend == "gstreamer_rawvideo_pipe"
     assert report.encoder_mode == "hardware"
+    assert report.worker_origin == "edge"
+    assert report.processing_mode == ProcessingMode.EDGE
+    assert report.telemetry_ingest_lag_ms == 42.5
+    assert report.telemetry_duplicate_frames == 2
     assert latest[camera_id].id == report.id
     assert latest[camera_id].media_capture_backend == "gstreamer_rawvideo_pipe"
+    assert latest[camera_id].worker_origin == "edge"
+    assert response.worker_origin == "edge"
+    assert response.processing_mode == ProcessingMode.EDGE
+    assert response.telemetry_ingest_lag_ms == 42.5
+    assert response.telemetry_duplicate_frames == 2
+
+
+def test_supervisor_runtime_report_rejects_negative_ingest_health_values() -> None:
+    base_payload = {
+        "camera_id": uuid4(),
+        "heartbeat_at": datetime(2026, 5, 13, 9, 0, tzinfo=UTC),
+    }
+
+    with pytest.raises(ValidationError):
+        SupervisorRuntimeReportCreate(
+            **base_payload,
+            telemetry_ingest_lag_ms=-0.1,
+        )
+
+    with pytest.raises(ValidationError):
+        SupervisorRuntimeReportCreate(
+            **base_payload,
+            telemetry_duplicate_frames=-1,
+        )
 
 
 @pytest.mark.asyncio

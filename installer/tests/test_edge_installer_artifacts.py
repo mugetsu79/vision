@@ -10,6 +10,7 @@ PREFLIGHT = REPO_ROOT / "scripts" / "jetson-preflight.sh"
 SUPERVISOR_COMPOSE = REPO_ROOT / "infra" / "install" / "compose" / "compose.supervisor.yml"
 EDGE_AGENT_WRAPPER = REPO_ROOT / "bin" / "vezor-edge-agent"
 MEDIAMTX_CONFIG = REPO_ROOT / "infra" / "mediamtx" / "mediamtx.yml"
+NATS_LEAF_CONFIG = REPO_ROOT / "infra" / "nats" / "leaf.conf"
 
 FORBIDDEN_PRODUCT_STRINGS = (
     "ARGUS_API_BEARER_TOKEN",
@@ -199,7 +200,8 @@ def test_edge_install_script_shell_quotes_edge_agent_env_values() -> None:
     assert 'VEZOR_SUPERVISOR_IMAGE=$(shell_quote "$EDGE_WORKER_IMAGE")' in script
     assert 'ARGUS_API_BASE_URL=$(shell_quote "$API_URL")' in script
     assert (
-        'ARGUS_LINK_EDGE_AGENT_CONFIG_URL=$(shell_quote "${API_URL%/}/api/v1/link/control-targets/master/edge-agent-config")'
+        "ARGUS_LINK_EDGE_AGENT_CONFIG_URL="
+        '$(shell_quote "${API_URL%/}/api/v1/link/control-targets/master/edge-agent-config")'
         in script
     )
     assert 'ARGUS_LINK_EDGE_AGENT_ID=$(shell_quote "$EDGE_NAME-core-link")' in script
@@ -248,6 +250,7 @@ def test_supervisor_compose_profile_contains_edge_services_and_secret_mounts() -
     assert 'entrypoint: ["/app/.venv/bin/python", "-m", "argus.supervisor.runner"]' in compose
     assert "      - --config" in compose
     assert "ARGUS_NATS_URL: ${ARGUS_NATS_URL:-nats://nats-leaf:4222}" in compose
+    assert 'ARGUS_NATS_MANAGE_STREAMS: "false"' in compose
     assert "ARGUS_MEDIAMTX_API_URL: http://mediamtx:9997" in compose
     assert "ARGUS_ENABLE_WORKER_METRICS_SERVER: \"true\"" in compose
     assert "ARGUS_PUBLISH_PROFILE: jetson-nano" in compose
@@ -262,6 +265,15 @@ def test_supervisor_compose_profile_contains_edge_services_and_secret_mounts() -
     assert "${VEZOR_MODEL_HOST_DIR:-/var/lib/vezor/models}:/models" in compose
     assert "${VEZOR_MODEL_HOST_DIR:-/var/lib/vezor/models}:/models:ro" not in compose
     assert "      - nats-leaf" in compose
+
+
+def test_edge_nats_leaf_scopes_local_worker_permissions() -> None:
+    config = _read(NATS_LEAF_CONFIG)
+
+    assert "default_permissions" in config
+    assert '"evt.edge.tracking.*"' in config
+    assert '"evt.tracking.*"' not in config
+    assert '"cmd.camera.*"' in config
 
 
 def test_jetson_preflight_supports_installer_json_mode() -> None:

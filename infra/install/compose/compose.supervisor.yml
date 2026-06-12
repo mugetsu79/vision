@@ -38,6 +38,7 @@ services:
       - /etc/vezor/supervisor.json
     environment:
       ARGUS_NATS_URL: ${ARGUS_NATS_URL:-nats://nats-leaf:4222}
+      ARGUS_NATS_MANAGE_STREAMS: "false"
       ARGUS_MEDIAMTX_API_URL: http://mediamtx:9997
       ARGUS_MEDIAMTX_RTSP_BASE_URL: rtsp://mediamtx:8554
       ARGUS_MEDIAMTX_WEBRTC_BASE_URL: http://mediamtx:8889

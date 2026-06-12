@@ -28,7 +28,7 @@ class EventMessage:
 STREAM_DEFINITIONS = (
     js_api.StreamConfig(
         name="ARGUS_TRACKING",
-        subjects=["evt.tracking.*"],
+        subjects=["evt.tracking.*", "evt.edge.tracking.*", "evt.worker.tracking.*"],
         description="Tracking telemetry events",
     ),
     js_api.StreamConfig(
@@ -85,7 +85,8 @@ class NatsJetStreamClient:
         self._client = await nats.connect(**connect_options)
         self._jetstream = self._client.jetstream()
         self._manager = self._client.jsm()
-        await self.ensure_streams()
+        if self.settings.nats_manage_streams:
+            await self.ensure_streams()
 
     async def close(self) -> None:
         if self._client is not None:
@@ -108,12 +109,18 @@ class NatsJetStreamClient:
                 await manager.update_stream(stream_config)
 
     async def publish(self, subject: str, payload: BaseModel) -> None:
-        jetstream = self._require_jetstream()
+        await self.publish_bytes(subject, payload.model_dump_json().encode("utf-8"))
 
+    async def publish_bytes(self, subject: str, payload: bytes) -> None:
         with self._tracer.start_as_current_span("nats.publish") as span:
             span.set_attribute("messaging.system", "nats")
             span.set_attribute("messaging.destination.name", subject)
-            await jetstream.publish(subject, payload.model_dump_json().encode("utf-8"))
+            if not self.settings.nats_manage_streams:
+                client = self._require_client()
+                await client.publish(subject, payload)
+                return
+            jetstream = self._require_jetstream()
+            await jetstream.publish(subject, payload)
 
     async def subscribe(
         self,
@@ -121,9 +128,9 @@ class NatsJetStreamClient:
         handler: MessageHandler,
         *,
         deliver_policy: js_api.DeliverPolicy | None = None,
+        durable: str | None = None,
+        stream: str | None = None,
     ) -> Any:
-        jetstream = self._require_jetstream()
-
         async def callback(message: Msg) -> None:
             with self._tracer.start_as_current_span("nats.consume") as span:
                 span.set_attribute("messaging.system", "nats")
@@ -135,14 +142,29 @@ class NatsJetStreamClient:
                         headers=dict(message.headers or {}),
                     )
                 )
-                await message.ack()
+                ack = getattr(message, "ack", None)
+                if callable(ack):
+                    await ack()
+
+        if not self.settings.nats_manage_streams:
+            client = self._require_client()
+            return await client.subscribe(subject, cb=callback)
+
+        jetstream = self._require_jetstream()
 
         return await jetstream.subscribe(
             subject,
             cb=callback,
             manual_ack=True,
             deliver_policy=deliver_policy,
+            durable=durable,
+            stream=stream,
         )
+
+    def _require_client(self) -> NATS:
+        if self._client is None:
+            raise RuntimeError("NATS client is not connected.")
+        return self._client
 
     def _require_jetstream(self) -> JetStreamContext:
         if self._jetstream is None:

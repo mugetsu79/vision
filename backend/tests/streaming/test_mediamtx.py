@@ -20,6 +20,7 @@ from argus.streaming.mediamtx import (
     StreamMode,
     StreamRegistration,
     _default_publisher_factory,
+    _drain_publisher_stderr,
     _FFmpegFramePublisher,
     _GStreamerFramePublisher,
     _prepare_frame_for_publish,
@@ -97,9 +98,10 @@ async def test_mediamtx_client_registers_passthrough_for_privacy_off_jetson() ->
                 "name": f"cameras/{camera_id}/passthrough",
                 "source": "rtsp://camera.internal/live",
                 "sourceOnDemand": True,
+                "rtspTransport": "tcp",
             },
         )
-    ]
+        ]
 
     await client.close()
 
@@ -155,6 +157,7 @@ async def test_mediamtx_client_registers_annotated_for_jetson_transcode_profile(
                 "name": f"cameras/{camera_id}/passthrough",
                 "source": "rtsp://camera.internal/live",
                 "sourceOnDemand": True,
+                "rtspTransport": "tcp",
             },
         ),
         (
@@ -525,6 +528,7 @@ async def test_mediamtx_client_registers_whip_target_for_central_profile() -> No
                 "name": f"cameras/{camera_id}/passthrough",
                 "source": "rtsp://camera.internal/live",
                 "sourceOnDemand": True,
+                "rtspTransport": "tcp",
             },
         ),
         (
@@ -587,9 +591,283 @@ async def test_mediamtx_client_keeps_preconfigured_preview_when_switching_to_pas
             "name": f"cameras/{camera_id}/passthrough",
             "source": "rtsp://camera.internal/live",
             "sourceOnDemand": True,
+            "rtspTransport": "tcp",
+        },
+    )
+    assert requests == [passthrough_replace]
+
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_mediamtx_client_reuses_edge_passthrough_path_when_config_unchanged() -> None:
+    requests: list[tuple[str, str, dict[str, object] | None]] = []
+
+    async def handler(request: Request) -> Response:
+        requests.append(
+            (
+                request.method,
+                str(request.url),
+                json.loads(request.content.decode("utf-8")) if request.content else None,
+            )
+        )
+        return Response(200, json={"ok": True})
+
+    camera_id = uuid4()
+    client = MediaMTXClient(
+        api_base_url="http://mediamtx.internal:9997",
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
+        whip_base_url="http://mediamtx.internal:8889",
+        http_client=AsyncClient(transport=_transport(handler)),
+    )
+
+    first_registration = await client.register_stream(
+        camera_id=camera_id,
+        rtsp_url="rtsp://camera.internal/live",
+        profile=PublishProfile.JETSON_NANO,
+        stream_kind="passthrough",
+        privacy=PrivacyPolicy(blur_faces=False, blur_plates=False),
+    )
+    second_registration = await client.register_stream(
+        camera_id=camera_id,
+        rtsp_url="rtsp://camera.internal/live",
+        profile=PublishProfile.JETSON_NANO,
+        stream_kind="passthrough",
+        privacy=PrivacyPolicy(blur_faces=False, blur_plates=False),
+    )
+
+    assert first_registration == second_registration
+    assert first_registration.mode is StreamMode.PASSTHROUGH
+    assert requests == [
+        (
+            "POST",
+            f"http://mediamtx.internal:9997/v3/config/paths/replace/cameras/{camera_id}/passthrough",
+            {
+                "name": f"cameras/{camera_id}/passthrough",
+                "source": "rtsp://camera.internal/live",
+                "sourceOnDemand": True,
+                "rtspTransport": "tcp",
+            },
+        )
+    ]
+
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_mediamtx_client_revalidates_edge_passthrough_path_after_cache_expiry() -> None:
+    requests: list[tuple[str, str, dict[str, object] | None]] = []
+    now = 100.0
+
+    async def handler(request: Request) -> Response:
+        requests.append(
+            (
+                request.method,
+                str(request.url),
+                json.loads(request.content.decode("utf-8")) if request.content else None,
+            )
+        )
+        return Response(200, json={"ok": True})
+
+    camera_id = uuid4()
+    client = MediaMTXClient(
+        api_base_url="http://mediamtx.internal:9997",
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
+        whip_base_url="http://mediamtx.internal:8889",
+        http_client=AsyncClient(transport=_transport(handler)),
+        path_config_revalidate_seconds=10.0,
+        clock=lambda: now,
+    )
+
+    await client.register_stream(
+        camera_id=camera_id,
+        rtsp_url="rtsp://camera.internal/live",
+        profile=PublishProfile.JETSON_NANO,
+        stream_kind="passthrough",
+        privacy=PrivacyPolicy(blur_faces=False, blur_plates=False),
+    )
+    await client.register_stream(
+        camera_id=camera_id,
+        rtsp_url="rtsp://camera.internal/live",
+        profile=PublishProfile.JETSON_NANO,
+        stream_kind="passthrough",
+        privacy=PrivacyPolicy(blur_faces=False, blur_plates=False),
+    )
+    now = 111.0
+    await client.register_stream(
+        camera_id=camera_id,
+        rtsp_url="rtsp://camera.internal/live",
+        profile=PublishProfile.JETSON_NANO,
+        stream_kind="passthrough",
+        privacy=PrivacyPolicy(blur_faces=False, blur_plates=False),
+    )
+
+    passthrough_replace = (
+        "POST",
+        f"http://mediamtx.internal:9997/v3/config/paths/replace/cameras/{camera_id}/passthrough",
+        {
+            "name": f"cameras/{camera_id}/passthrough",
+            "source": "rtsp://camera.internal/live",
+            "sourceOnDemand": True,
+            "rtspTransport": "tcp",
         },
     )
     assert requests == [passthrough_replace, passthrough_replace]
+
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_mediamtx_client_reuses_central_paths_when_config_unchanged() -> None:
+    requests: list[tuple[str, str, dict[str, object] | None]] = []
+
+    async def handler(request: Request) -> Response:
+        requests.append(
+            (
+                request.method,
+                str(request.url),
+                json.loads(request.content.decode("utf-8")) if request.content else None,
+            )
+        )
+        return Response(200, json={"ok": True})
+
+    camera_id = uuid4()
+    client = MediaMTXClient(
+        api_base_url="http://mediamtx.internal:9997",
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
+        whip_base_url="http://mediamtx.internal:8889",
+        http_client=AsyncClient(transport=_transport(handler)),
+    )
+
+    first_registration = await client.register_stream(
+        camera_id=camera_id,
+        rtsp_url="rtsp://camera.internal/live",
+        profile=PublishProfile.CENTRAL_GPU,
+        stream_kind="transcode",
+        privacy=PrivacyPolicy(blur_faces=False, blur_plates=False),
+    )
+    second_registration = await client.register_stream(
+        camera_id=camera_id,
+        rtsp_url="rtsp://camera.internal/live",
+        profile=PublishProfile.CENTRAL_GPU,
+        stream_kind="transcode",
+        privacy=PrivacyPolicy(blur_faces=False, blur_plates=False),
+    )
+
+    assert first_registration == second_registration
+    assert requests == [
+        (
+            "POST",
+            f"http://mediamtx.internal:9997/v3/config/paths/replace/cameras/{camera_id}/passthrough",
+            {
+                "name": f"cameras/{camera_id}/passthrough",
+                "source": "rtsp://camera.internal/live",
+                "sourceOnDemand": True,
+                "rtspTransport": "tcp",
+            },
+        ),
+        (
+            "POST",
+            f"http://mediamtx.internal:9997/v3/config/paths/replace/cameras/{camera_id}/annotated",
+            {
+                "name": f"cameras/{camera_id}/annotated",
+                "source": "publisher",
+                "sourceOnDemand": False,
+            },
+        ),
+    ]
+
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_mediamtx_client_revalidates_central_paths_after_cache_expiry() -> None:
+    requests: list[tuple[str, str, dict[str, object] | None]] = []
+    now = 100.0
+
+    async def handler(request: Request) -> Response:
+        requests.append(
+            (
+                request.method,
+                str(request.url),
+                json.loads(request.content.decode("utf-8")) if request.content else None,
+            )
+        )
+        return Response(200, json={"ok": True})
+
+    camera_id = uuid4()
+    client = MediaMTXClient(
+        api_base_url="http://mediamtx.internal:9997",
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
+        whip_base_url="http://mediamtx.internal:8889",
+        http_client=AsyncClient(transport=_transport(handler)),
+        path_config_revalidate_seconds=10.0,
+        clock=lambda: now,
+    )
+
+    await client.register_stream(
+        camera_id=camera_id,
+        rtsp_url="rtsp://camera.internal/live",
+        profile=PublishProfile.CENTRAL_GPU,
+        stream_kind="transcode",
+        privacy=PrivacyPolicy(blur_faces=False, blur_plates=False),
+    )
+    await client.register_stream(
+        camera_id=camera_id,
+        rtsp_url="rtsp://camera.internal/live",
+        profile=PublishProfile.CENTRAL_GPU,
+        stream_kind="transcode",
+        privacy=PrivacyPolicy(blur_faces=False, blur_plates=False),
+    )
+    now = 111.0
+    await client.register_stream(
+        camera_id=camera_id,
+        rtsp_url="rtsp://camera.internal/live",
+        profile=PublishProfile.CENTRAL_GPU,
+        stream_kind="transcode",
+        privacy=PrivacyPolicy(blur_faces=False, blur_plates=False),
+    )
+
+    assert requests == [
+        (
+            "POST",
+            f"http://mediamtx.internal:9997/v3/config/paths/replace/cameras/{camera_id}/passthrough",
+            {
+                "name": f"cameras/{camera_id}/passthrough",
+                "source": "rtsp://camera.internal/live",
+                "sourceOnDemand": True,
+                "rtspTransport": "tcp",
+            },
+        ),
+        (
+            "POST",
+            f"http://mediamtx.internal:9997/v3/config/paths/replace/cameras/{camera_id}/annotated",
+            {
+                "name": f"cameras/{camera_id}/annotated",
+                "source": "publisher",
+                "sourceOnDemand": False,
+            },
+        ),
+        (
+            "POST",
+            f"http://mediamtx.internal:9997/v3/config/paths/replace/cameras/{camera_id}/passthrough",
+            {
+                "name": f"cameras/{camera_id}/passthrough",
+                "source": "rtsp://camera.internal/live",
+                "sourceOnDemand": True,
+                "rtspTransport": "tcp",
+            },
+        ),
+        (
+            "POST",
+            f"http://mediamtx.internal:9997/v3/config/paths/replace/cameras/{camera_id}/annotated",
+            {
+                "name": f"cameras/{camera_id}/annotated",
+                "source": "publisher",
+                "sourceOnDemand": False,
+            },
+        ),
+    ]
 
     await client.close()
 
@@ -634,9 +912,10 @@ async def test_mediamtx_client_respects_passthrough_stream_kind_on_central_profi
                 "name": f"cameras/{camera_id}/passthrough",
                 "source": "rtsp://camera.internal/live",
                 "sourceOnDemand": True,
+                "rtspTransport": "tcp",
             },
         )
-    ]
+        ]
 
     await client.close()
 
@@ -1374,6 +1653,30 @@ async def test_ffmpeg_frame_publisher_captures_stderr_for_diagnostics(
     await publisher.close()
 
 
+@pytest.mark.asyncio
+async def test_drain_publisher_stderr_redacts_rtsp_credentials_and_tokens(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    stream = asyncio.StreamReader()
+    stream.feed_data(
+        b"pull failed for rtsp://user:secret@camera.local:8554/live?jwt=abc123&token=def456\n"
+    )
+    stream.feed_eof()
+
+    with caplog.at_level("WARNING", logger="argus.streaming.mediamtx"):
+        await _drain_publisher_stderr(
+            stream,
+            camera_id=uuid4(),
+            path_name="cameras/example/annotated",
+            publisher_name="ffmpeg",
+        )
+
+    assert "rtsp://***:***@camera.local:8554/live?jwt=***&token=***" in caplog.text
+    assert "rtsp://user:secret@" not in caplog.text
+    assert "jwt=abc123" not in caplog.text
+    assert "token=def456" not in caplog.text
+
+
 def _transport(handler: Callable[[Request], Response | object]):
     async def wrapped(request: Request) -> Response:
         response = handler(request)
@@ -1472,6 +1775,7 @@ async def test_build_registration_always_registers_camera_source_path() -> None:
             "name": f"cameras/{camera_id}/passthrough",
             "source": "rtsp://camera.internal/live",
             "sourceOnDemand": True,
+            "rtspTransport": "tcp",
         },
     )
     assert passthrough_register in requests

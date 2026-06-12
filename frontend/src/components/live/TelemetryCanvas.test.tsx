@@ -7,6 +7,17 @@ import { colorForClass, type SignalTrack } from "@/lib/live-signal-stability";
 
 type TelemetryFrame = components["schemas"]["TelemetryFrame"];
 
+function frameMeta(
+  sequence = 1,
+  workerOrigin: TelemetryFrame["worker_origin"] = "central",
+): Pick<TelemetryFrame, "frame_id" | "frame_sequence" | "worker_origin"> {
+  return {
+    frame_id: `test-frame-${sequence}`,
+    frame_sequence: sequence,
+    worker_origin: workerOrigin,
+  };
+}
+
 const fillTextMock = vi.fn();
 const strokeRectMock = vi.fn();
 const clearRectMock = vi.fn();
@@ -118,6 +129,7 @@ describe("TelemetryCanvas", () => {
   test("redraws overlays from explicit stable tracks with held-state styling", async () => {
     const frame: TelemetryFrame = {
       camera_id: "11111111-1111-1111-1111-111111111111",
+      ...frameMeta(),
       ts: "2026-04-19T09:15:00Z",
       profile: "central-gpu",
       stream_mode: "passthrough",
@@ -186,6 +198,7 @@ describe("TelemetryCanvas", () => {
   test("filters raw frame tracks when stable tracks are omitted", async () => {
     const frame: TelemetryFrame = {
       camera_id: "11111111-1111-1111-1111-111111111111",
+      ...frameMeta(1, "edge"),
       ts: "2026-04-19T09:15:00Z",
       profile: "central-gpu",
       stream_mode: "passthrough",
@@ -231,6 +244,7 @@ describe("TelemetryCanvas", () => {
   test("does not fall back to raw frame overlays on annotated streams", async () => {
     const frame: TelemetryFrame = {
       camera_id: "11111111-1111-1111-1111-111111111111",
+      ...frameMeta(),
       ts: "2026-04-19T09:15:00Z",
       profile: "central-gpu",
       stream_mode: "annotated-whip",
@@ -268,6 +282,7 @@ describe("TelemetryCanvas", () => {
   test("does not fall back to raw frame overlays on filtered preview streams", async () => {
     const frame: TelemetryFrame = {
       camera_id: "11111111-1111-1111-1111-111111111111",
+      ...frameMeta(),
       ts: "2026-04-19T09:15:00Z",
       profile: "jetson-nano",
       stream_mode: "filtered-preview",
@@ -305,6 +320,7 @@ describe("TelemetryCanvas", () => {
   test("does not draw explicit stable overlays on annotated streams", async () => {
     const frame: TelemetryFrame = {
       camera_id: "11111111-1111-1111-1111-111111111111",
+      ...frameMeta(),
       ts: "2026-04-19T09:15:00Z",
       profile: "central-gpu",
       stream_mode: "annotated-whip",
@@ -346,6 +362,7 @@ describe("TelemetryCanvas", () => {
   test("does not draw a frontend overlay when disabled", async () => {
     const frame: TelemetryFrame = {
       camera_id: "11111111-1111-1111-1111-111111111111",
+      ...frameMeta(),
       ts: "2026-04-19T09:15:00Z",
       profile: "central-gpu",
       stream_mode: "passthrough",
@@ -383,6 +400,7 @@ describe("TelemetryCanvas", () => {
   test("scales telemetry boxes from the real source size when provided", async () => {
     const frame: TelemetryFrame = {
       camera_id: "11111111-1111-1111-1111-111111111111",
+      ...frameMeta(),
       ts: "2026-04-19T09:15:00Z",
       profile: "central-gpu",
       stream_mode: "passthrough",
@@ -419,6 +437,7 @@ describe("TelemetryCanvas", () => {
   test("prefers the frame source size over the camera source size", async () => {
     const frame: TelemetryFrame = {
       camera_id: "11111111-1111-1111-1111-111111111111",
+      ...frameMeta(),
       ts: "2026-04-19T09:15:00Z",
       profile: "central-gpu",
       stream_mode: "passthrough",
@@ -456,6 +475,7 @@ describe("TelemetryCanvas", () => {
   test("does not draw a center endpoint dot for default frame overlays", async () => {
     const frame: TelemetryFrame = {
       camera_id: "11111111-1111-1111-1111-111111111111",
+      ...frameMeta(),
       ts: "2026-04-19T09:15:00Z",
       profile: "central-gpu",
       stream_mode: "passthrough",
@@ -493,6 +513,7 @@ describe("TelemetryCanvas", () => {
   test("draws scalable motion trails between stable object centers", async () => {
     const firstFrame: TelemetryFrame = {
       camera_id: "11111111-1111-1111-1111-111111111111",
+      ...frameMeta(),
       ts: "2026-04-19T09:15:00Z",
       profile: "central-gpu",
       stream_mode: "passthrough",
@@ -514,6 +535,7 @@ describe("TelemetryCanvas", () => {
     };
     const nextFrame: TelemetryFrame = {
       ...firstFrame,
+      ...frameMeta(2),
       ts: "2026-04-19T09:15:01Z",
       tracks: [
         {
@@ -558,6 +580,7 @@ describe("TelemetryCanvas", () => {
   test("moves labels below top-band boxes to avoid stream status collisions", async () => {
     const frame: TelemetryFrame = {
       camera_id: "11111111-1111-1111-1111-111111111111",
+      ...frameMeta(),
       ts: "2026-04-19T09:15:00Z",
       profile: "central-gpu",
       stream_mode: "passthrough",
@@ -602,6 +625,7 @@ describe("TelemetryCanvas", () => {
   test("matches object-contain letterbox offsets for non-widescreen sources", async () => {
     const frame: TelemetryFrame = {
       camera_id: "11111111-1111-1111-1111-111111111111",
+      ...frameMeta(),
       ts: "2026-04-19T09:15:00Z",
       profile: "central-gpu",
       stream_mode: "passthrough",
@@ -638,6 +662,7 @@ describe("TelemetryCanvas", () => {
   test("does not expose raw tracker ids in user-facing labels", async () => {
     const frame: TelemetryFrame = {
       camera_id: "11111111-1111-1111-1111-111111111111",
+      ...frameMeta(),
       ts: "2026-04-19T09:15:00Z",
       profile: "central-gpu",
       stream_mode: "passthrough",

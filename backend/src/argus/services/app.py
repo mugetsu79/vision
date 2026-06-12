@@ -10,7 +10,7 @@ import math
 import re
 import secrets
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -21,6 +21,7 @@ from uuid import UUID
 import httpx
 from fastapi import HTTPException, status
 from nats.js import api as js_api
+from pydantic import ValidationError
 from sqlalchemy import bindparam, delete, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
@@ -195,6 +196,7 @@ from argus.models.tables import (
     SupervisorServiceStatusReport,
     Tenant,
     TrackingEvent,
+    TrackingFrame,
     User,
     WorkerAssignment,
     WorkerModelAdmissionReport,
@@ -359,6 +361,7 @@ class AppServices:
     incidents: IncidentService
     streams: StreamService
     query: QueryService
+    edge_telemetry_ingest: EdgeTelemetryIngestService
     telemetry: NatsTelemetryService
     users: UserManagementService
     billing: BillingService
@@ -367,7 +370,11 @@ class AppServices:
     support: SupportService
     maritime: MaritimeRuntimeService
 
+    async def start(self) -> None:
+        await self.edge_telemetry_ingest.start()
+
     async def close(self) -> None:
+        await self.edge_telemetry_ingest.close()
         await self.streams.close()
         await self.deployment.close()
 
@@ -436,6 +443,71 @@ class DatabaseAuditLogger:
                 "latency_ms": latency_ms,
             },
         )
+
+
+def _telemetry_frame_key(frame: TelemetryFrame) -> str:
+    return f"{frame.camera_id}:{frame.frame_id}"
+
+TRACKING_EVENT_ROW_UUID_NAMESPACE = uuid.NAMESPACE_URL
+
+
+def _tracking_event_rows_for_frame(
+    frame: TelemetryFrame,
+    *,
+    telemetry_transport: str,
+) -> list[dict[str, object]]:
+    return [
+        {
+            "id": uuid.uuid5(
+                TRACKING_EVENT_ROW_UUID_NAMESPACE,
+                (
+                    f"{frame.camera_id}:{frame.frame_id}:{frame.ts.isoformat()}:"
+                    f"{track.track_id}:{track.source_track_id}:{track.stable_track_id}"
+                ),
+            ),
+            "ts": frame.ts,
+            "camera_id": frame.camera_id,
+            "class_name": track.class_name,
+            "track_id": track.track_id,
+            "confidence": track.confidence,
+            "speed_kph": track.speed_kph,
+            "direction_deg": track.direction_deg,
+            "zone_id": track.zone_id,
+            "attributes": track.attributes,
+            "bbox": track.bbox,
+            "frame_id": frame.frame_id,
+            "frame_sequence": frame.frame_sequence,
+            "stable_track_id": track.stable_track_id,
+            "source_track_id": track.source_track_id,
+            "track_state": track.track_state,
+            "last_seen_age_ms": track.last_seen_age_ms,
+            "telemetry_transport": telemetry_transport,
+            "worker_origin": frame.worker_origin.value,
+        }
+        for track in frame.tracks
+    ]
+
+
+def _tracking_frame_row_for_frame(
+    frame: TelemetryFrame,
+    *,
+    telemetry_transport: str,
+) -> dict[str, object]:
+    return {
+        "camera_id": frame.camera_id,
+        "frame_id": frame.frame_id,
+        "frame_sequence": frame.frame_sequence,
+        "ts": frame.ts,
+        "profile": frame.profile.value,
+        "stream_mode": frame.stream_mode.value,
+        "stream_profile_id": frame.stream_profile_id,
+        "source_size": frame.source_size,
+        "counts": frame.counts,
+        "track_count": len(frame.tracks),
+        "telemetry_transport": telemetry_transport,
+        "worker_origin": frame.worker_origin.value,
+        "live_broadcast_at": None,
+    }
 
 
 class TenancyService:
@@ -1770,6 +1842,210 @@ class CameraService:
             logger.exception("Failed to publish camera command update for camera %s", camera.id)
 
 
+@dataclass(frozen=True, slots=True)
+class FramePersistResult:
+    frames_inserted: int
+    tracks_inserted: int
+    accepted: bool
+    needs_live_broadcast: bool
+
+
+class WorkerTelemetryIngestService:
+    def __init__(
+        self,
+        *,
+        session_factory: async_sessionmaker[AsyncSession],
+        event_client: NatsJetStreamClient,
+        settings: Settings,
+        edge_subject_prefix: str = "evt.edge.tracking",
+        worker_subject_prefix: str = "evt.worker.tracking",
+        live_subject_prefix: str = "evt.tracking",
+        max_seen_frames: int = 4096,
+    ) -> None:
+        self.session_factory = session_factory
+        self.event_client = event_client
+        self.settings = settings
+        self.edge_subject_prefix = edge_subject_prefix.rstrip(".")
+        self.worker_subject_prefix = worker_subject_prefix.rstrip(".")
+        self.live_subject_prefix = live_subject_prefix.rstrip(".")
+        self.max_seen_frames = max_seen_frames
+        self._seen_frame_keys: dict[str, None] = {}
+        self._subscriptions: list[Any] = []
+        self._started = False
+
+    async def start(self) -> None:
+        if self._started or not self.settings.enable_nats:
+            return
+
+        async def handle_message(message: EventMessage, *, source: str) -> None:
+            try:
+                frame = TelemetryFrame.model_validate_json(message.data)
+            except ValidationError as exc:
+                logger.warning(
+                    "Dropping invalid worker telemetry frame from NATS",
+                    extra={
+                        "subject": message.subject,
+                        "source": source,
+                        "error_count": exc.error_count(),
+                    },
+                )
+                return
+            await self.ingest_frame(frame, source=source)
+
+        subscriptions: list[Any] = []
+        try:
+            subscriptions.append(
+                await self.event_client.subscribe(
+                    f"{self.edge_subject_prefix}.*",
+                    lambda message: handle_message(message, source="edge_nats"),
+                    deliver_policy=js_api.DeliverPolicy.NEW,
+                    durable="argus-edge-telemetry-ingest",
+                    stream="ARGUS_TRACKING",
+                )
+            )
+            subscriptions.append(
+                await self.event_client.subscribe(
+                    f"{self.worker_subject_prefix}.*",
+                    lambda message: handle_message(message, source="worker_nats"),
+                    deliver_policy=js_api.DeliverPolicy.NEW,
+                    durable="argus-worker-telemetry-ingest",
+                    stream="ARGUS_TRACKING",
+                )
+            )
+        except Exception:
+            for subscription in subscriptions:
+                unsubscribe = getattr(subscription, "unsubscribe", None)
+                if callable(unsubscribe):
+                    await unsubscribe()
+            self._subscriptions.clear()
+            self._started = False
+            raise
+        self._subscriptions = subscriptions
+        self._started = True
+
+    async def close(self) -> None:
+        subscriptions = list(self._subscriptions)
+        self._subscriptions.clear()
+        self._started = False
+        for subscription in subscriptions:
+            unsubscribe = getattr(subscription, "unsubscribe", None)
+            if callable(unsubscribe):
+                await unsubscribe()
+
+    async def ingest_envelope(
+        self,
+        payload: TelemetryEnvelope,
+        *,
+        source: Literal["http", "edge_nats", "worker_nats"],
+    ) -> dict[str, int]:
+        totals = {
+            "frames_inserted": 0,
+            "tracks_inserted": 0,
+            "broadcasted": 0,
+            "duplicates": 0,
+        }
+        for frame in payload.events:
+            result = await self.ingest_frame(frame, source=source)
+            for key in totals:
+                totals[key] += result[key]
+        return totals
+
+    async def ingest_frame(
+        self,
+        frame: TelemetryFrame,
+        *,
+        source: Literal["http", "edge_nats", "worker_nats"],
+    ) -> dict[str, int]:
+        persisted = await self._persist_frame(frame, telemetry_transport=source)
+        if not persisted.needs_live_broadcast:
+            return {
+                "frames_inserted": persisted.frames_inserted,
+                "tracks_inserted": persisted.tracks_inserted,
+                "broadcasted": 0,
+                "duplicates": 1,
+            }
+        await self.event_client.publish(f"{self.live_subject_prefix}.{frame.camera_id}", frame)
+        await self._mark_frame_broadcasted(frame)
+        frame_key = _telemetry_frame_key(frame)
+        self._remember_frame(frame_key)
+        return {
+            "frames_inserted": persisted.frames_inserted,
+            "tracks_inserted": persisted.tracks_inserted,
+            "broadcasted": 1,
+            "duplicates": 0,
+        }
+
+    async def _persist_frame(
+        self,
+        frame: TelemetryFrame,
+        *,
+        telemetry_transport: str,
+    ) -> FramePersistResult:
+        frame_row = _tracking_frame_row_for_frame(frame, telemetry_transport=telemetry_transport)
+        event_rows = _tracking_event_rows_for_frame(frame, telemetry_transport=telemetry_transport)
+        async with self.session_factory() as session:
+            frame_statement = (
+                insert(TrackingFrame)
+                .values(frame_row)
+                .on_conflict_do_nothing(index_elements=["camera_id", "frame_id"])
+                .returning(TrackingFrame.frame_id)
+            )
+            frame_result = await session.execute(frame_statement)
+            accepted = frame_result.scalar_one_or_none() is not None
+            if not accepted:
+                live_broadcast_at = await session.scalar(
+                    select(TrackingFrame.live_broadcast_at).where(
+                        TrackingFrame.camera_id == frame.camera_id,
+                        TrackingFrame.frame_id == frame.frame_id,
+                    )
+                )
+                return FramePersistResult(
+                    frames_inserted=0,
+                    tracks_inserted=0,
+                    accepted=False,
+                    needs_live_broadcast=live_broadcast_at is None,
+                )
+
+            inserted = 0
+            if event_rows:
+                statement = insert(TrackingEvent).values(event_rows)
+                returning_statement = statement.on_conflict_do_nothing(
+                    index_elements=["id", "ts"]
+                ).returning(TrackingEvent.id)
+                result = await session.execute(returning_statement)
+                inserted = len(result.scalars().all())
+            await session.commit()
+            return FramePersistResult(
+                frames_inserted=1,
+                tracks_inserted=inserted,
+                accepted=True,
+                needs_live_broadcast=True,
+            )
+
+    async def _mark_frame_broadcasted(self, frame: TelemetryFrame) -> None:
+        async with self.session_factory() as session:
+            await session.execute(
+                update(TrackingFrame)
+                .where(
+                    TrackingFrame.camera_id == frame.camera_id,
+                    TrackingFrame.frame_id == frame.frame_id,
+                    TrackingFrame.live_broadcast_at.is_(None),
+                )
+                .values(live_broadcast_at=datetime.now(tz=UTC))
+            )
+            await session.commit()
+
+    def _remember_frame(self, frame_key: str) -> None:
+        self._seen_frame_keys[frame_key] = None
+        if len(self._seen_frame_keys) <= self.max_seen_frames:
+            return
+        oldest_key = next(iter(self._seen_frame_keys))
+        self._seen_frame_keys.pop(oldest_key, None)
+
+
+EdgeTelemetryIngestService = WorkerTelemetryIngestService
+
+
 class EdgeService:
     def __init__(
         self,
@@ -1777,11 +2053,13 @@ class EdgeService:
         settings: Settings,
         events: NatsJetStreamClient,
         audit_logger: DatabaseAuditLogger,
+        telemetry_ingest: EdgeTelemetryIngestService,
     ) -> None:
         self.session_factory = session_factory
         self.settings = settings
         self.events = events
         self.audit_logger = audit_logger
+        self.telemetry_ingest = telemetry_ingest
 
     async def register_edge_node(
         self,
@@ -1822,7 +2100,7 @@ class EdgeService:
             api_key=api_key_plaintext,
             nats_nkey_seed=nats_seed,
             subjects=[
-                f"evt.tracking.{edge_node.id}",
+                f"evt.edge.tracking.{edge_node.id}",
                 f"edge.heartbeat.{edge_node.id}",
             ],
             mediamtx_url=self.settings.mediamtx_url,
@@ -1839,39 +2117,8 @@ class EdgeService:
         )
 
     async def ingest_telemetry(self, payload: TelemetryEnvelope) -> dict[str, int]:
-        inserted = 0
-        async with self.session_factory() as session:
-            for frame in payload.events:
-                rows = []
-                for track in frame.tracks:
-                    rows.append(
-                        {
-                            "id": uuid.uuid5(
-                                uuid.NAMESPACE_URL,
-                                f"{frame.camera_id}:{frame.ts.isoformat()}:{track.track_id}",
-                            ),
-                            "ts": frame.ts,
-                            "camera_id": frame.camera_id,
-                            "class_name": track.class_name,
-                            "track_id": track.track_id,
-                            "confidence": track.confidence,
-                            "speed_kph": track.speed_kph,
-                            "direction_deg": track.direction_deg,
-                            "zone_id": track.zone_id,
-                            "attributes": track.attributes,
-                            "bbox": track.bbox,
-                        }
-                    )
-                if rows:
-                    statement = insert(TrackingEvent).values(rows)
-                    returning_statement = statement.on_conflict_do_nothing(
-                        index_elements=["id", "ts"]
-                    ).returning(TrackingEvent.id)
-                    result = await session.execute(returning_statement)
-                    inserted += len(result.scalars().all())
-                await self.events.publish(f"evt.tracking.{frame.camera_id}", frame)
-            await session.commit()
-        return {"inserted": inserted}
+        result = await self.telemetry_ingest.ingest_envelope(payload, source="http")
+        return {"inserted": result["tracks_inserted"]}
 
     async def record_heartbeat(self, payload: EdgeHeartbeatRequest) -> EdgeHeartbeatResponse:
         async with self.session_factory() as session:
@@ -4635,25 +4882,33 @@ class StreamService:
         return callback
 
 
+@dataclass
+class _TelemetrySubscriber:
+    allowed_camera_ids: set[UUID]
+    queue: asyncio.Queue[TelemetryFrame]
+
+
 class NatsTelemetrySubscription:
     def __init__(
         self,
         *,
-        event_client: NatsJetStreamClient,
+        subscriber_id: int,
         queue: asyncio.Queue[TelemetryFrame],
-        nats_subscription: Any,
+        close_callback: Callable[[int], Awaitable[None]],
     ) -> None:
-        self.event_client = event_client
+        self.subscriber_id = subscriber_id
         self.queue = queue
-        self.nats_subscription = nats_subscription
+        self._close_callback = close_callback
+        self._closed = False
 
     async def receive(self) -> TelemetryFrame:
         return await self.queue.get()
 
     async def close(self) -> None:
-        unsubscribe = getattr(self.nats_subscription, "unsubscribe", None)
-        if callable(unsubscribe):
-            await unsubscribe()
+        if self._closed:
+            return
+        self._closed = True
+        await self._close_callback(self.subscriber_id)
 
 
 class NatsTelemetryService:
@@ -4667,31 +4922,76 @@ class NatsTelemetryService:
         self.session_factory = session_factory
         self.event_client = event_client
         self.settings = settings
+        self._subscribers: dict[int, _TelemetrySubscriber] = {}
+        self._subscription_lock = asyncio.Lock()
+        self._nats_subscription: Any | None = None
+        self._next_subscriber_id = 0
 
     async def subscribe(self, tenant_context: TenantContext) -> NatsTelemetrySubscription:
         allowed_camera_ids = await self._camera_ids_for_tenant(tenant_context)
         queue: asyncio.Queue[TelemetryFrame] = asyncio.Queue(
             maxsize=self.settings.websocket_telemetry_buffer_size
         )
+        async with self._subscription_lock:
+            subscriber_id = self._next_subscriber_id
+            self._next_subscriber_id += 1
+            self._subscribers[subscriber_id] = _TelemetrySubscriber(
+                allowed_camera_ids=allowed_camera_ids,
+                queue=queue,
+            )
+            try:
+                await self._ensure_subscription()
+            except Exception:
+                self._subscribers.pop(subscriber_id, None)
+                raise
 
-        async def handle_message(message: EventMessage) -> None:
-            frame = TelemetryFrame.model_validate_json(message.data)
-            if frame.camera_id not in allowed_camera_ids:
-                return
-            if queue.full():
-                queue.get_nowait()
-            queue.put_nowait(frame)
+        return NatsTelemetrySubscription(
+            subscriber_id=subscriber_id,
+            queue=queue,
+            close_callback=self._close_subscription,
+        )
 
-        nats_subscription = await self.event_client.subscribe(
+    async def _ensure_subscription(self) -> None:
+        if self._nats_subscription is not None:
+            return
+        self._nats_subscription = await self.event_client.subscribe(
             "evt.tracking.*",
-            handle_message,
+            self._handle_live_message,
             deliver_policy=js_api.DeliverPolicy.NEW,
         )
-        return NatsTelemetrySubscription(
-            event_client=self.event_client,
-            queue=queue,
-            nats_subscription=nats_subscription,
-        )
+
+    async def _handle_live_message(self, message: EventMessage) -> None:
+        frame = TelemetryFrame.model_validate_json(message.data)
+        self._publish_live_frame(frame)
+
+    async def publish_live_for_test(self, frame: TelemetryFrame) -> None:
+        self._publish_live_frame(frame)
+
+    async def _close_subscription(self, subscriber_id: int) -> None:
+        async with self._subscription_lock:
+            self._subscribers.pop(subscriber_id, None)
+
+    def _publish_live_frame(self, frame: TelemetryFrame) -> None:
+        for subscriber in tuple(self._subscribers.values()):
+            if frame.camera_id not in subscriber.allowed_camera_ids:
+                continue
+            self._enqueue_latest(subscriber.queue, frame)
+
+    def _enqueue_latest(
+        self,
+        queue: asyncio.Queue[TelemetryFrame],
+        frame: TelemetryFrame,
+    ) -> None:
+        if queue.full():
+            while True:
+                try:
+                    queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+        try:
+            queue.put_nowait(frame)
+        except asyncio.QueueFull:
+            logger.warning("Dropped telemetry frame because subscriber queue remained full.")
 
     async def _camera_ids_for_tenant(self, tenant_context: TenantContext) -> set[UUID]:
         async with self.session_factory() as session:
@@ -4725,7 +5025,18 @@ def build_app_services(
             else None
         ),
     )
-    edge_service = EdgeService(db.session_factory, settings, events, audit_logger)
+    edge_telemetry_ingest = EdgeTelemetryIngestService(
+        session_factory=db.session_factory,
+        event_client=events,
+        settings=settings,
+    )
+    edge_service = EdgeService(
+        db.session_factory,
+        settings,
+        events,
+        audit_logger,
+        edge_telemetry_ingest,
+    )
     configuration_service = configuration_service or OperatorConfigurationService(
         db.session_factory,
         settings,
@@ -4803,6 +5114,7 @@ def build_app_services(
         ),
         streams=StreamService(db.session_factory, mediamtx, settings),
         query=query_service,
+        edge_telemetry_ingest=edge_telemetry_ingest,
         telemetry=NatsTelemetryService(
             session_factory=db.session_factory,
             event_client=events,

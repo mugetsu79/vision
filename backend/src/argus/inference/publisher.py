@@ -12,6 +12,7 @@ from uuid import UUID
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
+from argus.compat import StrEnum
 from argus.streaming.mediamtx import PublishProfile, StreamMode
 
 MonotonicClock = Callable[[], float]
@@ -37,15 +38,47 @@ class TelemetryTrack(BaseModel):
     track_state: Literal["active", "coasting"] | None = None
     last_seen_age_ms: int | None = None
     source_track_id: int | None = None
+    lifecycle_reason: str | None = None
     speed_kph: float | None = None
     direction_deg: float | None = None
     zone_id: str | None = None
     attributes: dict[str, object] = Field(default_factory=dict)
 
 
+class WorkerOrigin(StrEnum):
+    EDGE = "edge"
+    CENTRAL = "central"
+
+
+def telemetry_subject_prefix_for_origin(worker_origin: WorkerOrigin | str) -> str:
+    origin = WorkerOrigin(worker_origin)
+    if origin is WorkerOrigin.EDGE:
+        return "evt.edge.tracking"
+    return "evt.worker.tracking"
+
+
+def _worker_origin_for_subject_prefix(subject_prefix: str) -> WorkerOrigin:
+    match subject_prefix.rstrip("."):
+        case "evt.edge.tracking":
+            return WorkerOrigin.EDGE
+        case _:
+            return WorkerOrigin.CENTRAL
+
+
+def telemetry_subject_for_camera(
+    camera_id: UUID,
+    *,
+    worker_origin: WorkerOrigin | str,
+) -> str:
+    return f"{telemetry_subject_prefix_for_origin(worker_origin)}.{camera_id}"
+
+
 class TelemetryFrame(BaseModel):
     model_config = ConfigDict(frozen=True)
 
+    frame_id: UUID
+    frame_sequence: int
+    worker_origin: WorkerOrigin
     camera_id: UUID
     ts: datetime
     profile: PublishProfile
@@ -75,16 +108,57 @@ class NatsPublisher:
         self,
         client: SupportsNatsPublish,
         *,
-        subject_prefix: str = "evt.tracking",
+        subject_prefix: str | None = None,
+        worker_origin: WorkerOrigin | str | None = None,
     ) -> None:
         self.client = client
-        self.subject_prefix = subject_prefix.rstrip(".")
+        resolved_subject_prefix = (
+            subject_prefix
+            if subject_prefix is not None
+            else telemetry_subject_prefix_for_origin(worker_origin or WorkerOrigin.CENTRAL)
+        )
+        self.subject_prefix = resolved_subject_prefix.rstrip(".")
+        self.worker_origin = (
+            WorkerOrigin(worker_origin)
+            if worker_origin is not None
+            else _worker_origin_for_subject_prefix(self.subject_prefix)
+        )
+        self.last_payload_bytes: int | None = None
+        self.last_serialization_seconds: float | None = None
 
     async def publish(self, frame: TelemetryFrame) -> None:
-        await self.client.publish(f"{self.subject_prefix}.{frame.camera_id}", frame)
+        if frame.worker_origin != self.worker_origin:
+            raise ValueError(
+                "TelemetryFrame worker_origin does not match NatsPublisher "
+                f"worker_origin: frame={frame.worker_origin.value} "
+                f"publisher={self.worker_origin.value}"
+            )
+        subject = f"{self.subject_prefix}.{frame.camera_id}"
+        serialization_started_at = time.perf_counter()
+        payload = frame.model_dump_json().encode("utf-8")
+        self.last_serialization_seconds = time.perf_counter() - serialization_started_at
+        self.last_payload_bytes = len(payload)
+        publish_bytes = getattr(self.client, "publish_bytes", None)
+        if callable(publish_bytes):
+            await publish_bytes(subject, payload)
+            return
+        await self.client.publish(subject, frame)
 
     async def close(self) -> None:
         return None
+
+    def describe_runtime_state(self) -> dict[str, object]:
+        return {
+            "transport": "nats",
+            "path": self.subject_prefix,
+            "cadence_seconds": 0.0,
+            "fallback_active": False,
+            "fallback_count": 0,
+            "last_error": None,
+            "last_payload_bytes": self.last_payload_bytes,
+            "last_serialization_seconds": self.last_serialization_seconds,
+            "worker_origin": self.worker_origin.value,
+        }
 
 
 class BufferedTelemetryPublisher:
@@ -164,6 +238,13 @@ class BufferedTelemetryPublisher:
                 )
         finally:
             await self.wrapped_publisher.close()
+
+    def describe_runtime_state(self) -> dict[str, object]:
+        describe = getattr(self.wrapped_publisher, "describe_runtime_state", None)
+        state = dict(describe()) if callable(describe) else {}
+        state["dropped_frames"] = self.dropped_frames
+        state["pending_frames"] = self._queue.qsize()
+        return state
 
     def _ensure_worker(self) -> None:
         if self._worker_task is None or self._worker_task.done():
@@ -277,18 +358,47 @@ class HttpPublisher:
         if self._owned_client:
             await self._http_client.aclose()
 
+    def describe_runtime_state(self) -> dict[str, object]:
+        return {
+            "transport": "http",
+            "path": self.url,
+            "cadence_seconds": self.flush_interval_seconds,
+            "fallback_active": False,
+            "fallback_count": 0,
+            "last_error": None,
+        }
+
 
 class ResilientPublisher:
     def __init__(self, *, primary: PublisherTransport, fallback: PublisherTransport) -> None:
         self.primary = primary
         self.fallback = fallback
+        self.active_transport = "primary"
+        self.fallback_count = 0
+        self.last_error: str | None = None
 
     async def publish(self, frame: TelemetryFrame) -> None:
         try:
             await self.primary.publish(frame)
+            self.active_transport = "primary"
+            self.last_error = None
         except Exception:
+            self.active_transport = "fallback"
+            self.fallback_count += 1
+            self.last_error = "Primary telemetry transport failed."
             await self.fallback.publish(frame)
 
     async def close(self) -> None:
         await self.primary.close()
         await self.fallback.close()
+
+    def describe_runtime_state(self) -> dict[str, object]:
+        active = self.primary if self.active_transport == "primary" else self.fallback
+        describe = getattr(active, "describe_runtime_state", None)
+        state = dict(describe()) if callable(describe) else {}
+        state["fallback_active"] = self.active_transport == "fallback"
+        state["fallback_count"] = self.fallback_count
+        state["last_error"] = self.last_error
+        if self.active_transport == "fallback":
+            state["transport"] = "http_fallback"
+        return state

@@ -375,14 +375,18 @@ class _RecordingTrackerFactory:
 
 
 class _FakePublisher:
-    def __init__(self) -> None:
+    def __init__(self, runtime_state: dict[str, object] | None = None) -> None:
         self.frames: list[TelemetryFrame] = []
+        self.runtime_state = runtime_state or {}
 
     async def publish(self, frame: TelemetryFrame) -> None:
         self.frames.append(frame)
 
     async def close(self) -> None:
         return None
+
+    def describe_runtime_state(self) -> dict[str, object]:
+        return dict(self.runtime_state)
 
 
 class _FailingPublisher:
@@ -660,6 +664,20 @@ class _RecordingRuntimeReporter:
         self.reports.append(payload)
 
 
+class _SlowRuntimeReporter:
+    def __init__(self, delay_seconds: float = 0.25) -> None:
+        self.delay_seconds = delay_seconds
+        self.started = asyncio.Event()
+        self.finished = asyncio.Event()
+        self.reports: list[object] = []
+
+    async def record_runtime_report(self, payload: object) -> None:
+        self.started.set()
+        await asyncio.sleep(self.delay_seconds)
+        self.reports.append(payload)
+        self.finished.set()
+
+
 class _RuleIncidentEngine:
     async def evaluate(
         self,
@@ -832,6 +850,9 @@ async def test_engine_applies_live_class_and_tracker_updates_without_restart() -
     assert detector.calls == [["car"], ["bus"]]
     assert tracker_creations == [TrackerType.BOTSORT, TrackerType.BYTETRACK]
     assert [frame.counts for frame in publisher.frames] == [{"car": 1}, {"bus": 1}]
+    assert [frame.frame_sequence for frame in publisher.frames] == [1, 2]
+    assert publisher.frames[0].frame_id != publisher.frames[1].frame_id
+    assert all(frame.worker_origin == "central" for frame in publisher.frames)
 
 
 @pytest.mark.asyncio
@@ -1690,6 +1711,59 @@ async def test_engine_draws_annotations_for_central_stream_frames() -> None:
 
 
 @pytest.mark.asyncio
+async def test_engine_runtime_reporter_runs_off_frame_loop() -> None:
+    camera_id = uuid4()
+    runtime_reporter = _SlowRuntimeReporter()
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=_FakeFrameSource([np.zeros((64, 64, 3), dtype=np.uint8)]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+        runtime_reporter=runtime_reporter,
+    )
+
+    loop = asyncio.get_running_loop()
+    started_at = loop.time()
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, tzinfo=UTC))
+    elapsed = loop.time() - started_at
+
+    assert elapsed < 0.15
+    assert runtime_reporter.reports == []
+    await asyncio.wait_for(runtime_reporter.started.wait(), timeout=0.1)
+    await asyncio.wait_for(runtime_reporter.finished.wait(), timeout=1.0)
+    assert len(runtime_reporter.reports) == 1
+    await engine.close()
+
+
+@pytest.mark.asyncio
+async def test_engine_close_flushes_runtime_reporter_worker() -> None:
+    camera_id = uuid4()
+    runtime_reporter = _SlowRuntimeReporter(delay_seconds=0.01)
+    engine = InferenceEngine(
+        config=_engine_config(camera_id),
+        frame_source=_FakeFrameSource([np.zeros((64, 64, 3), dtype=np.uint8)]),
+        detector=_FakeDetector(),
+        tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
+        publisher=_FakePublisher(),
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+        runtime_reporter=runtime_reporter,
+    )
+
+    await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, tzinfo=UTC))
+    await engine.close()
+
+    assert len(runtime_reporter.reports) == 1
+
+
+@pytest.mark.asyncio
 async def test_engine_reports_runtime_report_media_capture_backend_and_encoder_modes() -> None:
     camera_id = uuid4()
     edge_node_id = uuid4()
@@ -1721,7 +1795,17 @@ async def test_engine_reports_runtime_report_media_capture_backend_and_encoder_m
         ),
         detector=_FakeDetector(),
         tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
-        publisher=_FakePublisher(),
+        publisher=_FakePublisher(
+            {
+                "transport": "nats",
+                "path": "evt.edge.tracking",
+                "cadence_seconds": 0.0,
+                "fallback_active": False,
+                "dropped_frames": 2,
+                "pending_frames": 1,
+                "last_error": None,
+            }
+        ),
         tracking_store=_FakeTrackingStore(),
         rule_engine=_FakeRuleEngine(),
         event_client=_FakeEventClient(),
@@ -1737,6 +1821,7 @@ async def test_engine_reports_runtime_report_media_capture_backend_and_encoder_m
     )
 
     await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, tzinfo=UTC))
+    await engine.close()
 
     assert len(runtime_reporter.reports) == 1
     report = runtime_reporter.reports[0]
@@ -1750,6 +1835,13 @@ async def test_engine_reports_runtime_report_media_capture_backend_and_encoder_m
     assert report.media_pipeline_mode == "jetson_gstreamer_native"
     assert report.media_capture_backend == "gstreamer_appsink"
     assert report.encoder_mode == "software"
+    assert report.telemetry_transport == "nats"
+    assert report.telemetry_path == "evt.edge.tracking"
+    assert report.telemetry_cadence_seconds == 0.0
+    assert report.telemetry_fallback_active is False
+    assert report.telemetry_publish_drops == 2
+    assert report.telemetry_pending_frames == 1
+    assert report.telemetry_last_error is None
 
 
 @pytest.mark.asyncio
@@ -1783,6 +1875,7 @@ async def test_engine_omits_runtime_artifact_when_selected_provider_falls_back()
     )
 
     await engine.run_once(ts=datetime(2026, 4, 18, 12, 0, tzinfo=UTC))
+    await engine.close()
 
     assert len(runtime_reporter.reports) == 1
     report = runtime_reporter.reports[0]
@@ -2228,6 +2321,69 @@ async def test_engine_publishes_stable_count_and_coasting_track_after_missed_det
     assert len(tracking_store.records[0][1]) == 1
     assert tracking_store.records[1][1] == []
     assert [len(call) for call in rule_engine.detection_calls] == [1, 0]
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected_origin"),
+    [(ProcessingMode.EDGE, "edge"), (ProcessingMode.CENTRAL, "central")],
+)
+@pytest.mark.asyncio
+async def test_engine_telemetry_includes_lifecycle_reason_for_edge_and_central_modes(
+    mode: ProcessingMode,
+    expected_origin: str,
+) -> None:
+    camera_id = uuid4()
+    publisher = _FakePublisher()
+
+    class _RawIdSwitchTracker:
+        def __init__(self) -> None:
+            self._source_track_ids = iter([7, 99])
+
+        def update(
+            self,
+            detections: list[Detection],
+            frame: np.ndarray | None = None,
+        ) -> list[Detection]:
+            del frame
+            return [
+                detection.with_updates(track_id=next(self._source_track_ids))
+                for detection in detections
+            ]
+
+    config = _engine_config(camera_id).model_copy(update={"mode": mode})
+    engine = InferenceEngine(
+        config=config,
+        frame_source=_FakeFrameSource(
+            [np.zeros((96, 96, 3), dtype=np.uint8), np.zeros((96, 96, 3), dtype=np.uint8)]
+        ),
+        detector=_SequenceDetector(
+            [
+                [Detection(class_name="car", confidence=0.96, bbox=(20.0, 10.0, 60.0, 90.0))],
+                [Detection(class_name="car", confidence=0.95, bbox=(22.0, 12.0, 62.0, 92.0))],
+            ]
+        ),
+        tracker_factory=lambda tracker_type: _RawIdSwitchTracker(),
+        publisher=publisher,
+        tracking_store=_FakeTrackingStore(),
+        rule_engine=_FakeRuleEngine(),
+        event_client=_FakeEventClient(),
+        stream_client=_FakeStreamClient(),
+    )
+
+    await engine.run_once(ts=datetime(2026, 5, 9, 12, 0, tzinfo=UTC))
+    await engine.run_once(ts=datetime(2026, 5, 9, 12, 0, 1, tzinfo=UTC))
+    await engine.close()
+
+    assert [frame.worker_origin for frame in publisher.frames] == [
+        expected_origin,
+        expected_origin,
+    ]
+    assert [frame.tracks[0].stable_track_id for frame in publisher.frames] == [1, 1]
+    assert [frame.tracks[0].source_track_id for frame in publisher.frames] == [7, 99]
+    assert [frame.tracks[0].lifecycle_reason for frame in publisher.frames] == [
+        "new_track",
+        "spatial_reassociation",
+    ]
 
 
 @pytest.mark.asyncio
@@ -3851,6 +4007,112 @@ async def test_run_engine_for_edge_camera_avoids_local_database_stores(
 
 
 @pytest.mark.asyncio
+async def test_run_engine_for_central_camera_avoids_direct_tracking_history_store(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera_id = uuid4()
+    captured: dict[str, object] = {}
+
+    class _StopWorker(Exception):
+        pass
+
+    class _FakeEventsClient:
+        def __init__(self, settings: object) -> None:
+            captured["events_settings"] = settings
+
+        async def connect(self) -> None:
+            captured["events_connected"] = True
+
+        async def close(self) -> None:
+            captured["events_closed"] = True
+
+    class _FakeDatabaseManager:
+        def __init__(self, settings: object) -> None:
+            captured["db_settings"] = settings
+            self.session_factory = object()
+
+        async def dispose(self) -> None:
+            captured["db_disposed"] = True
+
+    class _FakeEngine:
+        async def start(self) -> None:
+            captured["engine_started"] = True
+
+        async def run_once(self) -> None:
+            raise _StopWorker
+
+        async def close(self) -> None:
+            captured["engine_closed"] = True
+
+    async def fake_load_engine_config(
+        received_camera_id: UUID,
+        *,
+        settings: object,
+    ) -> EngineConfig:
+        captured["config_camera_id"] = received_camera_id
+        captured["config_settings"] = settings
+        return _engine_config(received_camera_id).model_copy(
+            update={"mode": ProcessingMode.CENTRAL}
+        )
+
+    async def fake_build_runtime_engine(
+        config: EngineConfig,
+        **kwargs: object,
+    ) -> _FakeEngine:
+        captured["config"] = config
+        captured["tracking_store"] = kwargs.get("tracking_store")
+        captured["count_event_store"] = kwargs.get("count_event_store")
+        captured["rule_event_store"] = kwargs.get("rule_event_store")
+        captured["incident_capture"] = kwargs.get("incident_capture")
+        return _FakeEngine()
+
+    def fake_tracking_event_store(session_factory: object) -> object:
+        captured["tracking_event_store_session_factory"] = session_factory
+        return object()
+
+    monkeypatch.setattr(engine_module, "NatsJetStreamClient", _FakeEventsClient)
+    monkeypatch.setattr(engine_module, "DatabaseManager", _FakeDatabaseManager)
+    monkeypatch.setattr(
+        engine_module,
+        "TrackingEventStore",
+        fake_tracking_event_store,
+        raising=False,
+    )
+    monkeypatch.setattr(engine_module, "CountEventStore", lambda session_factory: object())
+    monkeypatch.setattr(engine_module, "SQLRuleEventStore", lambda session_factory: object())
+    monkeypatch.setattr(engine_module, "SQLIncidentRepository", lambda session_factory: object())
+    monkeypatch.setattr(engine_module, "build_evidence_store", lambda settings: object())
+    monkeypatch.setattr(
+        engine_module,
+        "IncidentClipCaptureService",
+        lambda **kwargs: object(),
+    )
+    monkeypatch.setattr(engine_module, "load_engine_config", fake_load_engine_config)
+    monkeypatch.setattr(engine_module, "build_runtime_engine", fake_build_runtime_engine)
+    monkeypatch.setattr(
+        engine_module,
+        "probe_publish_profile",
+        lambda **kwargs: PublishProfile.CENTRAL_GPU,
+    )
+
+    settings = engine_module.Settings(_env_file=None, enable_worker_metrics_server=False)
+
+    with pytest.raises(_StopWorker):
+        await engine_module.run_engine_for_camera(camera_id, settings=settings)
+
+    assert captured["config_camera_id"] == camera_id
+    assert captured["events_connected"] is True
+    assert captured["tracking_store"] is None
+    assert "tracking_event_store_session_factory" not in captured
+    assert captured["count_event_store"] is not None
+    assert captured["rule_event_store"] is not None
+    assert captured["incident_capture"] is not None
+    assert captured["engine_closed"] is True
+    assert captured["events_closed"] is True
+    assert captured["db_disposed"] is True
+
+
+@pytest.mark.asyncio
 async def test_run_engine_polls_worker_config_and_applies_stream_changes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -4215,7 +4477,113 @@ async def test_build_runtime_engine_buffers_tracking_persistence(
 
 
 @pytest.mark.asyncio
-async def test_build_runtime_engine_uses_master_http_ingest_for_edge_telemetry(
+async def test_build_runtime_engine_uses_noop_tracking_store_for_edge_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera_id = uuid4()
+    _patch_runtime_engine_build_dependencies(monkeypatch)
+    config = _engine_config(camera_id).model_copy(update={"mode": ProcessingMode.EDGE})
+
+    engine = await engine_module.build_runtime_engine(
+        config,
+        settings=engine_module.Settings(_env_file=None),
+        events_client=_FakeEventClient(),
+    )
+
+    try:
+        assert isinstance(engine.tracking_store, engine_module._NoopTrackingStore)
+        assert not isinstance(engine.tracking_store, engine_module.BufferedTrackingStore)
+    finally:
+        await engine.close()
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_engine_uses_noop_tracking_store_for_central_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera_id = uuid4()
+    _patch_runtime_engine_build_dependencies(monkeypatch)
+    config = _engine_config(camera_id).model_copy(update={"mode": ProcessingMode.CENTRAL})
+
+    engine = await engine_module.build_runtime_engine(
+        config,
+        settings=engine_module.Settings(_env_file=None),
+        events_client=_FakeEventClient(),
+    )
+
+    try:
+        assert isinstance(engine.tracking_store, engine_module._NoopTrackingStore)
+        assert not isinstance(engine.tracking_store, engine_module.BufferedTrackingStore)
+        assert isinstance(engine.publisher, engine_module.BufferedTelemetryPublisher)
+        wrapped = engine.publisher.wrapped_publisher
+        assert isinstance(wrapped, engine_module.NatsPublisher)
+        assert wrapped.subject_prefix == "evt.worker.tracking"
+    finally:
+        await engine.close()
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_engine_uses_worker_tracking_nats_primary_for_central_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera_id = uuid4()
+    _patch_runtime_engine_build_dependencies(monkeypatch)
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "mode": ProcessingMode.CENTRAL,
+            "publish": PublishSettings(subject_prefix="evt.tracking", http_fallback_url=None),
+        }
+    )
+
+    engine = await engine_module.build_runtime_engine(
+        config,
+        settings=engine_module.Settings(_env_file=None),
+        events_client=_FakeEventClient(),
+    )
+
+    try:
+        assert isinstance(engine.publisher, engine_module.BufferedTelemetryPublisher)
+        assert engine.publisher.max_queue_size == 64
+        wrapped = engine.publisher.wrapped_publisher
+        assert isinstance(wrapped, engine_module.NatsPublisher)
+        assert wrapped.subject_prefix == "evt.worker.tracking"
+    finally:
+        await engine.close()
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_engine_keeps_central_mode_nats_only_with_http_fallback_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera_id = uuid4()
+    _patch_runtime_engine_build_dependencies(monkeypatch)
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "mode": ProcessingMode.CENTRAL,
+            "publish": PublishSettings(
+                subject_prefix="evt.tracking",
+                http_fallback_url="http://backend.internal/api/v1/edge/telemetry",
+            ),
+        }
+    )
+
+    engine = await engine_module.build_runtime_engine(
+        config,
+        settings=engine_module.Settings(_env_file=None),
+        events_client=_FakeEventClient(),
+    )
+
+    try:
+        assert isinstance(engine.publisher, engine_module.BufferedTelemetryPublisher)
+        wrapped = engine.publisher.wrapped_publisher
+        assert isinstance(wrapped, engine_module.NatsPublisher)
+        assert wrapped.subject_prefix == "evt.worker.tracking"
+    finally:
+        await engine.close()
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_engine_uses_edge_nats_primary_with_http_fallback_for_edge_mode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     camera_id = uuid4()
@@ -4241,11 +4609,14 @@ async def test_build_runtime_engine_uses_master_http_ingest_for_edge_telemetry(
         assert isinstance(engine.publisher, engine_module.BufferedTelemetryPublisher)
         assert engine.publisher.max_queue_size == 1
         wrapped = engine.publisher.wrapped_publisher
-        assert isinstance(wrapped, engine_module.HttpPublisher)
-        assert wrapped.url == "http://master.local:8000/api/v1/edge/telemetry"
-        assert wrapped.headers == {"X-Edge-Key": "edge-secret"}
-        assert wrapped.max_buffer_size == 1
-        assert wrapped.flush_interval_seconds == pytest.approx(0.1)
+        assert isinstance(wrapped, engine_module.ResilientPublisher)
+        assert isinstance(wrapped.primary, engine_module.NatsPublisher)
+        assert wrapped.primary.subject_prefix == "evt.edge.tracking"
+        assert isinstance(wrapped.fallback, engine_module.HttpPublisher)
+        assert wrapped.fallback.url == "http://master.local:8000/api/v1/edge/telemetry"
+        assert wrapped.fallback.headers == {"X-Edge-Key": "edge-secret"}
+        assert wrapped.fallback.max_buffer_size == 1
+        assert wrapped.fallback.flush_interval_seconds == pytest.approx(0.1)
     finally:
         await engine.close()
 

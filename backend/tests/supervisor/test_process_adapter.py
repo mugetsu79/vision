@@ -97,6 +97,43 @@ async def test_stop_terminates_tracked_process_and_reports_stopped() -> None:
 
 
 @pytest.mark.asyncio
+async def test_stop_terminates_matching_stale_process_when_process_map_is_empty() -> None:
+    camera_id = uuid4()
+    stale_process = _FakeProcess()
+    adapter = LocalWorkerProcessAdapter(
+        WorkerLaunchConfig(base_env={}),
+        process_finder=lambda requested_camera_id: (
+            [stale_process] if requested_camera_id == camera_id else []
+        ),
+    )
+
+    result = await adapter.stop(camera_id)
+
+    assert result.runtime_state == "stopped"
+    assert result.last_error is None
+    assert stale_process.terminate_called is True
+
+
+@pytest.mark.asyncio
+async def test_stop_reports_error_when_matching_process_survives_verification() -> None:
+    camera_id = uuid4()
+    stale_process = _StubbornProcess()
+    adapter = LocalWorkerProcessAdapter(
+        WorkerLaunchConfig(base_env={}, graceful_timeout_seconds=0.01),
+        process_finder=lambda requested_camera_id: (
+            [stale_process] if requested_camera_id == camera_id else []
+        ),
+    )
+
+    result = await adapter.stop(camera_id)
+
+    assert result.runtime_state == "error"
+    assert result.last_error == "Matching worker process remained after stop."
+    assert stale_process.terminate_called is True
+    assert stale_process.kill_called is True
+
+
+@pytest.mark.asyncio
 async def test_restart_stops_then_starts_worker() -> None:
     camera_id = uuid4()
     first_process = _FakeProcess()
@@ -381,6 +418,17 @@ class _FakeProcess:
         if self.returncode is None:
             self.returncode = 0
         return self.returncode
+
+
+class _StubbornProcess(_FakeProcess):
+    def terminate(self) -> None:
+        self.terminate_called = True
+
+    def kill(self) -> None:
+        self.kill_called = True
+
+    async def wait(self) -> int:
+        return 0
 
 
 def _exec_factory(process: _FakeProcess):

@@ -50,6 +50,193 @@ def test_missing_track_coasts_until_ttl() -> None:
     assert coasting[0].last_seen_age_ms == 2_499
 
 
+def test_last_diagnostics_reports_new_track() -> None:
+    manager = TrackLifecycleManager()
+
+    visible = manager.update(
+        detections=[_person(track_id=4)],
+        ts=_ts(0),
+        frame_shape=FRAME_SHAPE,
+    )
+    diagnostics = manager.last_diagnostics()
+
+    assert [
+        (decision.stable_track_id, decision.source_track_id, decision.reason)
+        for decision in diagnostics
+    ] == [
+        (1, 4, "new_track")
+    ]
+    assert visible[0].lifecycle_reason == "new_track"
+
+
+def test_last_diagnostics_reports_source_id_match() -> None:
+    manager = TrackLifecycleManager()
+
+    manager.update(
+        detections=[_person(track_id=4, bbox=(10.0, 10.0, 60.0, 120.0))],
+        ts=_ts(0),
+        frame_shape=FRAME_SHAPE,
+    )
+    visible = manager.update(
+        detections=[_person(track_id=4, bbox=(11.0, 11.0, 61.0, 121.0))],
+        ts=_ts(100),
+        frame_shape=FRAME_SHAPE,
+    )
+
+    assert [
+        (decision.stable_track_id, decision.reason)
+        for decision in manager.last_diagnostics()
+    ] == [
+        (1, "source_id_match")
+    ]
+    assert visible[0].lifecycle_reason == "source_id_match"
+
+
+def test_last_diagnostics_reports_spatial_reassociation_for_source_id_switch() -> None:
+    manager = TrackLifecycleManager()
+
+    manager.update(
+        detections=[_person(track_id=4, bbox=(10.0, 10.0, 60.0, 120.0))],
+        ts=_ts(0),
+        frame_shape=FRAME_SHAPE,
+    )
+    visible = manager.update(
+        detections=[_person(track_id=99, bbox=(12.0, 12.0, 62.0, 122.0))],
+        ts=_ts(100),
+        frame_shape=FRAME_SHAPE,
+    )
+
+    assert [
+        (decision.stable_track_id, decision.source_track_id, decision.reason)
+        for decision in manager.last_diagnostics()
+    ] == [
+        (1, 99, "spatial_reassociation")
+    ]
+    assert visible[0].stable_track_id == 1
+    assert visible[0].lifecycle_reason == "spatial_reassociation"
+
+
+def test_last_diagnostics_reports_coasting_and_forgotten_tracks() -> None:
+    manager = TrackLifecycleManager(TrackLifecycleConfig(coast_ttl_ms=2_500))
+
+    manager.update(
+        detections=[_person(track_id=4)],
+        ts=_ts(0),
+        frame_shape=FRAME_SHAPE,
+    )
+    coasting = manager.update(
+        detections=[],
+        ts=_ts(2_499),
+        frame_shape=FRAME_SHAPE,
+    )
+    coasting_diagnostics = manager.last_diagnostics()
+    expired = manager.update(
+        detections=[],
+        ts=_ts(2_501),
+        frame_shape=FRAME_SHAPE,
+    )
+
+    assert [(decision.stable_track_id, decision.reason) for decision in coasting_diagnostics] == [
+        (1, "coasting")
+    ]
+    assert [
+        (decision.stable_track_id, decision.reason)
+        for decision in manager.last_diagnostics()
+    ] == [
+        (1, "forgotten")
+    ]
+    assert expired == []
+    assert coasting[0].lifecycle_reason == "coasting"
+
+
+def test_last_diagnostics_reports_duplicate_suppression() -> None:
+    manager = TrackLifecycleManager(
+        TrackLifecycleConfig(duplicate_iou_threshold=0.60),
+    )
+
+    manager.update(
+        detections=[_person(track_id=4, bbox=(10.0, 10.0, 60.0, 120.0))],
+        ts=_ts(0),
+        frame_shape=FRAME_SHAPE,
+    )
+    manager.update(
+        detections=[
+            _person(track_id=4, bbox=(11.0, 11.0, 61.0, 121.0), confidence=0.90),
+            _person(track_id=5, bbox=(12.0, 12.0, 62.0, 122.0), confidence=0.88),
+        ],
+        ts=_ts(100),
+        frame_shape=FRAME_SHAPE,
+    )
+
+    assert any(
+        decision.stable_track_id == 2 and decision.reason == "duplicate_suppressed"
+        for decision in manager.last_diagnostics()
+    )
+
+
+def test_last_diagnostics_reports_duplicate_replacement() -> None:
+    manager = TrackLifecycleManager(
+        TrackLifecycleConfig(
+            duplicate_iou_threshold=0.60,
+            duplicate_replacement_confidence_delta=0.25,
+        ),
+    )
+
+    manager.update(
+        detections=[_person(track_id=4, bbox=(10.0, 10.0, 60.0, 120.0), confidence=0.76)],
+        ts=_ts(0),
+        frame_shape=FRAME_SHAPE,
+    )
+    visible = manager.update(
+        detections=[
+            _person(track_id=4, bbox=(11.0, 11.0, 61.0, 121.0), confidence=0.40),
+            _person(track_id=5, bbox=(12.0, 12.0, 62.0, 122.0), confidence=0.92),
+        ],
+        ts=_ts(100),
+        frame_shape=FRAME_SHAPE,
+    )
+
+    assert any(
+        decision.stable_track_id == 1 and decision.reason == "duplicate_replaced"
+        for decision in manager.last_diagnostics()
+    )
+    assert visible[0].lifecycle_reason == "duplicate_replaced"
+
+
+def test_lifecycle_diagnostics_snapshot_defensively_copies_detection_attributes() -> None:
+    manager = TrackLifecycleManager()
+
+    manager.update(
+        detections=[_person(track_id=4).with_updates(attributes={"color": "blue"})],
+        ts=_ts(0),
+        frame_shape=FRAME_SHAPE,
+    )
+    diagnostics = manager.last_diagnostics()
+    diagnostics[0].detection.attributes["color"] = "red"
+
+    assert manager.last_diagnostics()[0].detection.attributes == {"color": "blue"}
+
+
+def test_lifecycle_diagnostics_snapshot_defensively_copies_nested_attributes() -> None:
+    manager = TrackLifecycleManager()
+
+    manager.update(
+        detections=[
+            _person(track_id=4).with_updates(
+                attributes={"uniform": {"colors": ["blue"]}},
+            )
+        ],
+        ts=_ts(0),
+        frame_shape=FRAME_SHAPE,
+    )
+    diagnostics = manager.last_diagnostics()
+    diagnostics[0].detection.attributes["uniform"]["colors"].append("red")
+
+    assert manager.last_diagnostics()[0].detection.attributes == {
+        "uniform": {"colors": ["blue"]}
+    }
+
+
 def test_visible_tracks_snapshot_defensively_copies_detection_attributes() -> None:
     manager = TrackLifecycleManager()
     attributes = {"color": "blue"}
@@ -72,6 +259,29 @@ def test_visible_tracks_snapshot_defensively_copies_detection_attributes() -> No
     assert snapshot[0].detection.attributes == {"color": "blue"}
 
 
+def test_visible_tracks_snapshot_defensively_copies_nested_attributes() -> None:
+    manager = TrackLifecycleManager()
+    attributes = {"uniform": {"colors": ["blue"]}}
+
+    visible = manager.update(
+        detections=[
+            _person(
+                track_id=4,
+                confidence=0.91,
+            ).with_updates(attributes=attributes)
+        ],
+        ts=_ts(0),
+        frame_shape=FRAME_SHAPE,
+    )
+    visible[0].detection.attributes["uniform"]["colors"].append("red")
+    manager.visible_tracks()[0].detection.attributes["uniform"]["colors"].append("green")
+    attributes["uniform"]["colors"].append("black")
+
+    assert manager.visible_tracks()[0].detection.attributes == {
+        "uniform": {"colors": ["blue"]}
+    }
+
+
 def test_candidate_context_tracks_include_tentative_tracks() -> None:
     manager = TrackLifecycleManager(TrackLifecycleConfig(tentative_hits=2))
 
@@ -87,6 +297,26 @@ def test_candidate_context_tracks_include_tentative_tracks() -> None:
         (track.stable_track_id, track.state)
         for track in manager.candidate_context_tracks()
     ] == [(1, "tentative")]
+
+
+def test_candidate_context_tracks_snapshot_defensively_copies_nested_attributes() -> None:
+    manager = TrackLifecycleManager(TrackLifecycleConfig(tentative_hits=2))
+
+    manager.update(
+        detections=[
+            _person(track_id=4, confidence=0.50).with_updates(
+                attributes={"uniform": {"colors": ["blue"]}},
+            )
+        ],
+        ts=_ts(0),
+        frame_shape=FRAME_SHAPE,
+    )
+    context_tracks = manager.candidate_context_tracks()
+    context_tracks[0].detection.attributes["uniform"]["colors"].append("red")
+
+    assert manager.candidate_context_tracks()[0].detection.attributes == {
+        "uniform": {"colors": ["blue"]}
+    }
 
 
 def test_coasting_track_expires_after_ttl() -> None:
@@ -127,6 +357,40 @@ def test_tracker_id_switch_reuses_stable_id_by_overlap() -> None:
     assert switched[0].stable_track_id == 1
     assert switched[0].source_track_id == 99
     assert switched[0].state == "active"
+
+
+def test_two_person_scene_raw_id_switches_remain_two_stable_ids() -> None:
+    manager = TrackLifecycleManager()
+
+    first = manager.update(
+        detections=[
+            _person(track_id=10, bbox=(100.0, 120.0, 180.0, 360.0)),
+            _person(track_id=20, bbox=(420.0, 118.0, 500.0, 358.0)),
+        ],
+        ts=_ts(0),
+        frame_shape=FRAME_SHAPE,
+    )
+    one_switched = manager.update(
+        detections=[
+            _person(track_id=30, bbox=(104.0, 122.0, 184.0, 362.0)),
+            _person(track_id=20, bbox=(424.0, 120.0, 504.0, 360.0)),
+        ],
+        ts=_ts(100),
+        frame_shape=FRAME_SHAPE,
+    )
+    both_switched = manager.update(
+        detections=[
+            _person(track_id=30, bbox=(108.0, 124.0, 188.0, 364.0)),
+            _person(track_id=40, bbox=(428.0, 122.0, 508.0, 362.0)),
+        ],
+        ts=_ts(200),
+        frame_shape=FRAME_SHAPE,
+    )
+
+    assert [track.stable_track_id for track in first] == [1, 2]
+    assert [track.stable_track_id for track in one_switched] == [1, 2]
+    assert [track.stable_track_id for track in both_switched] == [1, 2]
+    assert {track.source_track_id for track in both_switched} == {30, 40}
 
 
 def test_tracker_id_switch_requires_overlap_and_center_proximity() -> None:

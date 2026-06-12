@@ -221,6 +221,17 @@ class SupervisorOperationsService:
             media_pipeline_mode=payload.media_pipeline_mode,
             media_capture_backend=payload.media_capture_backend,
             encoder_mode=payload.encoder_mode,
+            worker_origin=payload.worker_origin,
+            processing_mode=payload.processing_mode,
+            telemetry_transport=payload.telemetry_transport,
+            telemetry_path=payload.telemetry_path,
+            telemetry_cadence_seconds=payload.telemetry_cadence_seconds,
+            telemetry_fallback_active=payload.telemetry_fallback_active,
+            telemetry_publish_drops=payload.telemetry_publish_drops,
+            telemetry_pending_frames=payload.telemetry_pending_frames,
+            telemetry_ingest_lag_ms=payload.telemetry_ingest_lag_ms,
+            telemetry_duplicate_frames=payload.telemetry_duplicate_frames,
+            telemetry_last_error=payload.telemetry_last_error,
         )
         async with self.session_factory() as session:
             session.add(row)
@@ -769,6 +780,17 @@ def supervisor_runtime_report_response(
         media_pipeline_mode=row.media_pipeline_mode,
         media_capture_backend=row.media_capture_backend,
         encoder_mode=row.encoder_mode,
+        worker_origin=row.worker_origin,
+        processing_mode=row.processing_mode,
+        telemetry_transport=row.telemetry_transport,
+        telemetry_path=row.telemetry_path,
+        telemetry_cadence_seconds=row.telemetry_cadence_seconds,
+        telemetry_fallback_active=row.telemetry_fallback_active,
+        telemetry_publish_drops=row.telemetry_publish_drops,
+        telemetry_pending_frames=row.telemetry_pending_frames,
+        telemetry_ingest_lag_ms=row.telemetry_ingest_lag_ms,
+        telemetry_duplicate_frames=row.telemetry_duplicate_frames,
+        telemetry_last_error=row.telemetry_last_error,
         created_at=row.created_at,
     )
 

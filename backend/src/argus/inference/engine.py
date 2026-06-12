@@ -11,7 +11,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any, Protocol, cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import cv2
 import httpx
@@ -39,7 +39,6 @@ from argus.core.db import (
     CountEventStore,
     DatabaseManager,
     TrackingEventBatchRecord,
-    TrackingEventStore,
 )
 from argus.core.events import EventMessage, NatsJetStreamClient
 from argus.core.logging import configure_logging, redact_url_secrets
@@ -60,6 +59,8 @@ from argus.inference.publisher import (
     ResilientPublisher,
     TelemetryFrame,
     TelemetryTrack,
+    WorkerOrigin,
+    telemetry_subject_prefix_for_origin,
 )
 from argus.models.enums import (
     CameraSourceKind,
@@ -125,6 +126,7 @@ Frame = NDArray[np.uint8]
 
 logger = logging.getLogger(__name__)
 _CAPTURE_WAIT_SPIKE_WARNING_THRESHOLD_S = 0.250
+_RUNTIME_REPORT_SHUTDOWN_TIMEOUT_SECONDS = 2.0
 _DETECTOR_PROVIDER_FALLBACKS: dict[str, tuple[str, ...]] = {
     "TensorrtExecutionProvider": ("CUDAExecutionProvider", "CPUExecutionProvider"),
     "CUDAExecutionProvider": ("CPUExecutionProvider",),
@@ -251,7 +253,7 @@ class CameraSettings(BaseModel):
 
 
 class PublishSettings(BaseModel):
-    subject_prefix: str = "evt.tracking"
+    subject_prefix: str = "evt.worker.tracking"
     http_fallback_url: str | None = None
 
 
@@ -1014,6 +1016,10 @@ class InferenceEngine:
         self._edge_node_id = edge_node_id
         self._runtime_report_interval_seconds = max(0.0, runtime_report_interval_seconds)
         self._last_runtime_report_at: float | None = None
+        self._runtime_report_queue: asyncio.Queue[
+            SupervisorRuntimeReportCreate | None
+        ] = asyncio.Queue(maxsize=1)
+        self._runtime_report_task: asyncio.Task[None] | None = None
         self._diagnostics_enabled = diagnostics_enabled
         self._timing_summary_interval_frames = max(0, timing_summary_interval_frames)
         self.privacy_filter = privacy_filter or PrivacyFilter(
@@ -1060,6 +1066,7 @@ class InferenceEngine:
             list
         )
         self._frame_attempt_index = 0
+        self._frame_sequence = 0
         self._last_stage_timings: dict[str, float] = {}
         self._timing_summary = _TimingSummaryWindow()
         self.runtime_selection = RuntimeSelection(
@@ -1074,6 +1081,15 @@ class InferenceEngine:
             fallback_allowed=config.runtime_selection.fallback_allowed,
         )
         self._started = False
+
+    def _worker_origin(self) -> WorkerOrigin:
+        if self.config.mode is ProcessingMode.EDGE:
+            return WorkerOrigin.EDGE
+        return WorkerOrigin.CENTRAL
+
+    def _next_frame_sequence(self) -> int:
+        self._frame_sequence += 1
+        return self._frame_sequence
 
     async def start(self) -> None:
         if self._started:
@@ -1106,6 +1122,7 @@ class InferenceEngine:
     async def close(self) -> None:
         if self.incident_capture is not None:
             await self.incident_capture.close()
+        await self._close_runtime_reporter()
         tracking_store_close = getattr(self.tracking_store, "close", None)
         if tracking_store_close is not None:
             close_result = tracking_store_close()
@@ -1129,6 +1146,10 @@ class InferenceEngine:
         )
         return TrackLifecycleManager(lifecycle_config)
 
+    def _telemetry_runtime_state(self) -> dict[str, object]:
+        describe = getattr(self.publisher, "describe_runtime_state", None)
+        return dict(describe()) if callable(describe) else {}
+
     async def _maybe_record_runtime_report(
         self,
         *,
@@ -1145,6 +1166,7 @@ class InferenceEngine:
             return
         self._last_runtime_report_at = loop_time
         selected_provider = self._selected_runtime_provider()
+        telemetry_state = self._telemetry_runtime_state()
         payload = SupervisorRuntimeReportCreate(
             camera_id=self.config.camera_id,
             edge_node_id=self._edge_node_id,
@@ -1161,14 +1183,107 @@ class InferenceEngine:
             media_pipeline_mode=self._media_pipeline_mode(),
             media_capture_backend=self._media_capture_backend(),
             encoder_mode=self._encoder_mode(),
+            telemetry_transport=_optional_str(telemetry_state.get("transport")),
+            telemetry_path=_optional_str(telemetry_state.get("path")),
+            telemetry_cadence_seconds=_optional_float(
+                telemetry_state.get("cadence_seconds")
+            ),
+            telemetry_fallback_active=_optional_bool(
+                telemetry_state.get("fallback_active")
+            ),
+            telemetry_publish_drops=_optional_int(
+                telemetry_state.get("dropped_frames")
+            ),
+            telemetry_pending_frames=_optional_int(
+                telemetry_state.get("pending_frames")
+            ),
+            telemetry_last_error=_optional_str(telemetry_state.get("last_error")),
         )
+        self._enqueue_runtime_report(payload)
+
+    def _enqueue_runtime_report(self, payload: SupervisorRuntimeReportCreate) -> None:
+        if self._runtime_reporter is None:
+            return
+        self._ensure_runtime_report_worker()
         try:
-            await self._runtime_reporter.record_runtime_report(payload)
-        except Exception as exc:
+            self._runtime_report_queue.put_nowait(payload)
+        except asyncio.QueueFull:
+            self._drop_pending_runtime_report()
+            try:
+                self._runtime_report_queue.put_nowait(payload)
+            except asyncio.QueueFull:
+                logger.warning(
+                    "Dropped worker runtime report for camera %s because the "
+                    "background queue remained full.",
+                    self.config.camera_id,
+                )
+
+    def _ensure_runtime_report_worker(self) -> None:
+        if self._runtime_reporter is None:
+            return
+        if self._runtime_report_task is None or self._runtime_report_task.done():
+            self._runtime_report_task = asyncio.create_task(
+                self._runtime_report_worker(),
+                name="argus-runtime-reporter",
+            )
+
+    def _drop_pending_runtime_report(self) -> None:
+        try:
+            dropped = self._runtime_report_queue.get_nowait()
+        except asyncio.QueueEmpty:
+            return
+        self._runtime_report_queue.task_done()
+        if dropped is not None:
             logger.warning(
-                "Worker runtime report failed for camera %s: %s",
+                "Dropped oldest worker runtime report for camera %s because the "
+                "background queue is full.",
                 self.config.camera_id,
-                exc,
+            )
+
+    async def _runtime_report_worker(self) -> None:
+        if self._runtime_reporter is None:
+            return
+        while True:
+            payload = await self._runtime_report_queue.get()
+            if payload is None:
+                self._runtime_report_queue.task_done()
+                return
+            try:
+                await self._runtime_reporter.record_runtime_report(payload)
+            except Exception as exc:
+                logger.warning(
+                    "Worker runtime report failed for camera %s: %s",
+                    self.config.camera_id,
+                    exc,
+                    exc_info=True,
+                )
+            finally:
+                self._runtime_report_queue.task_done()
+
+    async def _close_runtime_reporter(self) -> None:
+        worker_task = self._runtime_report_task
+        if worker_task is None:
+            return
+        if worker_task.done():
+            await worker_task
+            return
+        try:
+            await asyncio.wait_for(
+                self._runtime_report_queue.put(None),
+                timeout=_RUNTIME_REPORT_SHUTDOWN_TIMEOUT_SECONDS,
+            )
+            await asyncio.wait_for(
+                worker_task,
+                timeout=_RUNTIME_REPORT_SHUTDOWN_TIMEOUT_SECONDS,
+            )
+        except _TIMEOUT_ERRORS:
+            worker_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await worker_task
+            logger.warning(
+                "Timed out while flushing worker runtime report queue; dropped %s "
+                "pending reports.",
+                self._runtime_report_queue.qsize(),
             )
 
     def _runtime_artifact_id(self, *, selected_provider: str | None = None) -> UUID | None:
@@ -1422,6 +1537,9 @@ class InferenceEngine:
             loop_time=loop.time(),
         )
         telemetry = TelemetryFrame(
+            frame_id=uuid4(),
+            frame_sequence=self._next_frame_sequence(),
+            worker_origin=self._worker_origin(),
             camera_id=self.config.camera_id,
             ts=current_ts,
             profile=self.profile,
@@ -2207,6 +2325,34 @@ def _edge_telemetry_headers(settings: Settings) -> dict[str, str]:
     return {}
 
 
+def _optional_str(value: object | None) -> str | None:
+    if value is None:
+        return None
+    return str(value)
+
+
+def _optional_bool(value: object | None) -> bool | None:
+    if value is None:
+        return None
+    return bool(value)
+
+
+def _optional_int(value: object | None) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return max(value, 0)
+    return 0
+
+
+def _optional_float(value: object | None) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return max(float(value), 0.0)
+    return None
+
+
 def _runtime_reporter_from_settings(settings: Settings) -> RuntimeReporter | None:
     if settings.api_bearer_token is None:
         return None
@@ -2397,25 +2543,30 @@ async def build_runtime_engine(
         else None
     )
 
+    worker_origin = (
+        WorkerOrigin.EDGE if config.mode is ProcessingMode.EDGE else WorkerOrigin.CENTRAL
+    )
+    requested_subject_prefix = config.publish.subject_prefix.rstrip(".")
+    resolved_subject_prefix = (
+        telemetry_subject_prefix_for_origin(worker_origin)
+        if requested_subject_prefix in {"evt.tracking", "evt.worker.tracking", "evt.edge.tracking"}
+        else requested_subject_prefix
+    )
     primary_publisher = NatsPublisher(
         events_client,
-        subject_prefix=config.publish.subject_prefix,
+        subject_prefix=resolved_subject_prefix,
+        worker_origin=worker_origin,
     )
     publisher: Publisher
     edge_http_publisher = config.mode is ProcessingMode.EDGE
     if edge_http_publisher:
-        publisher = HttpPublisher(
-            url=config.publish.http_fallback_url or _edge_telemetry_ingest_url(settings),
-            headers=_edge_telemetry_headers(settings),
-            max_buffer_size=1,
-            flush_interval_seconds=settings.edge_telemetry_flush_interval_seconds,
-        )
-    elif config.publish.http_fallback_url is not None:
         publisher = ResilientPublisher(
             primary=primary_publisher,
             fallback=HttpPublisher(
-                url=config.publish.http_fallback_url,
+                url=config.publish.http_fallback_url or _edge_telemetry_ingest_url(settings),
                 headers=_edge_telemetry_headers(settings),
+                max_buffer_size=1,
+                flush_interval_seconds=settings.edge_telemetry_flush_interval_seconds,
             ),
         )
     else:
@@ -2430,6 +2581,19 @@ async def build_runtime_engine(
         publisher=events_client,
         store=rule_event_store or _NoopRuleEventStore(),
     )
+    resolved_tracking_store: TrackingStore
+    if tracking_store is None:
+        resolved_tracking_store = _NoopTrackingStore()
+    else:
+        resolved_tracking_store = BufferedTrackingStore(
+            tracking_store,
+            max_queue_size=settings.tracking_persistence_queue_size,
+            shutdown_timeout_seconds=settings.tracking_persistence_shutdown_timeout_seconds,
+            max_batch_size=settings.tracking_persistence_batch_size,
+            batch_flush_interval_seconds=(
+                settings.tracking_persistence_batch_flush_interval_seconds
+            ),
+        )
 
     engine = InferenceEngine(
         config=config,
@@ -2437,15 +2601,7 @@ async def build_runtime_engine(
         detector=detector,
         tracker_factory=tracker_factory,
         publisher=publisher,
-        tracking_store=BufferedTrackingStore(
-            tracking_store or _NoopTrackingStore(),
-            max_queue_size=settings.tracking_persistence_queue_size,
-            shutdown_timeout_seconds=settings.tracking_persistence_shutdown_timeout_seconds,
-            max_batch_size=settings.tracking_persistence_batch_size,
-            batch_flush_interval_seconds=(
-                settings.tracking_persistence_batch_flush_interval_seconds
-            ),
-        ),
+        tracking_store=resolved_tracking_store,
         count_event_store=count_event_store or _NoopCountEventStore(),
         rule_engine=resolved_rule_engine,
         event_client=events_client,
@@ -2482,13 +2638,12 @@ async def run_engine_for_camera(camera_id: UUID, *, settings: Settings | None = 
     )
     config = config.model_copy(update={"profile": resolved_profile})
     db_manager: DatabaseManager | None = None
-    tracking_store: TrackingEventStore | None = None
+    tracking_store: TrackingStore | None = None
     count_event_store: CountEventStore | None = None
     rule_event_store: SQLRuleEventStore | None = None
     incident_capture: IncidentClipCaptureService | None = None
     if config.mode is not ProcessingMode.EDGE:
         db_manager = DatabaseManager(resolved_settings)
-        tracking_store = TrackingEventStore(db_manager.session_factory)
         count_event_store = CountEventStore(db_manager.session_factory)
         rule_event_store = SQLRuleEventStore(db_manager.session_factory)
         incident_capture = IncidentClipCaptureService(
@@ -2718,6 +2873,7 @@ def _telemetry_track_from_lifecycle_track(track: LifecycleTrack) -> TelemetryTra
         track_state=track_state,
         last_seen_age_ms=track.last_seen_age_ms,
         source_track_id=track.source_track_id,
+        lifecycle_reason=track.lifecycle_reason,
         speed_kph=detection.speed_kph,
         direction_deg=detection.direction_deg,
         zone_id=detection.zone_id,
@@ -2735,6 +2891,9 @@ class _NoopTrackingStore:
         vocabulary_version: int | None = None,
         vocabulary_hash: str | None = None,
     ) -> None:
+        return None
+
+    async def close(self) -> None:
         return None
 
 

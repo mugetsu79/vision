@@ -9,6 +9,9 @@ type TelemetryFrame = components["schemas"]["TelemetryFrame"];
 function frame(tracks: TelemetryFrame["tracks"]): TelemetryFrame {
   return {
     camera_id: "11111111-1111-1111-1111-111111111111",
+    frame_id: "test-frame-1",
+    frame_sequence: 1,
+    worker_origin: "central",
     ts: new Date().toISOString(),
     profile: "central-gpu",
     stream_mode: "annotated-whip",

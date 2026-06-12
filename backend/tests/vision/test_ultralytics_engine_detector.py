@@ -128,6 +128,53 @@ def test_engine_detector_uses_artifact_classes_when_engine_names_are_placeholder
     assert detections[0].class_name == "person"
 
 
+def test_engine_detector_records_stage_timings_with_allowed_class_filter() -> None:
+    model = _FakeModel(
+        [
+            _result(
+                xyxy=[[1, 2, 3, 4], [5, 6, 7, 8]],
+                conf=[0.8, 0.7],
+                cls=[0, 1],
+                names={0: "person", 1: "car"},
+            )
+        ]
+    )
+    detector = UltralyticsEngineDetector(_artifact(), model_loader=lambda path: model)
+
+    detections = detector.detect(
+        np.zeros((8, 8, 3), dtype=np.uint8),
+        allowed_classes=["person"],
+    )
+
+    assert [detection.class_name for detection in detections] == ["person"]
+    timings = detector.last_stage_timings()
+    assert set(timings) == {"predict", "convert", "filter"}
+    assert all(isinstance(duration, float) for duration in timings.values())
+    assert all(duration >= 0.0 for duration in timings.values())
+
+
+def test_engine_detector_records_filter_timing_when_filtering_is_not_requested() -> None:
+    model = _FakeModel(
+        [
+            _result(
+                xyxy=[[1, 2, 3, 4], [5, 6, 7, 8]],
+                conf=[0.8, 0.7],
+                cls=[0, 1],
+                names={0: "person", 1: "car"},
+            )
+        ]
+    )
+    detector = UltralyticsEngineDetector(_artifact(), model_loader=lambda path: model)
+
+    detections = detector.detect(np.zeros((8, 8, 3), dtype=np.uint8))
+
+    assert [detection.class_name for detection in detections] == ["person", "car"]
+    timings = detector.last_stage_timings()
+    assert set(timings) == {"predict", "convert", "filter"}
+    assert all(isinstance(duration, float) for duration in timings.values())
+    assert all(duration >= 0.0 for duration in timings.values())
+
+
 def test_engine_detector_empty_results_return_empty_list() -> None:
     detector = UltralyticsEngineDetector(_artifact(), model_loader=lambda path: _FakeModel([]))
 

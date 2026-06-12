@@ -41,7 +41,7 @@ from argus.core.security import (
     get_current_user,
     get_current_websocket_user,
 )
-from argus.inference.publisher import TelemetryFrame, TelemetryTrack
+from argus.inference.publisher import TelemetryFrame, TelemetryTrack, WorkerOrigin
 from argus.main import create_app
 from argus.models.enums import (
     DetectorCapability,
@@ -133,6 +133,24 @@ def _camera_payload(site_id: UUID, primary_model_id: UUID) -> CameraCreate:
         },
         frame_skip=1,
         fps_cap=25,
+    )
+
+
+def _telemetry_frame(
+    *,
+    counts: dict[str, int] | None = None,
+    tracks: list[TelemetryTrack] | None = None,
+) -> TelemetryFrame:
+    return TelemetryFrame(
+        frame_id=uuid4(),
+        frame_sequence=1,
+        worker_origin=WorkerOrigin.CENTRAL,
+        camera_id=uuid4(),
+        ts=datetime.now(tz=UTC),
+        profile=PublishProfile.CENTRAL_GPU,
+        stream_mode=StreamMode.ANNOTATED_WHIP,
+        counts=counts or {},
+        tracks=tracks or [],
     )
 
 
@@ -762,14 +780,7 @@ async def test_sites_crud_contract() -> None:
         streams=FakeStreamService(),
         query=FakeQueryService(),
         telemetry=FakeTelemetryService(
-            TelemetryFrame(
-                camera_id=uuid4(),
-                ts=datetime.now(tz=UTC),
-                profile=PublishProfile.CENTRAL_GPU,
-                stream_mode=StreamMode.ANNOTATED_WHIP,
-                counts={"truck": 1},
-                tracks=[],
-            )
+            _telemetry_frame(counts={"truck": 1})
         ),
     )
     app = create_app(
@@ -831,14 +842,7 @@ async def test_models_routes_contract() -> None:
         streams=FakeStreamService(),
         query=FakeQueryService(),
         telemetry=FakeTelemetryService(
-            TelemetryFrame(
-                camera_id=uuid4(),
-                ts=datetime.now(tz=UTC),
-                profile=PublishProfile.CENTRAL_GPU,
-                stream_mode=StreamMode.ANNOTATED_WHIP,
-                counts={},
-                tracks=[],
-            )
+            _telemetry_frame()
         ),
     )
     app = create_app(
@@ -918,14 +922,7 @@ async def test_models_routes_allow_open_vocab_empty_static_classes() -> None:
         streams=FakeStreamService(),
         query=FakeQueryService(),
         telemetry=FakeTelemetryService(
-            TelemetryFrame(
-                camera_id=uuid4(),
-                ts=datetime.now(tz=UTC),
-                profile=PublishProfile.CENTRAL_GPU,
-                stream_mode=StreamMode.ANNOTATED_WHIP,
-                counts={},
-                tracks=[],
-            )
+            _telemetry_frame()
         ),
     )
     app = create_app(
@@ -997,14 +994,7 @@ async def test_camera_routes_validate_policy_and_crud() -> None:
         streams=FakeStreamService(),
         query=FakeQueryService(),
         telemetry=FakeTelemetryService(
-            TelemetryFrame(
-                camera_id=uuid4(),
-                ts=datetime.now(tz=UTC),
-                profile=PublishProfile.CENTRAL_GPU,
-                stream_mode=StreamMode.ANNOTATED_WHIP,
-                counts={},
-                tracks=[],
-            )
+            _telemetry_frame()
         ),
     )
     app = create_app(
@@ -1099,14 +1089,7 @@ async def test_camera_routes_persist_open_vocab_runtime_vocabulary() -> None:
         streams=FakeStreamService(),
         query=FakeQueryService(),
         telemetry=FakeTelemetryService(
-            TelemetryFrame(
-                camera_id=uuid4(),
-                ts=datetime.now(tz=UTC),
-                profile=PublishProfile.CENTRAL_GPU,
-                stream_mode=StreamMode.ANNOTATED_WHIP,
-                counts={},
-                tracks=[],
-            )
+            _telemetry_frame()
         ),
     )
     app = create_app(
@@ -1167,14 +1150,7 @@ async def test_camera_worker_config_route_returns_engine_ready_payload() -> None
         streams=FakeStreamService(),
         query=FakeQueryService(),
         telemetry=FakeTelemetryService(
-            TelemetryFrame(
-                camera_id=uuid4(),
-                ts=datetime.now(tz=UTC),
-                profile=PublishProfile.CENTRAL_GPU,
-                stream_mode=StreamMode.ANNOTATED_WHIP,
-                counts={},
-                tracks=[],
-            )
+            _telemetry_frame()
         ),
         deployment=deployment_service,
     )
@@ -1269,14 +1245,7 @@ async def test_edge_routes_history_export_incidents_and_stream_offer_contract() 
         streams=FakeStreamService(),
         query=FakeQueryService(),
         telemetry=FakeTelemetryService(
-            TelemetryFrame(
-                camera_id=uuid4(),
-                ts=datetime.now(tz=UTC),
-                profile=PublishProfile.CENTRAL_GPU,
-                stream_mode=StreamMode.ANNOTATED_WHIP,
-                counts={},
-                tracks=[],
-            )
+            _telemetry_frame()
         ),
     )
     app = create_app(
@@ -1307,6 +1276,9 @@ async def test_edge_routes_history_export_incidents_and_stream_offer_contract() 
             json={
                 "events": [
                     {
+                        "frame_id": str(uuid4()),
+                        "frame_sequence": 1,
+                        "worker_origin": "edge",
                         "camera_id": str(camera_id),
                         "ts": now.isoformat(),
                         "profile": "central-gpu",
@@ -1399,14 +1371,7 @@ async def test_query_route_contract() -> None:
         streams=FakeStreamService(),
         query=FakeQueryService(),
         telemetry=FakeTelemetryService(
-            TelemetryFrame(
-                camera_id=uuid4(),
-                ts=datetime.now(tz=UTC),
-                profile=PublishProfile.CENTRAL_GPU,
-                stream_mode=StreamMode.ANNOTATED_WHIP,
-                counts={},
-                tracks=[],
-            )
+            _telemetry_frame()
         ),
     )
     app = create_app(
@@ -1438,11 +1403,7 @@ async def test_query_route_contract() -> None:
 def test_websocket_telemetry_contract() -> None:
     user = _sample_user(role=RoleEnum.VIEWER)
     context = _tenant_context(user)
-    frame = TelemetryFrame(
-        camera_id=uuid4(),
-        ts=datetime.now(tz=UTC),
-        profile=PublishProfile.CENTRAL_GPU,
-        stream_mode=StreamMode.ANNOTATED_WHIP,
+    frame = _telemetry_frame(
         counts={"truck": 1},
         tracks=[
             TelemetryTrack(

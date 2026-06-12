@@ -44,6 +44,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         ).set(1)
         if settings_object.enable_nats:
             await app.state.events.connect()
+            await app.state.services.start()
         app.state.tracing.configure(app, engine=app.state.db.engine)
         await reconcile_identity_provider_for_startup(app)
 

@@ -7722,6 +7722,7 @@ export interface components {
             media_capture_backend?: string | null;
             /** Media Pipeline Mode */
             media_pipeline_mode?: string | null;
+            processing_mode?: components["schemas"]["ProcessingMode"] | null;
             /**
              * Restart Count
              * @default 0
@@ -7737,6 +7738,35 @@ export interface components {
             selected_provider?: string | null;
             /** Source Profile Hash */
             source_profile_hash?: string | null;
+            /** Telemetry Cadence Seconds */
+            telemetry_cadence_seconds?: number | null;
+            /**
+             * Telemetry Duplicate Frames
+             * @default 0
+             */
+            telemetry_duplicate_frames: number;
+            /** Telemetry Fallback Active */
+            telemetry_fallback_active?: boolean | null;
+            /** Telemetry Ingest Lag Ms */
+            telemetry_ingest_lag_ms?: number | null;
+            /** Telemetry Last Error */
+            telemetry_last_error?: string | null;
+            /** Telemetry Path */
+            telemetry_path?: string | null;
+            /**
+             * Telemetry Pending Frames
+             * @default 0
+             */
+            telemetry_pending_frames: number;
+            /**
+             * Telemetry Publish Drops
+             * @default 0
+             */
+            telemetry_publish_drops: number;
+            /** Telemetry Transport */
+            telemetry_transport?: string | null;
+            /** Worker Origin */
+            worker_origin?: string | null;
         };
         /** SupervisorRuntimeReportResponse */
         SupervisorRuntimeReportResponse: {
@@ -7772,6 +7802,7 @@ export interface components {
             media_capture_backend?: string | null;
             /** Media Pipeline Mode */
             media_pipeline_mode?: string | null;
+            processing_mode?: components["schemas"]["ProcessingMode"] | null;
             /** Restart Count */
             restart_count: number;
             /** Runtime Artifact Id */
@@ -7783,11 +7814,40 @@ export interface components {
             selected_provider?: string | null;
             /** Source Profile Hash */
             source_profile_hash?: string | null;
+            /** Telemetry Cadence Seconds */
+            telemetry_cadence_seconds?: number | null;
+            /**
+             * Telemetry Duplicate Frames
+             * @default 0
+             */
+            telemetry_duplicate_frames: number;
+            /** Telemetry Fallback Active */
+            telemetry_fallback_active?: boolean | null;
+            /** Telemetry Ingest Lag Ms */
+            telemetry_ingest_lag_ms?: number | null;
+            /** Telemetry Last Error */
+            telemetry_last_error?: string | null;
+            /** Telemetry Path */
+            telemetry_path?: string | null;
+            /**
+             * Telemetry Pending Frames
+             * @default 0
+             */
+            telemetry_pending_frames: number;
+            /**
+             * Telemetry Publish Drops
+             * @default 0
+             */
+            telemetry_publish_drops: number;
+            /** Telemetry Transport */
+            telemetry_transport?: string | null;
             /**
              * Tenant Id
              * Format: uuid
              */
             tenant_id: string;
+            /** Worker Origin */
+            worker_origin?: string | null;
         };
         /** SupervisorServiceReportCreate */
         SupervisorServiceReportCreate: {
@@ -8017,6 +8077,13 @@ export interface components {
             counts: {
                 [key: string]: number;
             };
+            /**
+             * Frame Id
+             * Format: uuid
+             */
+            frame_id: string;
+            /** Frame Sequence */
+            frame_sequence: number;
             profile: components["schemas"]["PublishProfile"];
             /** Source Size */
             source_size?: {
@@ -8035,6 +8102,7 @@ export interface components {
              * Format: date-time
              */
             ts: string;
+            worker_origin: components["schemas"]["WorkerOrigin"];
         };
         /** TelemetryObjectIngestRequest */
         TelemetryObjectIngestRequest: {
@@ -8071,6 +8139,8 @@ export interface components {
             direction_deg?: number | null;
             /** Last Seen Age Ms */
             last_seen_age_ms?: number | null;
+            /** Lifecycle Reason */
+            lifecycle_reason?: string | null;
             /** Source Track Id */
             source_track_id?: number | null;
             /** Speed Kph */
@@ -8582,6 +8652,11 @@ export interface components {
             path: string;
             runtime_vocabulary?: components["schemas"]["RuntimeVocabularyState"];
         };
+        /**
+         * WorkerOrigin
+         * @enum {string}
+         */
+        WorkerOrigin: "edge" | "central";
         /** WorkerPolygonZone */
         WorkerPolygonZone: {
             /** Class Names */

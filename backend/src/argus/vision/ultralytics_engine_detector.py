@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Callable, Iterable
 from importlib import import_module
 from typing import Any
@@ -24,21 +25,47 @@ class UltralyticsEngineDetector:
         self.artifact = artifact
         self.capability = artifact.capability
         self._model = (model_loader or _load_ultralytics_model)(artifact.path)
+        self._last_stage_timings: dict[str, float] = {
+            "predict": 0.0,
+            "convert": 0.0,
+            "filter": 0.0,
+        }
 
     def detect(
         self,
         frame: NDArray[np.uint8],
         allowed_classes: Iterable[str] | None = None,
     ) -> list[Detection]:
+        started_at = time.perf_counter()
         results = self._model.predict(frame, verbose=False)
+        predict_finished_at = time.perf_counter()
         detections = _detections_from_ultralytics_results(
             results,
             artifact_classes=self.artifact.classes,
         )
+        convert_finished_at = time.perf_counter()
         if allowed_classes is None:
+            filter_finished_at = time.perf_counter()
+            self._last_stage_timings = {
+                "predict": predict_finished_at - started_at,
+                "convert": convert_finished_at - predict_finished_at,
+                "filter": filter_finished_at - convert_finished_at,
+            }
             return detections
         allowed = set(allowed_classes)
-        return [detection for detection in detections if detection.class_name in allowed]
+        filtered = [
+            detection for detection in detections if detection.class_name in allowed
+        ]
+        filter_finished_at = time.perf_counter()
+        self._last_stage_timings = {
+            "predict": predict_finished_at - started_at,
+            "convert": convert_finished_at - predict_finished_at,
+            "filter": filter_finished_at - convert_finished_at,
+        }
+        return filtered
+
+    def last_stage_timings(self) -> dict[str, float]:
+        return dict(self._last_stage_timings)
 
     def update_runtime_vocabulary(self, vocabulary: list[str]) -> None:
         return None

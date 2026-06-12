@@ -13229,6 +13229,16 @@
             ],
             "title": "Media Pipeline Mode"
           },
+          "processing_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProcessingMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "restart_count": {
             "default": 0,
             "minimum": 0.0,
@@ -13288,6 +13298,107 @@
               }
             ],
             "title": "Source Profile Hash"
+          },
+          "telemetry_cadence_seconds": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telemetry Cadence Seconds"
+          },
+          "telemetry_duplicate_frames": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Telemetry Duplicate Frames",
+            "type": "integer"
+          },
+          "telemetry_fallback_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telemetry Fallback Active"
+          },
+          "telemetry_ingest_lag_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telemetry Ingest Lag Ms"
+          },
+          "telemetry_last_error": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telemetry Last Error"
+          },
+          "telemetry_path": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telemetry Path"
+          },
+          "telemetry_pending_frames": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Telemetry Pending Frames",
+            "type": "integer"
+          },
+          "telemetry_publish_drops": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Telemetry Publish Drops",
+            "type": "integer"
+          },
+          "telemetry_transport": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telemetry Transport"
+          },
+          "worker_origin": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Origin"
           }
         },
         "required": [
@@ -13390,6 +13501,16 @@
             ],
             "title": "Media Pipeline Mode"
           },
+          "processing_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProcessingMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "restart_count": {
             "minimum": 0.0,
             "title": "Restart Count",
@@ -13448,10 +13569,111 @@
             ],
             "title": "Source Profile Hash"
           },
+          "telemetry_cadence_seconds": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telemetry Cadence Seconds"
+          },
+          "telemetry_duplicate_frames": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Telemetry Duplicate Frames",
+            "type": "integer"
+          },
+          "telemetry_fallback_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telemetry Fallback Active"
+          },
+          "telemetry_ingest_lag_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telemetry Ingest Lag Ms"
+          },
+          "telemetry_last_error": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telemetry Last Error"
+          },
+          "telemetry_path": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telemetry Path"
+          },
+          "telemetry_pending_frames": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Telemetry Pending Frames",
+            "type": "integer"
+          },
+          "telemetry_publish_drops": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Telemetry Publish Drops",
+            "type": "integer"
+          },
+          "telemetry_transport": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telemetry Transport"
+          },
           "tenant_id": {
             "format": "uuid",
             "title": "Tenant Id",
             "type": "string"
+          },
+          "worker_origin": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Origin"
           }
         },
         "required": [
@@ -13996,6 +14218,15 @@
             "title": "Counts",
             "type": "object"
           },
+          "frame_id": {
+            "format": "uuid",
+            "title": "Frame Id",
+            "type": "string"
+          },
+          "frame_sequence": {
+            "title": "Frame Sequence",
+            "type": "integer"
+          },
           "profile": {
             "$ref": "#/components/schemas/PublishProfile"
           },
@@ -14032,9 +14263,15 @@
             "format": "date-time",
             "title": "Ts",
             "type": "string"
+          },
+          "worker_origin": {
+            "$ref": "#/components/schemas/WorkerOrigin"
           }
         },
         "required": [
+          "frame_id",
+          "frame_sequence",
+          "worker_origin",
           "camera_id",
           "ts",
           "profile",
@@ -14115,6 +14352,17 @@
               }
             ],
             "title": "Last Seen Age Ms"
+          },
+          "lifecycle_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lifecycle Reason"
           },
           "source_track_id": {
             "anyOf": [
@@ -15833,6 +16081,14 @@
         ],
         "title": "WorkerModelSettings",
         "type": "object"
+      },
+      "WorkerOrigin": {
+        "enum": [
+          "edge",
+          "central"
+        ],
+        "title": "WorkerOrigin",
+        "type": "string"
       },
       "WorkerPolygonZone": {
         "additionalProperties": true,

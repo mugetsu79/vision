@@ -2185,6 +2185,17 @@ class SupervisorRuntimeReportCreate(BaseModel):
     media_pipeline_mode: str | None = Field(default=None, max_length=64)
     media_capture_backend: str | None = Field(default=None, max_length=64)
     encoder_mode: str | None = Field(default=None, max_length=32)
+    worker_origin: str | None = Field(default=None, max_length=32)
+    processing_mode: ProcessingMode | None = None
+    telemetry_transport: str | None = Field(default=None, max_length=64)
+    telemetry_path: str | None = Field(default=None, max_length=255)
+    telemetry_cadence_seconds: float | None = Field(default=None, ge=0)
+    telemetry_fallback_active: bool | None = None
+    telemetry_publish_drops: int = Field(default=0, ge=0)
+    telemetry_pending_frames: int = Field(default=0, ge=0)
+    telemetry_ingest_lag_ms: float | None = Field(default=None, ge=0)
+    telemetry_duplicate_frames: int = Field(default=0, ge=0)
+    telemetry_last_error: str | None = Field(default=None, max_length=255)
 
 
 class SupervisorRuntimeReportResponse(BaseModel):
@@ -2204,6 +2215,17 @@ class SupervisorRuntimeReportResponse(BaseModel):
     media_pipeline_mode: str | None = Field(default=None, max_length=64)
     media_capture_backend: str | None = Field(default=None, max_length=64)
     encoder_mode: str | None = Field(default=None, max_length=32)
+    worker_origin: str | None = Field(default=None, max_length=32)
+    processing_mode: ProcessingMode | None = None
+    telemetry_transport: str | None = Field(default=None, max_length=64)
+    telemetry_path: str | None = Field(default=None, max_length=255)
+    telemetry_cadence_seconds: float | None = Field(default=None, ge=0)
+    telemetry_fallback_active: bool | None = None
+    telemetry_publish_drops: int = Field(default=0, ge=0)
+    telemetry_pending_frames: int = Field(default=0, ge=0)
+    telemetry_ingest_lag_ms: float | None = Field(default=None, ge=0)
+    telemetry_duplicate_frames: int = Field(default=0, ge=0)
+    telemetry_last_error: str | None = Field(default=None, max_length=255)
     created_at: datetime
 
 

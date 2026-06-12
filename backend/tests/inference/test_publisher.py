@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import pytest
 from httpx import AsyncClient, MockTransport, Request, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from argus.inference.publisher import (
     BufferedTelemetryPublisher,
@@ -17,12 +17,17 @@ from argus.inference.publisher import (
     ResilientPublisher,
     TelemetryFrame,
     TelemetryTrack,
+    WorkerOrigin,
 )
 from argus.streaming.mediamtx import PublishProfile, StreamMode
 
 
 class _FailingNatsClient:
+    def __init__(self) -> None:
+        self.messages: list[tuple[str, BaseModel]] = []
+
     async def publish(self, subject: str, payload: BaseModel) -> None:
+        self.messages.append((subject, payload))
         raise RuntimeError("nats offline")
 
 
@@ -32,6 +37,18 @@ class _RecordingNatsClient:
 
     async def publish(self, subject: str, payload: BaseModel) -> None:
         self.messages.append((subject, payload))
+
+
+class _RecordingBytesNatsClient:
+    def __init__(self) -> None:
+        self.messages: list[tuple[str, bytes]] = []
+        self.model_messages: list[tuple[str, BaseModel]] = []
+
+    async def publish_bytes(self, subject: str, payload: bytes) -> None:
+        self.messages.append((subject, payload))
+
+    async def publish(self, subject: str, payload: BaseModel) -> None:
+        self.model_messages.append((subject, payload))
 
 
 class _BlockingPublisher:
@@ -62,9 +79,16 @@ class _NeverPublisher:
         return None
 
 
-def _telemetry_frame(track_id: int = 7) -> TelemetryFrame:
+def _telemetry_frame(
+    track_id: int = 7,
+    *,
+    worker_origin: WorkerOrigin | str = WorkerOrigin.CENTRAL,
+) -> TelemetryFrame:
     camera_id = uuid4()
     return TelemetryFrame(
+        frame_id=uuid4(),
+        frame_sequence=track_id,
+        worker_origin=worker_origin,
         camera_id=camera_id,
         ts=datetime(2026, 4, 18, 12, 0, track_id, tzinfo=UTC),
         profile=PublishProfile.CENTRAL_GPU,
@@ -93,19 +117,120 @@ def test_telemetry_track_lifecycle_fields_are_optional_for_legacy_frames() -> No
     assert track.source_track_id is None
     assert track.track_state is None
     assert track.last_seen_age_ms is None
+    assert track.lifecycle_reason is None
     assert track.model_dump()["track_state"] is None
+    assert track.model_dump()["lifecycle_reason"] is None
+
+
+def test_telemetry_track_serializes_lifecycle_reason_when_present() -> None:
+    track = TelemetryTrack(
+        class_name="person",
+        confidence=0.96,
+        bbox={"x1": 12.0, "y1": 24.0, "x2": 48.0, "y2": 66.0},
+        track_id=7,
+        lifecycle_reason="spatial_reassociation",
+    )
+
+    payload = track.model_dump(mode="json")
+
+    assert payload["lifecycle_reason"] == "spatial_reassociation"
+    assert TelemetryTrack.model_validate(payload).lifecycle_reason == "spatial_reassociation"
 
 
 @pytest.mark.asyncio
 async def test_nats_publisher_routes_frame_to_camera_subject() -> None:
     client = _RecordingNatsClient()
-    publisher = NatsPublisher(client)
+    publisher = NatsPublisher(client, worker_origin="edge")
+    frame = _telemetry_frame(worker_origin=WorkerOrigin.EDGE)
+
+    await publisher.publish(frame)
+
+    assert client.messages[0][0] == f"evt.edge.tracking.{frame.camera_id}"
+    assert client.messages[0][1] == frame
+
+
+@pytest.mark.asyncio
+async def test_nats_publisher_routes_central_frames_to_worker_tracking_subject() -> None:
+    client = _RecordingNatsClient()
+    publisher = NatsPublisher(client, worker_origin="central")
     frame = _telemetry_frame()
 
     await publisher.publish(frame)
 
-    assert client.messages[0][0] == f"evt.tracking.{frame.camera_id}"
+    assert client.messages[0][0] == f"evt.worker.tracking.{frame.camera_id}"
     assert client.messages[0][1] == frame
+
+
+@pytest.mark.asyncio
+async def test_nats_publisher_preencodes_json_bytes_when_client_supports_it() -> None:
+    client = _RecordingBytesNatsClient()
+    publisher = NatsPublisher(client, worker_origin="central")
+    frame = _telemetry_frame()
+
+    await publisher.publish(frame)
+
+    assert client.model_messages == []
+    assert len(client.messages) == 1
+    subject, payload = client.messages[0]
+    assert subject == f"evt.worker.tracking.{frame.camera_id}"
+    assert isinstance(payload, bytes)
+    decoded = json.loads(payload.decode("utf-8"))
+    assert decoded["frame_id"] == str(frame.frame_id)
+    assert decoded["frame_sequence"] == frame.frame_sequence
+    assert decoded["worker_origin"] == "central"
+    state = publisher.describe_runtime_state()
+    assert state["last_payload_bytes"] == len(payload)
+    assert isinstance(state["last_serialization_seconds"], float)
+    assert state["last_serialization_seconds"] >= 0.0
+    assert state["worker_origin"] == "central"
+
+
+@pytest.mark.asyncio
+async def test_nats_publisher_rejects_frame_with_mismatched_worker_origin() -> None:
+    client = _RecordingNatsClient()
+    publisher = NatsPublisher(client, worker_origin=WorkerOrigin.EDGE)
+    frame = _telemetry_frame(worker_origin=WorkerOrigin.CENTRAL)
+
+    with pytest.raises(ValueError, match="worker_origin"):
+        await publisher.publish(frame)
+
+    assert client.messages == []
+
+
+def test_nats_publisher_defaults_to_worker_safe_subject_prefix() -> None:
+    publisher = NatsPublisher(_RecordingNatsClient())
+
+    assert publisher.subject_prefix == "evt.worker.tracking"
+
+
+def test_telemetry_frame_requires_and_serializes_canonical_identity_fields() -> None:
+    frame_id = uuid4()
+    frame = _telemetry_frame().model_copy(
+        update={
+            "frame_id": frame_id,
+            "frame_sequence": 42,
+            "worker_origin": WorkerOrigin.EDGE,
+        }
+    )
+
+    payload = frame.model_dump(mode="json")
+
+    assert payload["frame_id"] == str(frame_id)
+    assert payload["frame_sequence"] == 42
+    assert payload["worker_origin"] == "edge"
+    assert TelemetryFrame.model_validate(payload) == frame
+
+    with pytest.raises(ValidationError):
+        TelemetryFrame.model_validate(
+            {
+                "camera_id": str(uuid4()),
+                "ts": datetime(2026, 4, 18, 12, 0, tzinfo=UTC).isoformat(),
+                "profile": PublishProfile.CENTRAL_GPU.value,
+                "stream_mode": StreamMode.ANNOTATED_WHIP.value,
+                "counts": {"car": 1},
+                "tracks": [],
+            }
+        )
 
 
 @pytest.mark.asyncio
@@ -180,13 +305,18 @@ async def test_http_publisher_can_coalesce_batch_to_latest_frame() -> None:
 @pytest.mark.asyncio
 async def test_resilient_publisher_falls_back_to_http_when_nats_is_unreachable() -> None:
     batches: list[list[dict[str, object]]] = []
+    nats_client = _FailingNatsClient()
 
     async def handler(request: Request) -> Response:
         batches.append(json.loads(request.content.decode("utf-8"))["events"])
         return Response(202, json={"accepted": True})
 
     resilient = ResilientPublisher(
-        primary=NatsPublisher(_FailingNatsClient()),
+        primary=NatsPublisher(
+            nats_client,
+            subject_prefix="evt.edge.tracking",
+            worker_origin=WorkerOrigin.EDGE,
+        ),
         fallback=HttpPublisher(
             url="http://backend.internal/api/v1/edge/telemetry",
             http_client=AsyncClient(transport=MockTransport(handler)),
@@ -194,11 +324,45 @@ async def test_resilient_publisher_falls_back_to_http_when_nats_is_unreachable()
         ),
     )
 
-    await resilient.publish(_telemetry_frame())
+    frame = _telemetry_frame(worker_origin=WorkerOrigin.EDGE)
+
+    await resilient.publish(frame)
     await resilient.close()
 
+    assert nats_client.messages == [(f"evt.edge.tracking.{frame.camera_id}", frame)]
     assert len(batches) == 1
     assert len(batches[0]) == 1
+
+
+@pytest.mark.asyncio
+async def test_resilient_publisher_reports_active_transport_and_fallback_state() -> None:
+    async def handler(request: Request) -> Response:
+        return Response(202, json={"accepted": True})
+
+    resilient = ResilientPublisher(
+        primary=NatsPublisher(
+            _FailingNatsClient(),
+            subject_prefix="evt.edge.tracking",
+            worker_origin=WorkerOrigin.EDGE,
+        ),
+        fallback=HttpPublisher(
+            url="http://backend.internal/api/v1/edge/telemetry",
+            http_client=AsyncClient(transport=MockTransport(handler)),
+            flush_interval_seconds=0.25,
+            monotonic=lambda: 1.0,
+        ),
+    )
+
+    await resilient.publish(_telemetry_frame(worker_origin=WorkerOrigin.EDGE))
+    state = resilient.describe_runtime_state()
+    await resilient.close()
+
+    assert state["transport"] == "http_fallback"
+    assert state["path"] == "http://backend.internal/api/v1/edge/telemetry"
+    assert state["cadence_seconds"] == 0.25
+    assert state["fallback_active"] is True
+    assert state["fallback_count"] == 1
+    assert state["last_error"] == "Primary telemetry transport failed."
 
 
 @pytest.mark.asyncio
@@ -224,6 +388,27 @@ async def test_buffered_telemetry_publisher_returns_while_transport_is_blocked()
 
 
 @pytest.mark.asyncio
+async def test_buffered_telemetry_publisher_preserves_wrapped_serialization_state() -> None:
+    client = _RecordingBytesNatsClient()
+    publisher = BufferedTelemetryPublisher(
+        NatsPublisher(client, worker_origin="central"),
+        max_queue_size=4,
+        shutdown_timeout_seconds=1.0,
+    )
+    frame = _telemetry_frame()
+
+    await publisher.publish(frame)
+    await publisher.close()
+
+    state = publisher.describe_runtime_state()
+    assert state["last_payload_bytes"] == len(client.messages[0][1])
+    assert isinstance(state["last_serialization_seconds"], float)
+    assert state["last_serialization_seconds"] >= 0.0
+    assert state["worker_origin"] == "central"
+    assert state["dropped_frames"] == 0
+
+
+@pytest.mark.asyncio
 async def test_buffered_telemetry_publisher_drops_oldest_queued_live_frame() -> None:
     blocking = _BlockingPublisher()
     publisher = BufferedTelemetryPublisher(
@@ -246,6 +431,7 @@ async def test_buffered_telemetry_publisher_drops_oldest_queued_live_frame() -> 
 
     assert blocking.frames == [first, latest]
     assert publisher.dropped_frames == 1
+    assert publisher.describe_runtime_state()["dropped_frames"] == 1
 
 
 @pytest.mark.asyncio

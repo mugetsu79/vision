@@ -3,13 +3,15 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import importlib
+import re
 import subprocess
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from datetime import datetime
 from logging import getLogger
+from time import monotonic
 from typing import Any, Literal, Protocol
-from urllib.parse import urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import UUID
 
 import httpx
@@ -31,6 +33,11 @@ ReadTokenFactory = Callable[[UUID, str], str]
 LOGGER = getLogger(__name__)
 
 _GSTREAMER_PUBLISHER_STARTUP_GRACE_S = 0.05
+_PATH_CONFIG_REVALIDATE_SECONDS = 60.0
+_RTSP_URL_RE = re.compile(r"\brtsps?://[^\s\"']+")
+_SENSITIVE_QUERY_KEYS = ("token", "jwt", "bearer", "password", "pass", "auth")
+_SENSITIVE_ASSIGNMENT_RE = re.compile(r"(?i)\b(jwt|token|bearer|password|pass|auth)=([^&\s]+)")
+_BEARER_VALUE_RE = re.compile(r"(?i)\b(bearer\s+)([^\s,;]+)")
 
 
 class PublishProfile(StrEnum):
@@ -374,7 +381,7 @@ async def _drain_publisher_stderr(
             LOGGER.warning(
                 "MediaMTX publisher %s stderr: %s",
                 publisher_name,
-                message,
+                sanitize_stream_log_message(message),
                 extra={
                     "camera_id": str(camera_id),
                     "path_name": path_name,
@@ -401,6 +408,8 @@ class MediaMTXClient:
         read_token_factory: ReadTokenFactory | None = None,
         publisher_push_timeout_seconds: float = 1.0,
         publisher_idle_restart_seconds: float = 15.0,
+        path_config_revalidate_seconds: float = _PATH_CONFIG_REVALIDATE_SECONDS,
+        clock: Callable[[], float] | None = None,
     ) -> None:
         self.api_base_url = api_base_url.rstrip("/")
         self.rtsp_base_url = rtsp_base_url.rstrip("/")
@@ -414,10 +423,14 @@ class MediaMTXClient:
         self._read_token_factory = read_token_factory
         self._publisher_push_timeout_seconds = max(0.0, publisher_push_timeout_seconds)
         self._publisher_idle_restart_seconds = max(0.0, publisher_idle_restart_seconds)
+        self._path_config_revalidate_seconds = max(0.0, path_config_revalidate_seconds)
+        self._clock = clock or monotonic
         self._registrations: dict[UUID, StreamRegistration] = {}
         self._publishers: dict[UUID, _PublisherState] = {}
         self._software_publish_fallbacks: set[UUID] = set()
         self._pushed_frames: dict[UUID, dict[str, Any]] = {}
+        self._path_configs: dict[str, dict[str, Any]] = {}
+        self._path_config_checked_at: dict[str, float] = {}
 
     async def close(self) -> None:
         for state in list(self._publishers.values()):
@@ -462,6 +475,8 @@ class MediaMTXClient:
                 f"/v3/config/paths/delete/{previous.path_name}",
                 ignore_not_found=True,
             )
+            self._path_configs.pop(previous.path_name, None)
+            self._path_config_checked_at.pop(previous.path_name, None)
         publisher_state = self._publishers.get(camera_id)
         if (
             publisher_state is not None
@@ -840,15 +855,34 @@ class MediaMTXClient:
         return max(0.0, (ts - publisher_state.last_published_at).total_seconds())
 
     async def _ensure_path(self, path_name: str, *, source: str, source_on_demand: bool) -> None:
+        path_config: dict[str, Any] = {
+            "name": path_name,
+            "source": source,
+            "sourceOnDemand": source_on_demand,
+        }
+        if urlsplit(source).scheme.lower() in {"rtsp", "rtsps"}:
+            path_config["rtspTransport"] = "tcp"
+        if self._path_configs.get(path_name) == path_config and self._path_config_cache_fresh(
+            path_name
+        ):
+            LOGGER.debug(
+                "MediaMTX stream path already matches desired config",
+                extra={"path_name": path_name},
+            )
+            return
         await self._request(
             "POST",
             f"/v3/config/paths/replace/{path_name}",
-            json={
-                "name": path_name,
-                "source": source,
-                "sourceOnDemand": source_on_demand,
-            },
+            json=path_config,
         )
+        self._path_configs[path_name] = path_config
+        self._path_config_checked_at[path_name] = self._clock()
+
+    def _path_config_cache_fresh(self, path_name: str) -> bool:
+        checked_at = self._path_config_checked_at.get(path_name)
+        if checked_at is None:
+            return False
+        return self._clock() - checked_at < self._path_config_revalidate_seconds
 
     async def ensure_path(self, path_name: str, *, source: str, source_on_demand: bool) -> None:
         await self._ensure_path(
@@ -1021,4 +1055,36 @@ def _append_query_parameter(url: str, *, key: str, value: str) -> str:
     combined = suffix if query == "" else f"{query}&{suffix}"
     return urlunsplit(
         (split_url.scheme, split_url.netloc, split_url.path, combined, split_url.fragment)
+    )
+
+
+def sanitize_stream_log_message(message: str) -> str:
+    sanitized = _RTSP_URL_RE.sub(lambda match: _sanitize_rtsp_url(match.group(0)), message)
+    sanitized = _SENSITIVE_ASSIGNMENT_RE.sub(r"\1=***", sanitized)
+    return _BEARER_VALUE_RE.sub(r"\1***", sanitized)
+
+
+def _sanitize_rtsp_url(url: str) -> str:
+    split_url = urlsplit(url)
+    host = split_url.hostname or ""
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    netloc = host
+    if split_url.port is not None:
+        netloc = f"{netloc}:{split_url.port}"
+    if split_url.username is not None or split_url.password is not None:
+        netloc = f"***:***@{netloc}"
+    sanitized_pairs = [
+        (key, "***" if any(marker in key.lower() for marker in _SENSITIVE_QUERY_KEYS) else value)
+        for key, value in parse_qsl(split_url.query, keep_blank_values=True)
+    ]
+    sanitized_query = urlencode(sanitized_pairs)
+    return urlunsplit(
+        (
+            split_url.scheme,
+            netloc,
+            split_url.path,
+            sanitized_query,
+            split_url.fragment,
+        )
     )

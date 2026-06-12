@@ -8,11 +8,27 @@ import pytest
 from pydantic import BaseModel
 
 from argus.core.config import Settings
-from argus.core.events import EventMessage, NatsJetStreamClient, STREAM_DEFINITIONS
+from argus.core.events import STREAM_DEFINITIONS, EventMessage, NatsJetStreamClient
 
 
 class CameraCommand(BaseModel):
     command: str
+
+
+class _RecordingRawNatsClient:
+    def __init__(self) -> None:
+        self.published: list[tuple[str, bytes]] = []
+
+    async def publish(self, subject: str, payload: bytes) -> None:
+        self.published.append((subject, payload))
+
+
+class _RecordingJetStream:
+    def __init__(self) -> None:
+        self.published: list[tuple[str, bytes]] = []
+
+    async def publish(self, subject: str, payload: bytes) -> None:
+        self.published.append((subject, payload))
 
 
 def test_stream_definitions_include_rule_events() -> None:
@@ -23,6 +39,52 @@ def test_stream_definitions_include_rule_events() -> None:
     }
 
     assert "evt.rule.*" in subjects
+
+
+def test_stream_definitions_include_live_edge_and_worker_tracking_events() -> None:
+    subjects = {
+        subject
+        for stream in STREAM_DEFINITIONS
+        for subject in stream.subjects
+    }
+
+    assert "evt.tracking.*" in subjects
+    assert "evt.edge.tracking.*" in subjects
+    assert "evt.worker.tracking.*" in subjects
+
+
+@pytest.mark.asyncio
+async def test_publish_bytes_uses_raw_nats_client_when_streams_are_unmanaged() -> None:
+    settings = Settings(
+        _env_file=None,
+        nats_manage_streams=False,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    events_client = NatsJetStreamClient(settings)
+    raw_client = _RecordingRawNatsClient()
+    events_client._client = raw_client  # type: ignore[assignment]
+    payload = b'{"command":"reload"}'
+
+    await events_client.publish_bytes("cmd.camera.test", payload)
+
+    assert raw_client.published == [("cmd.camera.test", payload)]
+
+
+@pytest.mark.asyncio
+async def test_publish_bytes_uses_jetstream_when_streams_are_managed() -> None:
+    settings = Settings(
+        _env_file=None,
+        nats_manage_streams=True,
+        rtsp_encryption_key="argus-dev-rtsp-key",
+    )
+    events_client = NatsJetStreamClient(settings)
+    jetstream = _RecordingJetStream()
+    events_client._jetstream = jetstream  # type: ignore[assignment]
+    payload = b'{"command":"reload"}'
+
+    await events_client.publish_bytes("cmd.camera.test", payload)
+
+    assert jetstream.published == [("cmd.camera.test", payload)]
 
 
 @pytest.mark.asyncio

@@ -190,6 +190,9 @@ const sites: Site[] = [
 
 const freshFrame: TelemetryFrame = {
   camera_id: "camera-1",
+  frame_id: "test-frame-1",
+  frame_sequence: 1,
+  worker_origin: "central",
   ts: new Date().toISOString(),
   profile: "central-gpu",
   stream_mode: "annotated-whip",
