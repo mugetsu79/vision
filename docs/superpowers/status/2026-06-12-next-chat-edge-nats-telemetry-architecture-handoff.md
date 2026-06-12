@@ -222,6 +222,40 @@ Live validation after implementation should measure:
 - fallback behavior by temporarily blocking the primary NATS path
 - no raw credentials in logs/docs/screenshots
 
+## Lifecycle Stop Bug To Carry Forward
+
+After this handoff was first written, the central worker stop path showed a
+small but important control-plane bug:
+
+- camera: `CENTRAL persons RTSP`
+- DB assignment desired state: `not_desired`
+- latest lifecycle request: `stop`, `completed`
+- actual state: the central inference child process and its ffmpeg child were
+  still running under `vezor-master-vezor-supervisor-1`
+- manual recovery: terminate the matching central camera worker process inside
+  the supervisor container, then verify it does not respawn
+- post-recovery evidence: only the supervisor Python process remained; no
+  central `argus.inference.engine` process was present; latest central runtime
+  heartbeat became stale
+
+Likely root cause: `LocalWorkerProcessAdapter.stop()` only terminates a process
+present in its in-memory `_processes` map. If a worker survives outside that map
+or the supervisor loses bookkeeping across a restart/reload, the stop request
+can be recorded as completed while a matching child process remains alive.
+
+Next-chat follow-up:
+
+- add a failing test that reproduces stop completion when the tracked process
+  map is missing or stale
+- make stop/reconcile verify there is no matching local worker process before
+  marking lifecycle `completed`
+- report a truthful failure if a matching process cannot be terminated
+- keep process inspection sanitized; do not print raw command arguments that
+  might contain RTSP URLs, bearer tokens, or other secrets
+- ensure the UI/API does not imply a worker is stopped or running solely from
+  supervisor node health or stale lifecycle state; fresh per-camera heartbeat
+  remains the runtime source of truth
+
 ## Whole-Product Smoke Guidance
 
 Yes, a whole-product smoke is worth rerunning later, but not necessarily for
