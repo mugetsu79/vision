@@ -7722,6 +7722,10 @@ export interface components {
             media_capture_backend?: string | null;
             /** Media Pipeline Mode */
             media_pipeline_mode?: string | null;
+            /** Output Fps */
+            output_fps?: number | null;
+            /** Processing Fps Cap */
+            processing_fps_cap?: number | null;
             processing_mode?: components["schemas"]["ProcessingMode"] | null;
             /**
              * Restart Count
@@ -7738,6 +7742,8 @@ export interface components {
             selected_provider?: string | null;
             /** Source Profile Hash */
             source_profile_hash?: string | null;
+            /** Stream Profile Id */
+            stream_profile_id?: string | null;
             /** Telemetry Cadence Seconds */
             telemetry_cadence_seconds?: number | null;
             /**
@@ -7765,6 +7771,10 @@ export interface components {
             telemetry_publish_drops: number;
             /** Telemetry Transport */
             telemetry_transport?: string | null;
+            /** Tracking Diagnostics */
+            tracking_diagnostics?: {
+                [key: string]: number | string;
+            };
             /** Worker Origin */
             worker_origin?: string | null;
         };
@@ -7802,6 +7812,10 @@ export interface components {
             media_capture_backend?: string | null;
             /** Media Pipeline Mode */
             media_pipeline_mode?: string | null;
+            /** Output Fps */
+            output_fps?: number | null;
+            /** Processing Fps Cap */
+            processing_fps_cap?: number | null;
             processing_mode?: components["schemas"]["ProcessingMode"] | null;
             /** Restart Count */
             restart_count: number;
@@ -7814,6 +7828,8 @@ export interface components {
             selected_provider?: string | null;
             /** Source Profile Hash */
             source_profile_hash?: string | null;
+            /** Stream Profile Id */
+            stream_profile_id?: string | null;
             /** Telemetry Cadence Seconds */
             telemetry_cadence_seconds?: number | null;
             /**
@@ -7846,6 +7862,10 @@ export interface components {
              * Format: uuid
              */
             tenant_id: string;
+            /** Tracking Diagnostics */
+            tracking_diagnostics?: {
+                [key: string]: number | string;
+            };
             /** Worker Origin */
             worker_origin?: string | null;
         };

@@ -61,6 +61,54 @@ def test_jetson_advanced_profile_allows_maximum_accuracy_without_deepstream_runt
     assert resolved.verifier.mode in {"none", "suspicious_only"}
 
 
+def test_central_people_profile_lowers_person_association_confidence_below_display() -> None:
+    resolved = resolve_scene_vision_profile(
+        {
+            "accuracy_mode": "maximum_accuracy",
+            "compute_tier": "central_gpu",
+            "object_domain": "people",
+        },
+        has_homography=False,
+    )
+
+    assert resolved.candidate_quality.display_min_confidence["person"] == 0.45
+    assert resolved.candidate_quality.association_min_confidence["person"] < 0.45
+
+
+def test_edge_mixed_profile_preserves_class_specific_vehicle_confidence() -> None:
+    resolved = resolve_scene_vision_profile(
+        {
+            "accuracy_mode": "balanced",
+            "compute_tier": "edge_standard",
+            "object_domain": "mixed",
+        },
+        has_homography=False,
+    )
+
+    assert resolved.candidate_quality.display_min_confidence["car"] == 0.4
+    assert resolved.candidate_quality.association_min_confidence["car"] == 0.4
+    assert resolved.candidate_quality.display_min_confidence["forklift"] == 0.4
+
+
+def test_tracker_profile_resolves_bounded_coast_seconds() -> None:
+    low = resolve_scene_vision_profile(
+        {"tracker_profile": {"coast_seconds": 0.2}},
+        has_homography=False,
+    )
+    explicit = resolve_scene_vision_profile(
+        {"tracker_profile": {"coast_seconds": 3.25}},
+        has_homography=False,
+    )
+    high = resolve_scene_vision_profile(
+        {"tracker_profile": {"coast_seconds": 20.0}},
+        has_homography=False,
+    )
+
+    assert low.tracker.coast_seconds == 0.5
+    assert explicit.tracker.coast_seconds == 3.25
+    assert high.tracker.coast_seconds == 8.0
+
+
 def test_speed_enabled_requires_homography() -> None:
     with pytest.raises(ValueError, match="Homography is required when speed metrics are enabled."):
         resolve_scene_vision_profile(

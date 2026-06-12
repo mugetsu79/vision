@@ -112,7 +112,6 @@ from argus.vision.runtime import (
 )
 from argus.vision.runtime_selection import RuntimeSelection, select_runtime_artifact
 from argus.vision.track_lifecycle import (
-    DEFAULT_TRACK_COAST_TTL_MS,
     LifecycleTrack,
     TrackLifecycleConfig,
     TrackLifecycleManager,
@@ -883,12 +882,8 @@ def _canonical_model_backend(model: ModelSettings) -> str:
     return "onnxruntime"
 
 
-def _capture_fps_cap(camera_fps_cap: int, stream_fps: int) -> int:
-    if stream_fps <= 0:
-        return camera_fps_cap
-    if camera_fps_cap <= 0:
-        return stream_fps
-    return min(camera_fps_cap, stream_fps)
+def _processing_fps_cap(camera_fps_cap: int) -> int:
+    return max(1, int(camera_fps_cap))
 
 
 def _tracker_config_from_resolved_profile(
@@ -919,12 +914,7 @@ def _track_lifecycle_config_from_resolved_profile(
     resolved_profile: ResolvedSceneVisionProfile,
 ) -> TrackLifecycleConfig:
     del config
-    memory_frames = max(1, int(resolved_profile.candidate_quality.memory_frames))
-    coast_ttl_ms = round(
-        DEFAULT_TRACK_COAST_TTL_MS
-        * memory_frames
-        / _TRACK_LIFECYCLE_BASE_MEMORY_FRAMES
-    )
+    coast_ttl_ms = round(float(resolved_profile.tracker.coast_seconds) * 1000)
     coast_ttl_ms = min(
         max(coast_ttl_ms, _TRACK_LIFECYCLE_MIN_COAST_TTL_MS),
         _TRACK_LIFECYCLE_MAX_COAST_TTL_MS,
@@ -1150,6 +1140,18 @@ class InferenceEngine:
         describe = getattr(self.publisher, "describe_runtime_state", None)
         return dict(describe()) if callable(describe) else {}
 
+    def _tracking_diagnostics(self) -> dict[str, int]:
+        visible_tracks = self._track_lifecycle.visible_tracks()
+        diagnostics = dict(self._track_lifecycle.last_diagnostic_summary())
+        diagnostics["active_tracks"] = sum(
+            1 for track in visible_tracks if track.state == "active"
+        )
+        diagnostics["coasting_tracks"] = sum(
+            1 for track in visible_tracks if track.state == "coasting"
+        )
+        diagnostics["visible_tracks"] = len(visible_tracks)
+        return diagnostics
+
     async def _maybe_record_runtime_report(
         self,
         *,
@@ -1183,6 +1185,10 @@ class InferenceEngine:
             media_pipeline_mode=self._media_pipeline_mode(),
             media_capture_backend=self._media_capture_backend(),
             encoder_mode=self._encoder_mode(),
+            processing_fps_cap=float(_processing_fps_cap(self.config.camera.fps_cap)),
+            output_fps=float(self.config.stream.fps),
+            stream_profile_id=self.config.stream.profile_id,
+            tracking_diagnostics=self._tracking_diagnostics(),
             telemetry_transport=_optional_str(telemetry_state.get("transport")),
             telemetry_path=_optional_str(telemetry_state.get("path")),
             telemetry_cadence_seconds=_optional_float(
@@ -1848,11 +1854,10 @@ class InferenceEngine:
         target_height = (
             registration.target_height if registration is not None else self.config.stream.height
         )
-        target_fps = registration.target_fps if registration is not None else self.config.stream.fps
         reconfigure(
             target_width=target_width,
             target_height=target_height,
-            fps_cap=_capture_fps_cap(self.config.camera.fps_cap, target_fps),
+            fps_cap=_processing_fps_cap(self.config.camera.fps_cap),
             source_uri=self.config.camera.resolved_source_uri,
             source_profile_hash=self.config.source_profile_hash,
         )
@@ -2445,7 +2450,7 @@ async def build_runtime_engine(
             target_width=registration.target_width,
             target_height=registration.target_height,
             frame_skip=config.camera.frame_skip,
-            fps_cap=_capture_fps_cap(config.camera.fps_cap, registration.target_fps),
+            fps_cap=_processing_fps_cap(config.camera.fps_cap),
         )
     )
     runtime = import_onnxruntime()

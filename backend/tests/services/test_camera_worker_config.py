@@ -1996,6 +1996,32 @@ def test_annotated_browser_delivery_uses_processed_full_rate_stream() -> None:
     }
 
 
+def test_worker_config_keeps_processing_fps_separate_from_preview_fps() -> None:
+    model = _model(uuid4())
+    camera = _camera(
+        primary_model_id=model.id,
+        fps_cap=15,
+        browser_delivery={
+            "default_profile": "360p5",
+            "allow_native_on_demand": True,
+            "profiles": [],
+        },
+    )
+
+    config = _camera_to_worker_config(
+        camera=camera,
+        primary_model=model,
+        secondary_model=None,
+        settings=_settings(),
+        rtsp_url="rtsp://camera.internal/live",
+    )
+
+    assert config.camera.fps_cap == 15
+    assert config.stream.profile_id == "360p5"
+    assert config.stream.fps == 5
+    assert config.tracker.frame_rate == 15
+
+
 def test_central_native_browser_delivery_with_privacy_resolves_to_annotated_stream() -> None:
     camera = Camera(
         id=uuid4(),

@@ -69,6 +69,37 @@ def test_last_diagnostics_reports_new_track() -> None:
     assert visible[0].lifecycle_reason == "new_track"
 
 
+def test_last_diagnostic_summary_counts_reasons_and_visible_states() -> None:
+    manager = TrackLifecycleManager(TrackLifecycleConfig(coast_ttl_ms=2_500))
+
+    manager.update(
+        detections=[
+            _person(track_id=4, bbox=(10.0, 10.0, 60.0, 120.0)),
+            _person(track_id=5, bbox=(200.0, 10.0, 250.0, 120.0)),
+        ],
+        ts=_ts(0),
+        frame_shape=FRAME_SHAPE,
+    )
+    manager.update(
+        detections=[_person(track_id=99, bbox=(12.0, 12.0, 62.0, 122.0))],
+        ts=_ts(100),
+        frame_shape=FRAME_SHAPE,
+    )
+
+    assert manager.last_diagnostic_summary() == {
+        "spatial_reassociation": 1,
+        "coasting": 1,
+    }
+    assert [(track.stable_track_id, track.state) for track in manager.visible_tracks()] == [
+        (1, "active"),
+        (2, "coasting"),
+    ]
+
+    manager.update(detections=[], ts=_ts(2_601), frame_shape=FRAME_SHAPE)
+
+    assert manager.last_diagnostic_summary() == {"forgotten": 2}
+
+
 def test_last_diagnostics_reports_source_id_match() -> None:
     manager = TrackLifecycleManager()
 

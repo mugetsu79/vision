@@ -13,7 +13,11 @@ from uuid import UUID, uuid4
 import numpy as np
 import pytest
 
-from argus.api.contracts import WorkerEvidenceStorageSettings, WorkerRuntimeSelectionSettings
+from argus.api.contracts import (
+    SceneVisionProfile,
+    WorkerEvidenceStorageSettings,
+    WorkerRuntimeSelectionSettings,
+)
 from argus.core import metrics as core_metrics
 from argus.inference import engine as engine_module
 from argus.inference.engine import (
@@ -1842,6 +1846,12 @@ async def test_engine_reports_runtime_report_media_capture_backend_and_encoder_m
     assert report.telemetry_publish_drops == 2
     assert report.telemetry_pending_frames == 1
     assert report.telemetry_last_error is None
+    assert report.processing_fps_cap == 25
+    assert report.output_fps == 20
+    assert report.stream_profile_id == "720p20"
+    assert report.tracking_diagnostics["new_track"] == 1
+    assert report.tracking_diagnostics["active_tracks"] == 1
+    assert report.tracking_diagnostics["coasting_tracks"] == 0
 
 
 @pytest.mark.asyncio
@@ -2567,6 +2577,23 @@ def test_engine_initializes_tracker_and_lifecycle_from_max_accuracy_jetson_profi
     assert engine._track_lifecycle.config.coast_ttl_ms >= 2_000
 
 
+def test_lifecycle_coast_ttl_uses_resolved_profile_seconds() -> None:
+    profile = engine_module.resolve_scene_vision_profile(
+        SceneVisionProfile(
+            accuracy_mode="maximum_accuracy",
+            tracker_profile={"coast_seconds": 3.0},
+        ).model_dump(mode="python"),
+        has_homography=False,
+    )
+
+    config = engine_module._track_lifecycle_config_from_resolved_profile(
+        _engine_config(uuid4()),
+        profile,
+    )
+
+    assert config.coast_ttl_ms == 3000
+
+
 @pytest.mark.asyncio
 async def test_engine_rebuilds_tracker_and_lifecycle_when_vision_profile_changes() -> None:
     camera_id = uuid4()
@@ -2872,8 +2899,20 @@ async def test_engine_reconfigures_capture_source_when_stream_profile_changes() 
     camera_id = uuid4()
     stream_client = _FakeStreamClient()
     frame_source = _ReconfigurableFrameSource([np.zeros((64, 64, 3), dtype=np.uint8)])
+    config = _engine_config(camera_id).model_copy(
+        update={
+            "camera": _engine_config(camera_id).camera.model_copy(update={"fps_cap": 25}),
+            "stream": StreamSettings(
+                profile_id="360p5",
+                kind="transcode",
+                width=640,
+                height=360,
+                fps=5,
+            ),
+        }
+    )
     engine = InferenceEngine(
-        config=_engine_config(camera_id),
+        config=config,
         frame_source=frame_source,
         detector=_FakeDetector(),
         tracker_factory=lambda tracker_type: _FakeTracker(tracker_type=tracker_type),
@@ -2902,7 +2941,7 @@ async def test_engine_reconfigures_capture_source_when_stream_profile_changes() 
         {
             "target_width": 1920,
             "target_height": 1080,
-            "fps_cap": 20,
+            "fps_cap": 25,
             "source_uri": "rtsp://camera.internal/live",
             "source_profile_hash": None,
         }
@@ -4472,6 +4511,76 @@ async def test_build_runtime_engine_buffers_tracking_persistence(
         assert engine.tracking_store.wrapped_store is tracking_store
         assert engine.tracking_store.max_queue_size == 7
         assert engine.tracking_store.max_batch_size == 5
+    finally:
+        await engine.close()
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_engine_uses_camera_fps_cap_for_capture_not_stream_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera_id = uuid4()
+    captured: dict[str, CameraSourceConfig] = {}
+    _patch_runtime_engine_build_dependencies(monkeypatch)
+
+    class _FpsLimitedMediaMTXClient:
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+        async def register_stream(
+            self,
+            *,
+            camera_id: UUID,
+            rtsp_url: str,
+            profile: PublishProfile,
+            stream_kind: str,
+            privacy: PrivacyPolicy,
+            target_fps: int,
+            profile_id: str | None = None,
+            target_width: int | None = None,
+            target_height: int | None = None,
+        ) -> StreamRegistration:
+            del rtsp_url, profile, stream_kind, privacy, profile_id
+            return StreamRegistration(
+                camera_id=camera_id,
+                mode=StreamMode.PASSTHROUGH,
+                path_name=f"cameras/{camera_id}/passthrough",
+                read_path=f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/passthrough",
+                target_fps=target_fps,
+                target_width=target_width,
+                target_height=target_height,
+                managed_path_config=True,
+                ingest_path=f"rtsp://mediamtx.internal:8554/cameras/{camera_id}/passthrough",
+            )
+
+    def fake_create_camera_source(camera_config: CameraSourceConfig) -> _FakeFrameSource:
+        captured["camera_config"] = camera_config
+        return _FakeFrameSource([])
+
+    monkeypatch.setattr(engine_module, "MediaMTXClient", _FpsLimitedMediaMTXClient)
+    monkeypatch.setattr(engine_module, "create_camera_source", fake_create_camera_source)
+    base_config = _engine_config(camera_id)
+    config = base_config.model_copy(
+        update={
+            "camera": base_config.camera.model_copy(update={"fps_cap": 15}),
+            "stream": StreamSettings(
+                profile_id="360p5",
+                kind="transcode",
+                width=640,
+                height=360,
+                fps=5,
+            ),
+        }
+    )
+
+    engine = await engine_module.build_runtime_engine(
+        config,
+        settings=engine_module.Settings(_env_file=None),
+        events_client=_FakeEventClient(),
+    )
+
+    try:
+        assert captured["camera_config"].fps_cap == 15
     finally:
         await engine.close()
 

@@ -18,6 +18,8 @@ class ResolvedMotionMetrics:
 @dataclass(frozen=True, slots=True)
 class ResolvedCandidateQuality:
     new_track_min_confidence: dict[str, float] = field(default_factory=dict)
+    display_min_confidence: dict[str, float] = field(default_factory=dict)
+    association_min_confidence: dict[str, float] = field(default_factory=dict)
     duplicate_suppression_enabled: bool = True
     memory_frames: int = 24
 
@@ -28,6 +30,7 @@ class ResolvedTrackerProfile:
     with_reid: bool = False
     appearance_ready: bool = False
     new_track_min_hits: int = 2
+    coast_seconds: float = 2.5
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,29 +67,38 @@ def resolve_scene_vision_profile(
     duplicate_suppression_enabled = True
     memory_frames = 24
     new_track_min_hits = 2
+    coast_seconds = 2.5
+    coast_seconds_overridden = False
     appearance_ready = False
-    new_track_min_confidence = _base_new_track_confidence(requested.object_domain)
+    display_min_confidence = _base_new_track_confidence(requested.object_domain)
+    association_min_confidence = dict(display_min_confidence)
 
     if accuracy_mode == "fast" and compute_tier == "cpu_low":
         speed_enabled = False
         duplicate_suppression_enabled = False
         memory_frames = 8
         new_track_min_hits = 1
-        new_track_min_confidence.update(_vehicle_thresholds(0.35) | {"person": 0.35})
+        display_min_confidence.update(_vehicle_thresholds(0.35) | {"person": 0.35})
+        association_min_confidence.update(_vehicle_thresholds(0.35) | {"person": 0.35})
     elif accuracy_mode == "maximum_accuracy" and compute_tier == "edge_advanced_jetson":
         appearance_ready = True
         memory_frames = 36
         new_track_min_hits = 3
-        new_track_min_confidence.update(_vehicle_thresholds(0.45) | {"person": 0.45})
+        display_min_confidence.update(_vehicle_thresholds(0.45) | {"person": 0.45})
+        association_min_confidence.update(_vehicle_thresholds(0.45) | {"person": 0.45})
     elif accuracy_mode == "maximum_accuracy" and compute_tier == "central_gpu":
         verifier_mode = "suspicious_only"
         appearance_ready = True
         memory_frames = 36
         new_track_min_hits = 3
-        new_track_min_confidence.update(_vehicle_thresholds(0.45) | {"person": 0.45})
+        display_min_confidence.update(_vehicle_thresholds(0.45) | {"person": 0.45})
+        association_min_confidence.update(_vehicle_thresholds(0.45) | {"person": 0.30})
     elif accuracy_mode == "open_vocabulary":
         speed_enabled = requested.motion_metrics.speed_enabled
-        new_track_min_confidence.update(
+        display_min_confidence.update(
+            _vehicle_thresholds(0.5) | {"person": 0.5, "default": 0.5}
+        )
+        association_min_confidence.update(
             _vehicle_thresholds(0.5) | {"person": 0.5, "default": 0.5}
         )
 
@@ -94,7 +106,16 @@ def resolve_scene_vision_profile(
     if isinstance(quality_overrides.get("new_track_min_confidence"), dict):
         for class_name, value in quality_overrides["new_track_min_confidence"].items():
             if isinstance(class_name, str) and isinstance(value, int | float):
-                new_track_min_confidence[class_name] = float(value)
+                display_min_confidence[class_name] = float(value)
+                association_min_confidence[class_name] = float(value)
+    if isinstance(quality_overrides.get("display_min_confidence"), dict):
+        for class_name, value in quality_overrides["display_min_confidence"].items():
+            if isinstance(class_name, str) and isinstance(value, int | float):
+                display_min_confidence[class_name] = float(value)
+    if isinstance(quality_overrides.get("association_min_confidence"), dict):
+        for class_name, value in quality_overrides["association_min_confidence"].items():
+            if isinstance(class_name, str) and isinstance(value, int | float):
+                association_min_confidence[class_name] = float(value)
     if isinstance(quality_overrides.get("duplicate_suppression_enabled"), bool):
         duplicate_suppression_enabled = bool(
             quality_overrides["duplicate_suppression_enabled"]
@@ -105,6 +126,19 @@ def resolve_scene_vision_profile(
     tracker_overrides = requested.tracker_profile
     if isinstance(tracker_overrides.get("new_track_min_hits"), int):
         new_track_min_hits = max(1, int(tracker_overrides["new_track_min_hits"]))
+    if isinstance(tracker_overrides.get("coast_seconds"), int | float):
+        coast_seconds = _bounded_float(
+            float(tracker_overrides["coast_seconds"]),
+            minimum=0.5,
+            maximum=8.0,
+        )
+        coast_seconds_overridden = True
+    if not coast_seconds_overridden:
+        coast_seconds = _bounded_float(
+            2.5 * memory_frames / 24,
+            minimum=0.5,
+            maximum=8.0,
+        )
 
     verifier_overrides = requested.verifier_profile
     requested_verifier_mode = verifier_overrides.get("mode")
@@ -118,7 +152,9 @@ def resolve_scene_vision_profile(
         object_domain=requested.object_domain,
         motion_metrics=ResolvedMotionMetrics(speed_enabled=speed_enabled),
         candidate_quality=ResolvedCandidateQuality(
-            new_track_min_confidence=new_track_min_confidence,
+            new_track_min_confidence=dict(display_min_confidence),
+            display_min_confidence=display_min_confidence,
+            association_min_confidence=association_min_confidence,
             duplicate_suppression_enabled=duplicate_suppression_enabled,
             memory_frames=memory_frames,
         ),
@@ -127,6 +163,7 @@ def resolve_scene_vision_profile(
             with_reid=False,
             appearance_ready=appearance_ready,
             new_track_min_hits=new_track_min_hits,
+            coast_seconds=coast_seconds,
         ),
         verifier=ResolvedVerifierProfile(mode=verifier_mode),
     )
@@ -148,3 +185,7 @@ def _vehicle_thresholds(value: float) -> dict[str, float]:
         "bus": value,
         "forklift": value,
     }
+
+
+def _bounded_float(value: float, *, minimum: float, maximum: float) -> float:
+    return min(max(value, minimum), maximum)

@@ -115,6 +115,43 @@ Keep real camera URLs local and uncommitted. The local-only env var names are
 `VEZOR_SMOKE_REAL_RTSP_720P_URL` and
 `VEZOR_SMOKE_REAL_RTSP_1296P_URL`.
 
+## Tracking Live A/B Smoke
+
+Use this procedure after processing or tracker changes and before promoting a
+candidate configuration. The evidence may reference live RTSP sources, process
+metrics, and worker diagnostics, so publish only sanitized summaries. The
+helper at `scripts/tracking_live_ab_smoke.py` redacts credentialed RTSP URLs as
+`rtsp://***:***@<host>:8554/<path>` and must not be fed raw bearer tokens,
+sudo passwords, node credentials, registry credentials, or process argument
+dumps containing secrets.
+
+1. Capture baseline five-minute windows for the central two-person scene and
+   the representative edge scene without changing worker assignments.
+2. Record processed FPS, stage avg/p95, process CPU percent, RSS, tracking
+   diagnostics, persisted frames, broadcasted frames, JetStream pending and
+   ack-pending, MediaMTX replace count, and capture wait spike count.
+3. Apply the candidate processing or tracker configuration.
+4. Restart only the affected worker assignments. Do not restart unrelated
+   cameras, supervisors, JetStream, MediaMTX, or the API unless the candidate
+   explicitly requires it.
+5. After startup stabilization, capture matching candidate five-minute windows
+   for central and edge.
+6. Compare FPS, CPU, persistence, stream stability, ID switches, and
+   fragmentation against the baseline.
+7. Roll back the candidate if process CPU rises above the agreed budget or if
+   tracking gets worse, especially if central ID switches do not improve on the
+   two-person scene.
+
+Acceptance thresholds:
+
+- central processed FPS >= 10
+- edge processed FPS >= 15
+- JetStream pending 0 after sample window
+- MediaMTX repeated replace count 0 after startup
+- capture wait spikes 0 after startup stabilization window
+- fallback active false
+- tracking ID switches lower than baseline on central two-person scene
+
 ## Core Link Performance Operations
 
 The Link Performance workspace lives at `/links`. Use it for generic site link

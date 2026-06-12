@@ -113,6 +113,14 @@ async def test_records_worker_runtime_report_with_heartbeat_and_runtime_truth() 
             processing_mode=ProcessingMode.EDGE,
             telemetry_ingest_lag_ms=42.5,
             telemetry_duplicate_frames=2,
+            processing_fps_cap=15,
+            output_fps=5,
+            stream_profile_id="360p5",
+            tracking_diagnostics={
+                "new_track": 1,
+                "active_tracks": 1,
+                "coasting_tracks": 0,
+            },
         ),
     )
     report.id = uuid4()
@@ -137,6 +145,14 @@ async def test_records_worker_runtime_report_with_heartbeat_and_runtime_truth() 
     assert report.processing_mode == ProcessingMode.EDGE
     assert report.telemetry_ingest_lag_ms == 42.5
     assert report.telemetry_duplicate_frames == 2
+    assert report.processing_fps_cap == 15
+    assert report.output_fps == 5
+    assert report.stream_profile_id == "360p5"
+    assert report.tracking_diagnostics == {
+        "new_track": 1,
+        "active_tracks": 1,
+        "coasting_tracks": 0,
+    }
     assert latest[camera_id].id == report.id
     assert latest[camera_id].media_capture_backend == "gstreamer_rawvideo_pipe"
     assert latest[camera_id].worker_origin == "edge"
@@ -144,6 +160,14 @@ async def test_records_worker_runtime_report_with_heartbeat_and_runtime_truth() 
     assert response.processing_mode == ProcessingMode.EDGE
     assert response.telemetry_ingest_lag_ms == 42.5
     assert response.telemetry_duplicate_frames == 2
+    assert response.processing_fps_cap == 15
+    assert response.output_fps == 5
+    assert response.stream_profile_id == "360p5"
+    assert response.tracking_diagnostics == {
+        "new_track": 1,
+        "active_tracks": 1,
+        "coasting_tracks": 0,
+    }
 
 
 def test_supervisor_runtime_report_rejects_negative_ingest_health_values() -> None:
@@ -162,6 +186,18 @@ def test_supervisor_runtime_report_rejects_negative_ingest_health_values() -> No
         SupervisorRuntimeReportCreate(
             **base_payload,
             telemetry_duplicate_frames=-1,
+        )
+
+    with pytest.raises(ValidationError):
+        SupervisorRuntimeReportCreate(
+            **base_payload,
+            processing_fps_cap=-1,
+        )
+
+    with pytest.raises(ValidationError):
+        SupervisorRuntimeReportCreate(
+            **base_payload,
+            output_fps=-1,
         )
 
 

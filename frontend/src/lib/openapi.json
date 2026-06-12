@@ -13229,6 +13229,30 @@
             ],
             "title": "Media Pipeline Mode"
           },
+          "output_fps": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Fps"
+          },
+          "processing_fps_cap": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Fps Cap"
+          },
           "processing_mode": {
             "anyOf": [
               {
@@ -13298,6 +13322,18 @@
               }
             ],
             "title": "Source Profile Hash"
+          },
+          "stream_profile_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stream Profile Id"
           },
           "telemetry_cadence_seconds": {
             "anyOf": [
@@ -13387,6 +13423,23 @@
               }
             ],
             "title": "Telemetry Transport"
+          },
+          "tracking_diagnostics": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "title": "Tracking Diagnostics",
+            "type": "object"
           },
           "worker_origin": {
             "anyOf": [
@@ -13501,6 +13554,30 @@
             ],
             "title": "Media Pipeline Mode"
           },
+          "output_fps": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Fps"
+          },
+          "processing_fps_cap": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing Fps Cap"
+          },
           "processing_mode": {
             "anyOf": [
               {
@@ -13568,6 +13645,18 @@
               }
             ],
             "title": "Source Profile Hash"
+          },
+          "stream_profile_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stream Profile Id"
           },
           "telemetry_cadence_seconds": {
             "anyOf": [
@@ -13662,6 +13751,23 @@
             "format": "uuid",
             "title": "Tenant Id",
             "type": "string"
+          },
+          "tracking_diagnostics": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "title": "Tracking Diagnostics",
+            "type": "object"
           },
           "worker_origin": {
             "anyOf": [

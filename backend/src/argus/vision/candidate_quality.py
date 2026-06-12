@@ -20,11 +20,27 @@ class CandidateQualityConfig:
             "default": 0.40,
         }
     )
+    display_min_confidence: dict[str, float] = field(default_factory=dict)
+    association_min_confidence: dict[str, float] = field(default_factory=dict)
     continuation_min_confidence: float = 0.10
     near_track_iou_threshold: float = 0.10
     near_track_center_distance_ratio: float = 0.65
     fragment_iou_or_ios_threshold: float = 0.55
     duplicate_suppression_enabled: bool = True
+
+    def __post_init__(self) -> None:
+        if not self.display_min_confidence:
+            object.__setattr__(
+                self,
+                "display_min_confidence",
+                dict(self.new_track_min_confidence),
+            )
+        if not self.association_min_confidence:
+            object.__setattr__(
+                self,
+                "association_min_confidence",
+                dict(self.new_track_min_confidence),
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +48,7 @@ class CandidateDecision:
     detection: Detection
     accepted: bool
     reason: str
+    display_eligible: bool = False
 
 
 class CandidateQualityGate:
@@ -49,6 +66,26 @@ class CandidateQualityGate:
             for class_name, value in profile_thresholds.items():
                 if isinstance(class_name, str) and isinstance(value, int | float):
                     thresholds[class_name] = float(value)
+        display_thresholds = dict(thresholds)
+        profile_display_thresholds = getattr(
+            candidate_quality,
+            "display_min_confidence",
+            None,
+        )
+        if isinstance(profile_display_thresholds, Mapping):
+            for class_name, value in profile_display_thresholds.items():
+                if isinstance(class_name, str) and isinstance(value, int | float):
+                    display_thresholds[class_name] = float(value)
+        association_thresholds = dict(thresholds)
+        profile_association_thresholds = getattr(
+            candidate_quality,
+            "association_min_confidence",
+            None,
+        )
+        if isinstance(profile_association_thresholds, Mapping):
+            for class_name, value in profile_association_thresholds.items():
+                if isinstance(class_name, str) and isinstance(value, int | float):
+                    association_thresholds[class_name] = float(value)
         duplicate_suppression_enabled = getattr(
             candidate_quality,
             "duplicate_suppression_enabled",
@@ -57,6 +94,8 @@ class CandidateQualityGate:
         return cls(
             CandidateQualityConfig(
                 new_track_min_confidence=thresholds,
+                display_min_confidence=display_thresholds,
+                association_min_confidence=association_thresholds,
                 duplicate_suppression_enabled=bool(duplicate_suppression_enabled),
             )
         )
@@ -91,9 +130,12 @@ class CandidateQualityGate:
             if track.state in {"tentative", "active", "coasting"}
             and track.detection.class_name == detection.class_name
         ]
-        threshold = self._new_track_threshold(detection.class_name)
+        association_threshold = self._association_threshold(detection.class_name)
+        display_eligible = (
+            detection.confidence >= self._display_threshold(detection.class_name)
+        )
         if (
-            detection.confidence < threshold
+            detection.confidence < association_threshold
             and detection.confidence >= self.config.continuation_min_confidence
             and self._is_near_existing_track(detection, same_class_tracks, frame_shape)
         ):
@@ -101,33 +143,58 @@ class CandidateQualityGate:
                 detection,
                 accepted=True,
                 reason="existing_track_continuation",
+                display_eligible=display_eligible,
             )
 
         if (
             self.config.duplicate_suppression_enabled
             and self._is_duplicate_fragment(detection, same_class_tracks, frame_shape)
         ):
-            return CandidateDecision(detection, accepted=False, reason="duplicate_fragment")
+            return CandidateDecision(
+                detection,
+                accepted=False,
+                reason="duplicate_fragment",
+                display_eligible=False,
+            )
 
-        if detection.confidence >= threshold:
+        if detection.confidence >= association_threshold:
             return CandidateDecision(
                 detection,
                 accepted=True,
                 reason="new_track_high_confidence",
+                display_eligible=display_eligible,
             )
 
-        return CandidateDecision(detection, accepted=False, reason="new_track_low_confidence")
+        return CandidateDecision(
+            detection,
+            accepted=False,
+            reason="new_track_low_confidence",
+            display_eligible=False,
+        )
 
     def _new_track_threshold(self, class_name: str) -> float:
+        return self._threshold_for_class(self.config.new_track_min_confidence, class_name)
+
+    def _association_threshold(self, class_name: str) -> float:
+        return self._threshold_for_class(self.config.association_min_confidence, class_name)
+
+    def _display_threshold(self, class_name: str) -> float:
+        return self._threshold_for_class(self.config.display_min_confidence, class_name)
+
+    def _threshold_for_class(
+        self,
+        thresholds: Mapping[str, float],
+        class_name: str,
+    ) -> float:
         if (
             class_name in {"car", "truck", "bus", "forklift"}
-            and class_name not in self.config.new_track_min_confidence
-            and "vehicle" in self.config.new_track_min_confidence
+            and class_name not in thresholds
+            and "vehicle" in thresholds
         ):
-            return self.config.new_track_min_confidence["vehicle"]
-        return self.config.new_track_min_confidence.get(
+            return thresholds["vehicle"]
+        return thresholds.get(
             class_name,
-            self.config.new_track_min_confidence.get("default", 0.40),
+            thresholds.get("default", 0.40),
         )
 
     def _is_near_existing_track(

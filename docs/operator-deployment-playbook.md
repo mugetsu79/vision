@@ -131,6 +131,42 @@ Operator browser
   -> site cameras
 ```
 
+### Live Tracking A/B Smoke Before Promotion
+
+Run a live A/B smoke whenever a deployment candidate changes processing,
+capture, or tracker behavior. Keep raw camera URLs and credentials in local
+operator notes only; published summaries must be sanitized. Use
+`scripts/tracking_live_ab_smoke.py` to format the final evidence, including
+redacted RTSP sources in the form
+`rtsp://***:***@<host>:8554/<path>`.
+
+Procedure:
+
+1. Capture baseline five-minute windows for both the central two-person scene
+   and the representative edge scene.
+2. Collect processed FPS, stage avg/p95, process CPU percent, RSS, tracking
+   diagnostics, persisted frames, broadcasted frames, JetStream pending and
+   ack-pending, MediaMTX replace count, and capture wait spike count.
+3. Apply the candidate processing or tracker configuration.
+4. Restart only the affected worker assignments so unrelated cameras and
+   services remain stable.
+5. After startup stabilization, capture candidate five-minute windows for the
+   same central and edge sources.
+6. Compare FPS, CPU, persistence, stream stability, ID switches, and
+   fragmentation.
+7. Roll back if process CPU rises above the agreed deployment budget or if
+   tracking gets worse.
+
+Promotion requires:
+
+- central processed FPS >= 10
+- edge processed FPS >= 15
+- JetStream pending 0 after sample window
+- MediaMTX repeated replace count 0 after startup
+- capture wait spikes 0 after startup stabilization window
+- fallback active false
+- tracking ID switches lower than baseline on central two-person scene
+
 ### FleetOps Runtime Pack Boundary
 
 FleetOps is the maritime runtime pack on the installed product path. Validate it

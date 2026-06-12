@@ -731,6 +731,14 @@ class WorkerRuntimeReport(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     encoder_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
     worker_origin: Mapped[str | None] = mapped_column(String(32), nullable=True)
     processing_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    processing_fps_cap: Mapped[float | None] = mapped_column(Float, nullable=True)
+    output_fps: Mapped[float | None] = mapped_column(Float, nullable=True)
+    stream_profile_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    tracking_diagnostics: Mapped[dict[str, object]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+    )
     telemetry_transport: Mapped[str | None] = mapped_column(String(64), nullable=True)
     telemetry_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
     telemetry_cadence_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)

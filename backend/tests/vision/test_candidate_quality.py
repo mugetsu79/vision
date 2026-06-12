@@ -81,6 +81,30 @@ def test_low_confidence_new_person_candidate_is_rejected() -> None:
     ]
 
 
+def test_person_can_be_association_eligible_without_display_eligibility() -> None:
+    gate = CandidateQualityGate(
+        CandidateQualityConfig(
+            association_min_confidence={"person": 0.25, "default": 0.40},
+            display_min_confidence={"person": 0.45, "default": 0.40},
+        )
+    )
+    detection = _person(confidence=0.30, bbox=(500.0, 120.0, 640.0, 520.0))
+
+    filtered, decisions = gate.filter_detections(
+        [detection],
+        existing_tracks=[],
+        frame_shape=FRAME_SHAPE,
+    )
+
+    assert filtered == [detection]
+    assert [
+        (decision.accepted, decision.display_eligible, decision.reason)
+        for decision in decisions
+    ] == [
+        (True, False, "new_track_high_confidence")
+    ]
+
+
 def test_low_confidence_detection_near_existing_track_passes_for_association() -> None:
     detection = _person(confidence=0.22, bbox=(112.0, 106.0, 272.0, 526.0), track_id=99)
 

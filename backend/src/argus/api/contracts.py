@@ -2187,6 +2187,10 @@ class SupervisorRuntimeReportCreate(BaseModel):
     encoder_mode: str | None = Field(default=None, max_length=32)
     worker_origin: str | None = Field(default=None, max_length=32)
     processing_mode: ProcessingMode | None = None
+    processing_fps_cap: float | None = Field(default=None, ge=0)
+    output_fps: float | None = Field(default=None, ge=0)
+    stream_profile_id: str | None = Field(default=None, max_length=64)
+    tracking_diagnostics: dict[str, int | float | str] = Field(default_factory=dict)
     telemetry_transport: str | None = Field(default=None, max_length=64)
     telemetry_path: str | None = Field(default=None, max_length=255)
     telemetry_cadence_seconds: float | None = Field(default=None, ge=0)
@@ -2217,6 +2221,10 @@ class SupervisorRuntimeReportResponse(BaseModel):
     encoder_mode: str | None = Field(default=None, max_length=32)
     worker_origin: str | None = Field(default=None, max_length=32)
     processing_mode: ProcessingMode | None = None
+    processing_fps_cap: float | None = Field(default=None, ge=0)
+    output_fps: float | None = Field(default=None, ge=0)
+    stream_profile_id: str | None = Field(default=None, max_length=64)
+    tracking_diagnostics: dict[str, int | float | str] = Field(default_factory=dict)
     telemetry_transport: str | None = Field(default=None, max_length=64)
     telemetry_path: str | None = Field(default=None, max_length=255)
     telemetry_cadence_seconds: float | None = Field(default=None, ge=0)

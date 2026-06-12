@@ -105,6 +105,12 @@ class TrackLifecycleManager:
     def last_diagnostics(self) -> list[TrackLifecycleDecision]:
         return [_copy_lifecycle_decision(decision) for decision in self._last_diagnostics]
 
+    def last_diagnostic_summary(self) -> dict[str, int]:
+        summary: dict[str, int] = {}
+        for decision in self._last_diagnostics:
+            summary[decision.reason] = summary.get(decision.reason, 0) + 1
+        return summary
+
     def update(
         self,
         *,
