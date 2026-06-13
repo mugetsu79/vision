@@ -5,399 +5,634 @@ Branch: `codex/sceneops-pack-registry`
 
 ## Goal
 
-Close the documented ID-churn gap in the live tracking pipeline without
-introducing a new tracker family or breaking the canonical telemetry
-contract. This spec packages the structural fixes that surface *because of*
-the in-flight Phase 0 cadence decoupling (commit `982849cc feat: decouple
-processing cadence and track diagnostics`) into a single, evidence-gated PR.
+Reduce live tracking ID churn for simple scenes, especially one-to-two person
+scenes, without introducing a new tracker family or changing the canonical
+telemetry contract.
 
-This is the "A3 tier" of the review work. Phase 0 (cadence + diagnostics)
-and Phase 1 (counters) are already in flight in
-`2026-06-12-processing-cadence-tracking-accuracy-design.md` and
-`2026-06-12-edge-telemetry-tracking-optimization-design.md`; this spec does
-not redo them. It assumes they are merged or running alongside.
+This spec starts from the current branch state after commit
+`75e95b8f feat: stabilize worker cadence and tracking`. That commit already
+landed the Phase 0/1 prerequisites:
+
+- processing cadence is decoupled from browser delivery cadence
+- the Scene UI `fps_cap` is again the processing FPS source of truth unless an
+  explicit operator CPU fallback clamp is configured
+- MediaMTX path registration is idempotent and RTSP pulls are forced through TCP
+  where MediaMTX supports it
+- runtime reports expose processing FPS, output FPS, transport, drops,
+  duplicates, and tracking diagnostics
+- candidate quality already has separate display and association threshold
+  fields, though the new-track semantics still need tightening
+
+The implementation from this spec must make tracker identity continuity
+measurably better on a committed replay fixture and must keep NATS, persistence,
+WebSocket fanout, and telemetry schemas compatible with the current product.
 
 ## Current Evidence
 
-The processing-cadence design already documents the root failure mode:
+Live evidence on the current branch:
 
-- a max-two-person scene produces many distinct persisted person stable
-  track IDs across 5-minute windows on both central and edge workers
-- central total stage time ~190 ms/frame (paced by browser delivery, not
-  compute); `detect` ~27-32 ms; `track` < 1 ms
-- edge worker total ~15-16 FPS on Jetson Orin Nano Super; TensorRT detector
-  is the main cost
+- central camera: UI processing cap `25`, runtime processing cap `25`, browser
+  output `5`, CPU ONNX runtime, about `18.5 FPS` at about `164%` worker CPU
+- edge camera: UI processing cap `18`, runtime processing cap `18`, TensorRT
+  runtime, about `16.2 FPS` at about `64%` worker CPU
+- telemetry path is NATS on both central and edge, with zero publish drops and
+  zero duplicate frames in the post-deploy smoke
+- MediaMTX path churn is no longer observed after the idempotency fix
 
-What that evidence does *not* yet exercise is whether the lifecycle layer
-and the candidate-quality gate are correctly parameterised once cadence is
-decoupled. This spec assumes the cadence fix lands and then closes four
-remaining structural gaps.
+The unresolved product gap is tracker continuity: a max-two-person scene can
+still produce more persisted stable IDs than real people. The next PR should
+therefore focus on tracker configuration, lifecycle motion modeling, and
+quality gating, backed by a replay benchmark with real ground-truth identity
+annotations.
 
 ## Architecture Decision
 
-Treat the tracker stack as three cooperating layers with explicit
-responsibilities and a single immutable telemetry contract:
+Keep the tracker stack as three cooperating layers:
 
 ```text
-detector
-  -> candidate_quality_gate     (display threshold vs association threshold)
-  -> ultralytics tracker        (BoT-SORT, frame_rate aligned to processed FPS)
+detector outputs
+  -> candidate_quality_gate     (new-track threshold vs association threshold)
+  -> ultralytics tracker        (BoT-SORT, frame_rate = effective processing FPS)
   -> track_lifecycle_manager    (tentative/active/coasting/lost,
-                                 cx/cy Kalman coasting,
-                                 confidence EMA, class voting)
-  -> published telemetry        (stable_track_id, source_track_id,
-                                 track_state, last_seen_age_ms)
+                                 center motion filter,
+                                 confidence EMA,
+                                 class voting)
+  -> published telemetry        (unchanged contract)
 ```
 
-The telemetry contract is preserved exactly as defined in
-`2026-05-09-authoritative-live-track-lifecycle-design.md`. No new fields,
-no rename, no covariance plumbed out.
+The key timing value is **effective processing FPS**, not browser delivery FPS
+and not raw camera source FPS. It is the same value used to build
+`CameraSourceConfig.fps_cap` after applying the optional
+`ARGUS_CPU_FALLBACK_PROCESSING_FPS_CAP` clamp:
 
-The lifecycle layer keeps damped constant velocity as the default motion
-*intuition* but switches the coasted bbox model from "extrapolate all four
-edges linearly" to "constant-velocity Kalman on bbox center; freeze width
-and height". This is the smallest correct shape model for coasted
-predictions and matches what users perceive as "the box should follow the
-object, not grow as it disappears".
+```python
+effective_processing_fps = _processing_fps_cap(
+    camera.fps_cap,
+    runtime_policy=runtime_policy,
+    cpu_fallback_cap=settings.cpu_fallback_processing_fps_cap,
+)
+```
 
-`with_reid` and `gmc_method` stop being hard-coded constants in
-`TrackerConfig` and start being driven by `ResolvedTrackerProfile`, so the
-three-tier scene model from
-`2026-05-10-scene-vision-profiles-and-candidate-quality-design.md`
-actually activates ReID on `maximum_accuracy + edge_advanced_jetson` and
-`maximum_accuracy + central_gpu`, and exposes GMC for jitter-prone or PTZ
-deployments.
+Every tracker component that interprets frame cadence uses this value:
 
-## Scope (A3 tier)
+- `TrackerConfig.frame_rate`
+- `TrackLifecycleConfig.nominal_frame_interval_ms`
+- coasting damping
+- replay benchmark profile settings
 
-### A1: Cadence-aligned correctness
+The telemetry contract remains unchanged. Published live/persisted tracks still
+carry:
 
-**A1.a — `TrackerConfig.frame_rate` sourced from processed FPS**
+- `stable_track_id`
+- `source_track_id`
+- `state`
+- `last_seen_age_ms`
+- `detection`
+- `lifecycle_reason`
 
-`TrackerConfig.frame_rate` currently defaults to 30 and is set from
-`config.tracker.frame_rate`. BoT-SORT's internal Kalman uses `frame_rate`
-to scale its motion model; a wrong value produces wrong process noise and
-drifts association.
+Runtime reports and internal benchmark summaries may include additional
+diagnostic counters, but direct live telemetry frame shape must not change.
 
-Source `TrackerConfig.frame_rate` from the same `camera.fps_cap` (or
-measured processed FPS, whichever Phase 0 standardises on) that the frame
-source uses for `CameraSourceConfig.fps_cap`. The Ultralytics adapter
-forwards it via `_build_ultralytics_backend`, which already accepts a
-`frame_rate` keyword.
+## Scope
 
-Files: `backend/src/argus/vision/tracker.py`,
-`backend/src/argus/inference/engine.py` (`_tracker_config_from_resolved_profile`).
+### A1: Cadence-Aligned Tracker Configuration
 
-**A1.b — Time-normalized coast TTL and damping**
+#### A1.a - Source `TrackerConfig.frame_rate` from effective processing FPS
 
-`TrackLifecycleConfig.coast_ttl_ms` and `velocity_damping` currently work
-against `missing_updates` (a frame count). Once processing FPS varies, the
-same `coast_ttl_ms` translates to different coasting horizons on different
-cadences.
+`TrackerConfig.frame_rate` currently defaults to `30` and is sourced from
+`config.tracker.frame_rate`. BoT-SORT uses this value for its internal motion
+model, so wrong FPS produces wrong process noise and association behavior.
 
-`_coast_track` applies damping against `elapsed_ms` (measured from
-`memory.last_seen_ts` to current `ts`) rather than against
-`missing_updates`. The damping formula becomes
-`damping = velocity_damping ** (elapsed_ms / nominal_frame_interval_ms)`
-where `nominal_frame_interval_ms = 1000 / camera.fps_cap`. `coast_ttl_ms`
-keeps its absolute-time semantics.
+Change `_tracker_config_from_resolved_profile(...)` to accept
+`effective_processing_fps: int`. The value must be the same cap passed into
+`CameraSourceConfig.fps_cap`.
 
-Files: `backend/src/argus/vision/track_lifecycle.py`.
+`RuntimeInferenceEngine._build_tracker()` recomputes this value through
+`self._effective_processing_fps_cap()` every time it builds a tracker. This
+applies both during initial construction and when a runtime command changes the
+tracker type and forces `_build_tracker()` / `_build_track_lifecycle()` to run
+again.
 
-**A1.c — Skip identical MediaMTX `/replace` calls**
+Files:
 
-Documented stability source in
-`docs/superpowers/status/2026-06-11-jetson-live-overlay-stability-handoff.md`.
-The publisher should hash the registration payload and skip the `/replace`
-API call when the hash is identical to the last successful registration.
+- `backend/src/argus/inference/engine.py`
+- `backend/src/argus/vision/tracker.py`
 
-Files: `backend/src/argus/streaming/mediamtx.py`.
+#### A1.b - Source lifecycle nominal frame interval from effective processing FPS
 
-### A2: Profile wiring
+`TrackLifecycleConfig` gains:
 
-**A2.a — `appearance_ready` drives `with_reid`**
+```python
+nominal_frame_interval_ms: float = 1000.0 / 25.0
+```
 
-`ResolvedTrackerProfile.appearance_ready` is set to `True` for
-`maximum_accuracy + edge_advanced_jetson` and `maximum_accuracy +
-central_gpu` in `profiles.py`. `_tracker_config_from_resolved_profile`
-should map `appearance_ready` to `TrackerConfig.with_reid` rather than
-hard-coding `with_reid=False`. The `model="auto"` default already lets the
-Ultralytics tracker resolve a default appearance encoder.
+`_track_lifecycle_config_from_resolved_profile(...)` accepts
+`effective_processing_fps: int` and sets:
 
-Files: `backend/src/argus/vision/profiles.py`,
-`backend/src/argus/inference/engine.py` (`_tracker_config_from_resolved_profile`),
-`backend/src/argus/vision/tracker.py`.
+```python
+nominal_frame_interval_ms = 1000.0 / max(1, effective_processing_fps)
+```
 
-**A2.b — `gmc_method` exposed on the profile**
+`coast_ttl_ms` keeps absolute time semantics. Track expiry still depends on
+`elapsed_ms(last_seen_ts, now)`, not frame count.
 
-`ResolvedTrackerProfile` gains an optional `gmc_method: str = "none"`
-field. The resolver picks the value based on the camera/scene profile (a
-new operator-facing knob on the scene-vision-profile contract, or a
-deployment-level config in `argus.core.config` for now). Default remains
-`"none"` so fixed traffic cameras keep current behaviour. PTZ or
-vibration-prone deployments can opt in to `"sparseOptFlow"` (the
-Ultralytics default) without code change.
+`RuntimeInferenceEngine._build_track_lifecycle()` recomputes the same effective
+processing FPS through `self._effective_processing_fps_cap()` whenever lifecycle
+state is rebuilt. No separate cached FPS value is stored in state.
 
-Files: `backend/src/argus/vision/profiles.py`,
-`backend/src/argus/vision/tracker.py`, contract definition in
-`backend/src/argus/api/contracts.py` if exposed via profile JSON; a
-`tracker_profile.gmc_method` override field is added to the existing
-`SceneVisionProfile` contract.
+Files:
 
-**A2.c — Candidate quality: display vs association confidence**
+- `backend/src/argus/inference/engine.py`
+- `backend/src/argus/vision/track_lifecycle.py`
 
-`ResolvedCandidateQuality` already exposes
-`display_min_confidence` and `association_min_confidence` as separate
-dicts. The consumer in `candidate_quality.py` should apply
-`association_min_confidence` when judging whether a low-confidence
-detection can extend an existing active or coasting track, and
-`display_min_confidence` (which is typically higher) when judging whether
-to create a new track.
+### A2: Runtime-Gated Tracker Profile Wiring
 
-Files: `backend/src/argus/vision/candidate_quality.py`.
+#### A2.a - ReID is requested by profile, enabled only when runtime allows it
 
-### A3: Lifecycle polish
+`ResolvedTrackerProfile.appearance_ready` means the scene profile wants
+appearance cues. It is not sufficient by itself to enable ReID.
 
-**A3.a — Constrained Kalman coasting**
+`TrackerConfig.with_reid` becomes true only when all are true:
 
-Replace the linear bbox-edge extrapolation in `_coast_track` with a
-constant-velocity Kalman filter on `(cx, cy)` with frozen `(w, h)`.
+1. `resolved_profile.tracker.appearance_ready` is true.
+2. The tracker type is BoT-SORT.
+3. Runtime is not CPU fallback. Dockerized central CPU ONNX must keep ReID off.
+4. The appearance model is locally available or the configured tracker backend
+   can provide it without network downloads.
+
+The implementation must not trigger implicit model downloads in live worker
+startup or frame processing. If ReID is requested but unavailable, the worker
+keeps `with_reid=False` and reports a tracking diagnostic reason such as
+`reid_unavailable_runtime`.
+
+Files:
+
+- `backend/src/argus/inference/engine.py`
+- `backend/src/argus/vision/profiles.py`
+- `backend/src/argus/vision/tracker.py`
+
+#### A2.b - GMC is an explicit JSON-only profile override
+
+`ResolvedTrackerProfile` gains:
+
+```python
+gmc_method: Literal["none", "sparseOptFlow"] = "none"
+```
+
+`SceneVisionProfile.tracker_profile` becomes a typed Pydantic submodel with
+`extra="allow"` so existing JSON keys still round-trip. It accepts
+`gmc_method`, defaulting to `"none"`. Only `"none"` and `"sparseOptFlow"` are
+in scope for this PR. This keeps fixed traffic cameras on the current low-cost
+behavior while letting jitter-prone deployments opt in via JSON.
+
+No frontend UI control is added in this PR. The operator-facing UI can follow
+after live validation proves the setting is worth exposing.
+
+Files:
+
+- `backend/src/argus/api/contracts.py`
+- `backend/src/argus/vision/profiles.py`
+- `backend/src/argus/inference/engine.py`
+- `backend/src/argus/vision/tracker.py`
+
+### A3: Candidate Quality Semantics
+
+The current gate has separate `display_min_confidence` and
+`association_min_confidence`, but detections above the association threshold can
+still create new tracks even when they are below the display/new-track
+threshold.
+
+Tighten the rule:
+
+- A detection may create a new track only when confidence is at least the
+  display/new-track threshold for its class.
+- A detection below display/new-track threshold but at or above association
+  threshold may extend an existing tentative, active, or coasting track only if
+  it is spatially near that track.
+- A detection below association threshold may still extend an existing track
+  only through the existing continuation path when it is at least
+  `continuation_min_confidence` and spatially near an existing track.
+
+This keeps low-confidence true positives useful for continuity without letting
+them spawn new stable IDs.
+
+Files:
+
+- `backend/src/argus/vision/candidate_quality.py`
+- `backend/tests/vision/test_candidate_quality.py`
+
+### A4: Lifecycle Motion and Output Stabilization
+
+#### A4.a - Constrained center motion filter for coasting
+
+Replace bbox-edge extrapolation during coasting with a constrained center
+motion model:
 
 - state: `[cx, cy, vx, vy]`
-- observation: `[cx, cy]` from the matched detection
-- process model: `cx_t = cx_{t-1} + vx * dt`, `cy_t = cy_{t-1} + vy * dt`,
-  velocities damped by `velocity_damping ** (dt / nominal_frame_interval_ms)`
-- measurement model: identity on `(cx, cy)`
-- process noise: fixed; tuned against the replay benchmark
-- measurement noise: fixed; tuned against the replay benchmark
-- bbox at any time = `(cx - w/2, cy - h/2, cx + w/2, cy + h/2)` clamped to
-  frame shape
+- velocities are stored as pixels per millisecond
+- detection update computes velocity from the previous observed center and
+  elapsed time between detections
+- prediction uses `dt_ms = elapsed_ms(updated_ts, now)`
+- damping uses
+  `velocity_damping ** (dt_ms / nominal_frame_interval_ms)`
+- width and height are frozen from the most recent detection
+- predicted bbox is clamped to frame shape
 
-State lives on `_TrackMemory` as a new `_MotionFilter` dataclass; no
-covariance is plumbed to the telemetry contract. The filter is created
-when a track first becomes `active`, re-seeded from the matched detection
-on every `_apply_detection`, and used to predict during `_coast_track`.
+`last_seen_ts` remains the timestamp of the last real detection and is used for
+TTL and `last_seen_age_ms`. `updated_ts` advances on both detection updates and
+coast predictions and is used only for incremental prediction.
 
-Files: `backend/src/argus/vision/track_lifecycle.py`.
+State lives inside `_TrackMemory` as a private `_MotionFilter` dataclass. No
+covariance or motion state is added to live telemetry.
 
-**A3.b — Per-track confidence EMA**
+Files:
 
-`_TrackMemory` gains `confidence_ema: float | None`. Each `_apply_detection`
-updates it via `alpha * detection.confidence + (1 - alpha) * confidence_ema`
-with `alpha = 0.4` (tuned against the replay benchmark). The published
-`Detection.confidence` on the lifecycle output uses the EMA rather than
-the instantaneous detection confidence. Raw detection confidence remains
-available to upstream consumers (count_events, rule_engine) that read from
-the pre-lifecycle `tracked` list.
+- `backend/src/argus/vision/track_lifecycle.py`
 
-Files: `backend/src/argus/vision/track_lifecycle.py`.
+#### A4.b - Per-track confidence EMA
 
-**A3.c — Per-track class voting**
+`_TrackMemory` gains `confidence_ema: float | None`.
 
-`_TrackMemory` gains `class_votes: dict[str, int]`. Each `_apply_detection`
-increments `class_votes[detection.class_name]`. The published class on
-lifecycle output is the argmax class. Vote dict resets when a track
-transitions through `lost`. This eliminates the visible class flicker
-when a detector flips between e.g. `person` and `pedestrian` across
-frames.
+Each detection update applies:
 
-Files: `backend/src/argus/vision/track_lifecycle.py`.
+```python
+confidence_ema = detection.confidence if confidence_ema is None else (
+    alpha * detection.confidence + (1.0 - alpha) * confidence_ema
+)
+```
 
-**A3.d — Frozen attributes mapping**
+`alpha` is added to `TrackLifecycleConfig` as:
 
-`_copy_detection` currently does `deepcopy(detection.attributes)` on every
-snapshot. With ANPR/attribute payloads this is non-trivial per frame per
-track.
+```python
+confidence_ema_alpha: float = 0.4
+```
 
-Switch to `types.MappingProxyType` over a frozen dict on the
-`Detection.attributes` payload. `Detection.with_updates(attributes=…)`
-wraps the new attributes in a `MappingProxyType` once, and
-`_copy_detection` shares the reference. Downstream consumers already treat
-`attributes` as read-only.
+Published lifecycle detections use the EMA confidence. Raw detector/tracker
+outputs before lifecycle processing remain unchanged for rules and count-event
+consumers.
 
-Files: `backend/src/argus/vision/types.py`,
-`backend/src/argus/vision/track_lifecycle.py`.
+Files:
 
-**A3.e — `_TrackerResults.cls` as `int32`**
+- `backend/src/argus/vision/track_lifecycle.py`
 
-Class IDs are integers conceptually; the `float32` with `-1` sentinel in
-`_TrackerResults.cls` is lossy and slower for the Ultralytics adapter's
-internal comparisons. Switch to `int32`, use a separate `valid_cls` mask
-or sentinel that does not collide with real class IDs (Ultralytics expects
-non-negative IDs; use `-1` as int sentinel).
+#### A4.c - Per-track class voting
 
-Files: `backend/src/argus/vision/tracker.py`.
+`_TrackMemory` gains `class_votes: dict[str, int]`. Every detection update
+increments the detected class. Published lifecycle detections use the most
+common class, with deterministic tie-breaking by the current detection class
+and then lexical class name.
+
+Votes are deleted when the track is forgotten. Duplicate replacement must merge
+or preserve votes so stable identity does not lose history when adopting a
+better duplicate detection.
+
+Files:
+
+- `backend/src/argus/vision/track_lifecycle.py`
+
+#### A4.d - Frozen detection attributes
+
+`Detection.attributes` becomes a read-only mapping to avoid per-frame deep copy
+work in lifecycle snapshots.
+
+Implementation requirements:
+
+- Type as `Mapping[str, Any]`, not `dict[str, Any]`.
+- Store an immutable shallow copy using `types.MappingProxyType(dict(value))`.
+- Make the freeze helper idempotent: if the supplied value is already a
+  `MappingProxyType`, return it unchanged so `_copy_detection()` can share the
+  frozen reference instead of allocating a new proxy/dict pair.
+- `Detection.with_updates(attributes=...)` freezes the supplied mapping.
+- `_copy_detection` can share the frozen attributes reference.
+- Serialization paths that need a mutable dict convert with `dict(attributes)`.
+- Tests cover telemetry serialization, rule/count consumers, and mutation
+  attempts.
+
+Files:
+
+- `backend/src/argus/vision/types.py`
+- `backend/src/argus/vision/track_lifecycle.py`
+- relevant telemetry serialization tests
+
+#### A4.e - `_TrackerResults.cls` uses integer dtype
+
+Class IDs are integer values. `_TrackerResults.cls` currently uses `float32`
+with a `-1` sentinel. Switch it to `int32` and keep `-1` as the invalid class
+sentinel because Ultralytics class IDs are non-negative.
+
+Files:
+
+- `backend/src/argus/vision/tracker.py`
+
+### A5: Replay Benchmark With Ground Truth
+
+The current replay script does not measure true ID switches because it does not
+have ground-truth identities. This PR must replace the merge gate with an
+annotated replay fixture.
+
+#### Fixture format
+
+Create a committed fixture directory:
+
+```text
+backend/tests/scripts/fixtures/tracker_continuity_people_001/
+  manifest.json
+  frames/
+    000001.jpg
+    000002.jpg
+    000003.jpg
+  detections.jsonl
+  ground_truth.jsonl
+```
+
+`manifest.json` contains:
+
+```json
+{
+  "fixture_id": "tracker_continuity_people_001",
+  "description": "Redacted two-person continuity scene",
+  "fps": 15,
+  "frame_count": 450,
+  "classes": ["person"],
+  "tracker_scene_profile": "difficult",
+  "iou_match_threshold": 0.5,
+  "redacted": true
+}
+```
+
+`detections.jsonl` contains one record per frame:
+
+```json
+{
+  "frame_id": 1,
+  "image": "frames/000001.jpg",
+  "detections": [
+    {
+      "class_name": "person",
+      "class_id": 0,
+      "confidence": 0.73,
+      "bbox": [100.0, 120.0, 180.0, 420.0]
+    }
+  ]
+}
+```
+
+`ground_truth.jsonl` contains one record per visible ground-truth object per
+frame:
+
+```json
+{
+  "frame_id": 1,
+  "gt_id": "person_1",
+  "class_name": "person",
+  "bbox": [98.0, 119.0, 181.0, 421.0],
+  "visibility": 1.0,
+  "ignore": false
+}
+```
+
+The fixture itself is invalid unless it contains at least two distinct
+non-ignored `gt_id` values. The replay gate is invalid unless the committed
+baseline has at least five total continuity defects across
+`id_switches + track_fragmentation_sum`. This avoids a benchmark that cannot
+prove improvement.
+
+#### Evaluator semantics
+
+For each frame:
+
+1. Replay fixture detections into the tracker stack.
+2. Match published lifecycle tracks to ground truth with class-compatible IoU
+   >= `iou_match_threshold`.
+3. Use greedy highest-IoU matching after sorting candidate pairs by IoU
+   descending.
+4. Ignore ground-truth rows with `ignore=true`.
+5. Count an ID switch when the same `gt_id` is matched to a different
+   `stable_track_id` than its previous matched frame.
+6. Count fragmentation for each `gt_id` as
+   `max(0, distinct_matched_stable_ids - 1)`.
+7. Count duplicate active tracks when more than one published track matches the
+   same `gt_id` above threshold before one-to-one matching.
+8. Count coverage as matched frames divided by visible non-ignored frames.
+
+The baseline JSON stores:
+
+```json
+{
+  "fixture_id": "tracker_continuity_people_001",
+  "fixture_sha256": "64-character-lowercase-sha256-digest",
+  "base_commit": "75e95b8f",
+  "effective_processing_fps": 15,
+  "tracker_scene_profile": "difficult",
+  "metrics": {
+    "id_switches": 0,
+    "track_fragmentation_sum": 0,
+    "median_fragments_per_gt": 0.0,
+    "median_track_lifetime_frames": 0.0,
+    "coverage_ratio": 0.0,
+    "duplicate_active_track_frames": 0
+  }
+}
+```
+
+The numeric values above are schema examples. The committed baseline file must
+contain actual metrics from the base implementation.
+
+#### Merge gate metrics
+
+The A3/A4 implementation passes when all are true:
+
+- ID switches decrease by at least 30% when baseline `id_switches >= 3`; if
+  baseline ID switches are lower, they must not increase.
+- `track_fragmentation_sum` decreases by at least 20% when baseline
+  fragmentation is nonzero; if baseline fragmentation is zero, it must remain
+  zero.
+- `coverage_ratio` does not decrease by more than 2 percentage points.
+- `median_track_lifetime_frames` does not decrease.
+- `duplicate_active_track_frames` does not increase.
+- Runtime benchmark median per-frame tracker+lifecycle time does not increase
+  by more than 10% on the replay fixture.
+
+Files:
+
+- `scripts/tracking_replay_benchmark.py`
+- `backend/tests/scripts/test_tracking_replay_benchmark.py`
+- `backend/tests/scripts/fixtures/tracker_continuity_people_001/`
 
 ## Telemetry Contract
 
-Unchanged. The published `LifecycleTrack` continues to carry exactly:
+Unchanged for live and persisted tracking frames.
 
-- `stable_track_id: int`
-- `source_track_id: int | None`
-- `state: "active" | "coasting"`
-- `last_seen_age_ms: int`
-- `detection: Detection` (now with smoothed `confidence` and voted
-  `class_name`)
-- `lifecycle_reason: TrackLifecycleReason | None`
+Allowed internal/reporting changes:
 
-`stable_track_id` continuity semantics are preserved. The Kalman coasting
-change affects the *bbox values* during `state="coasting"` but does not
-introduce new states, new fields, or new lifecycle reasons.
+- runtime report `tracking_diagnostics` may include counters for
+  `reid_requested`, `reid_enabled`, `reid_unavailable_runtime`,
+  `gmc_method`, `id_switches_replay_only`, or similar diagnostic fields
+- replay benchmark JSON may include any metric needed for evidence
+
+Disallowed:
+
+- renaming existing telemetry fields
+- requiring clients to understand covariance, velocity, ReID features, or GMC
+  state
+- bypassing canonical NATS ingest, history persistence, or WebSocket fanout
 
 ## Acceptance Criteria
 
-### Required (merge gate)
+### Required Merge Gates
 
-1. **Replay benchmark gate.** Extend
-   `backend/tests/scripts/test_tracking_replay_benchmark.py` to load a
-   committed representative-scene fixture (mixed-class is fine; format
-   defined by the existing harness — NATS replay or detection-stream
-   replay) and assert:
-   - **≥ 30% fewer ID switches** vs. the pre-A3 baseline run on the same
-     fixture
-   - **≥ 20% lower track fragmentation** (median count of distinct
-     `stable_track_id` values per unique ground-truth track) vs. baseline
-   - **no regression on track lifetime** (median active-frames-per-track
-     does not decrease)
+1. **Annotated replay benchmark passes.**
+   `backend/tests/scripts/test_tracking_replay_benchmark.py` loads the committed
+   fixture and baseline JSON, runs the current tracker stack, and enforces the
+   metrics in A5.
 
-   The baseline metrics are captured by running the harness against the
-   parent commit of this branch (Phase 0 + diagnostics applied, A3 not
-   applied) and committed to
-   `backend/tests/scripts/fixtures/tracking_replay_baseline.json`.
+2. **Effective processing FPS is wired end to end.**
+   Tests prove `TrackerConfig.frame_rate` and
+   `TrackLifecycleConfig.nominal_frame_interval_ms` use the same effective
+   processing cap used by `CameraSourceConfig.fps_cap`, including when a CPU
+   fallback clamp is explicitly set.
 
-2. **Mypy + ruff + `make test` green.** No new mypy errors, no new ruff
-   findings, full `make test` passes including the new fixture-driven
-   replay test.
+3. **ReID cannot silently enable on CPU fallback.**
+   Tests prove `maximum_accuracy + central_gpu` on CPU ONNX keeps
+   `with_reid=False` and emits an unavailable diagnostic, while an explicitly
+   supported runtime can enable it.
 
-3. **No telemetry contract regressions.** The existing
-   `tests/vision/test_track_lifecycle.py` continues to pass without
-   relaxing any field shape or value assertion. The Kalman-coasted bbox
-   may shift the *exact numeric value* of coasted bbox coordinates; the
-   tests should assert geometric properties (bbox stays inside frame,
-   center motion follows last velocity direction) rather than exact pixel
-   values during coast.
+4. **Candidate quality cannot spawn low-confidence new tracks.**
+   Tests prove a person detection below display/new-track threshold but above
+   association threshold is rejected without a nearby existing track and accepted
+   only when it extends a nearby existing track.
 
-4. **No detector-association regression for rules and count_events.**
-   `tests/vision/test_count_events.py`, `tests/vision/test_rules.py`
-   continue to pass; rule_engine and count_event_processor see the raw
-   pre-lifecycle `tracked` list, not the smoothed-confidence post-lifecycle
-   output.
+5. **Telemetry contract remains compatible.**
+   Existing lifecycle, NATS ingest, persistence, and WebSocket tests pass without
+   relaxing field names or required values. Numeric coasted bbox assertions may
+   switch to geometric properties.
 
-### Recommended evidence (not merge gate)
+6. **Full targeted verification passes.**
+   Required commands:
 
-5. **Jetson-only live A/B.** Run a 5-minute before/after window on a
-   fixed Jetson camera, before deploying A3 and after. Capture:
-   - distinct persisted stable_track_ids per ground-truth track
-   - average per-frame tracker output count
-   - average ID-switch rate
-   - subjective overlay smoothness (operator note)
+   ```bash
+   ./backend/.venv/bin/pytest \
+     backend/tests/scripts/test_tracking_replay_benchmark.py \
+     backend/tests/vision/test_track_lifecycle.py \
+     backend/tests/vision/test_tracker.py \
+     backend/tests/vision/test_candidate_quality.py \
+     backend/tests/vision/test_profiles.py \
+     backend/tests/inference/test_engine.py \
+     backend/tests/services/test_camera_worker_config.py \
+     backend/tests/streaming/test_mediamtx.py \
+     -q
+   ./backend/.venv/bin/ruff check \
+     backend/src/argus/vision \
+     backend/src/argus/inference/engine.py \
+     backend/src/argus/api/contracts.py \
+     scripts/tracking_replay_benchmark.py \
+     backend/tests/scripts/test_tracking_replay_benchmark.py
+   ```
 
-   Drop results into
-   `docs/superpowers/status/YYYY-MM-DD-tracker-continuity-jetson-evidence.md`.
+### Recommended Evidence
 
-   **Skip the macOS central A/B** until the host-worker stability bug
-   (open in `CLAUDE.md`) is independently resolved. Running A/B through a
-   pipeline known to drop frames mid-run pollutes the evidence with
-   non-tracker signal.
+1. **Jetson live A/B after merge-candidate build.**
+   Run a 5-minute window before and after on the same Jetson scene and capture:
+
+   - processed FPS
+   - worker CPU/RSS
+   - detector, tracker, lifecycle, publish telemetry stage averages
+   - distinct persisted `stable_track_id` count per observed person
+   - runtime tracking diagnostics
+   - operator note on overlay smoothness
+
+2. **Central A/B only after host-worker stability is clean.**
+   Central macOS/CoreML/MPS acceleration remains future work. Do not claim
+   Dockerized central GPU acceleration.
 
 ## Test Plan
 
-### Unit tests (new or extended)
+### Unit Tests
 
-- `tests/vision/test_track_lifecycle.py`
-  - new test: Kalman coast prediction respects frame shape clamp
-  - new test: coast bbox shape (w, h) does not drift over N coast frames
-  - new test: confidence EMA converges within K frames at given alpha
-  - new test: class voting stabilises on argmax under detector flicker
-- `tests/vision/test_tracker.py`
-  - new test: `TrackerConfig.frame_rate` propagates to the underlying
-    `BOTSORT` constructor
-  - new test: `with_reid` is set when `appearance_ready=True` in the
-    resolved profile
-  - new test: `gmc_method` is set when the profile carries an override
-- `tests/vision/test_candidate_quality.py`
-  - new test: low-confidence detection above `association_min_confidence`
-    but below `display_min_confidence` is accepted for association with an
-    existing active track, rejected for new track creation
-- `tests/vision/test_profiles.py`
-  - new test: `gmc_method` override flows from `SceneVisionProfile` JSON
-    through to `ResolvedTrackerProfile`
-- `tests/streaming/test_mediamtx.py`
-  - new test: identical registration payload does not trigger a
-    `/replace` API call
+- `backend/tests/vision/test_tracker.py`
+  - `TrackerConfig.frame_rate` propagates to the Ultralytics backend
+  - `with_reid` and `gmc_method` flow into `to_namespace()`
+  - `_TrackerResults.cls` is `int32` and uses `-1` for unknown class IDs
 
-### Integration tests (extended)
+- `backend/tests/vision/test_track_lifecycle.py`
+  - coasting preserves width/height across multiple coast frames
+  - coasting center moves in the last observed direction and clamps to frame
+  - damping uses elapsed time and nominal frame interval
+  - confidence EMA converges under repeated detections
+  - class voting stabilizes detector class flicker
+  - frozen attributes cannot be mutated and are not deep-copied per snapshot
 
-- `tests/inference/test_engine.py`
-  - new test: when the resolved profile has `appearance_ready=True`, the
-    tracker built by `_build_tracker` has `with_reid=True`
-  - new test: when `camera.fps_cap` changes mid-run, the rebuilt tracker
-    receives the new `frame_rate`
+- `backend/tests/vision/test_candidate_quality.py`
+  - association-eligible but display-ineligible detection extends nearby track
+  - the same detection is rejected when there is no nearby existing track
+  - duplicate suppression still rejects duplicate fragments
 
-### Replay benchmark
+- `backend/tests/vision/test_profiles.py`
+  - `tracker_profile.gmc_method` override resolves to `ResolvedTrackerProfile`
+  - invalid `gmc_method` is rejected by contract validation
 
-- `tests/scripts/test_tracking_replay_benchmark.py`
-  - asserts the four gate metrics above against the committed baseline
-  - emits a JSON summary that the live A/B doc can reference
+### Integration Tests
 
-## Files Touched (summary)
+- `backend/tests/inference/test_engine.py`
+  - tracker frame rate uses effective processing cap, not stream output FPS
+  - lifecycle nominal interval uses effective processing cap
+  - explicit CPU fallback clamp affects tracker and lifecycle cadence together
+  - ReID request is disabled on CPU fallback
+  - ReID can be enabled only in a test runtime that declares local support
+
+- `backend/tests/services/test_camera_worker_config.py`
+  - worker config preserves scene UI `fps_cap`
+  - browser delivery FPS remains decoupled from processing FPS
+
+- `backend/tests/streaming/test_mediamtx.py`
+  - existing idempotent path registration tests continue to pass
+
+### Replay Benchmark Tests
+
+- `backend/tests/scripts/test_tracking_replay_benchmark.py`
+  - fixture schema validation rejects missing GT identities
+  - evaluator counts ID switches against `gt_id`, not class changes
+  - evaluator counts fragmentation as distinct stable IDs per `gt_id`
+  - committed fixture passes the improvement/no-regression gates against the
+    committed baseline
+
+## Files Touched
 
 | File | Change |
 |---|---|
-| `backend/src/argus/vision/tracker.py` | A1.a, A2.a, A2.b, A3.e |
-| `backend/src/argus/vision/track_lifecycle.py` | A1.b, A3.a, A3.b, A3.c, A3.d |
-| `backend/src/argus/vision/profiles.py` | A2.a, A2.b |
-| `backend/src/argus/vision/candidate_quality.py` | A2.c |
-| `backend/src/argus/vision/types.py` | A3.d |
-| `backend/src/argus/streaming/mediamtx.py` | A1.c |
-| `backend/src/argus/inference/engine.py` | wiring only (`_tracker_config_from_resolved_profile`, `_build_tracker`) |
-| `backend/src/argus/api/contracts.py` | A2.b (new `tracker_profile.gmc_method` override) |
-| `backend/tests/scripts/test_tracking_replay_benchmark.py` | new gate logic |
-| `backend/tests/scripts/fixtures/tracking_replay_baseline.json` | new baseline file |
-| `backend/tests/vision/test_*.py` | new and extended tests as above |
-| `backend/tests/inference/test_engine.py` | new wiring tests |
-| `backend/tests/streaming/test_mediamtx.py` | new replace-skip test |
+| `backend/src/argus/inference/engine.py` | effective FPS tracker/lifecycle wiring, ReID runtime gate |
+| `backend/src/argus/vision/tracker.py` | ReID/GMC config fields, `int32` class IDs |
+| `backend/src/argus/vision/track_lifecycle.py` | nominal frame interval, center motion filter, confidence EMA, class voting, frozen attributes |
+| `backend/src/argus/vision/candidate_quality.py` | prevent association-only detections from spawning new tracks |
+| `backend/src/argus/vision/profiles.py` | resolve ReID request and GMC override |
+| `backend/src/argus/vision/types.py` | immutable detection attributes |
+| `backend/src/argus/api/contracts.py` | additive `tracker_profile.gmc_method` JSON field |
+| `scripts/tracking_replay_benchmark.py` | annotated fixture loader and ground-truth evaluator |
+| `backend/tests/scripts/test_tracking_replay_benchmark.py` | replay metric gates |
+| `backend/tests/scripts/fixtures/tracker_continuity_people_001/` | committed redacted fixture and baseline |
+| `backend/tests/vision/test_*.py` | unit tests listed above |
+| `backend/tests/inference/test_engine.py` | wiring and runtime-gate tests |
 
-No frontend changes. No API contract changes other than the additive
-`tracker_profile.gmc_method` override field, which defaults to `"none"`.
+No frontend change is required in this PR.
 
 ## Out Of Scope
 
-- Extracting the tracking pipeline out of `engine.py` (the 3057-LOC god
-  module). Documented as item A4 in the parent review; deferred to a
-  follow-up spec to avoid merge churn with the in-flight cadence work.
-- ByteTrack reactivation. The Ultralytics adapter keeps the code path
-  callable but no profile selects it.
-- Cross-camera reidentification. Documented as out of V3 scope at the
-  scene/profile design level.
-- Full appearance-aware Kalman tracker on top of BoT-SORT. The
-  constrained `(cx, cy, vx, vy)` filter in A3.a is intentionally the
-  minimum motion model needed for correct coasted-bbox shape.
-- macOS central A/B. Blocked on independent host-worker stability work
-  (see `CLAUDE.md` handoff).
-- DeepStream / NvDCF visual tracking on Jetson. Explicit follow-up in the
-  three-tier scene model.
+- New tracker families.
+- ByteTrack reactivation as a selected profile.
+- Cross-camera reidentification.
+- DeepStream / NvDCF implementation.
+- Native macOS/CoreML/MPS central acceleration.
+- UI control for `gmc_method`.
+- Telemetry contract changes.
+- Any direct telemetry path that bypasses canonical ingest, persistence, or
+  WebSocket fanout.
 
-## Open Questions
+## Open Decisions Locked By This Spec
 
-1. **Replay fixture provenance.** Where does the committed
-   representative-scene fixture come from? The harness format exists,
-   but no committed fixture does.
-
-   Proposed: capture a ≥30-second segment from the live Jetson rig the
-   first time A3 is exercised — using the existing tracker
-   configuration the operator is already running, with whatever scene
-   composition is currently in front of the camera (mixed person +
-   vehicle, person-only if no vehicles are in view, etc. — the fixture
-   only needs ≥2 distinct ground-truth tracks to be useful for
-   measuring ID switches and fragmentation). Run the captured payload
-   through the existing privacy pipeline before committing if it
-   contains identifiable faces or plates, and store the redacted
-   payload under `backend/tests/scripts/fixtures/`.
-
-   Approval needed before merge.
-2. **`gmc_method` UI surfacing.** The `tracker_profile.gmc_method`
-   override is reachable via JSON for now. Does it need a UI control in
-   `CameraWizard.tsx` in this spec, or in a follow-up? Default proposal:
-   JSON-only for this spec; UI control follows once the constrained
-   Kalman + ReID wiring is validated.
+1. Replay evidence must use annotated ground-truth identities. A frame-only or
+   detector-output-only fixture is not sufficient.
+2. Effective processing FPS is the sole cadence source for tracker timing.
+3. ReID is opt-in by profile but runtime-gated; CPU fallback stays off.
+4. `gmc_method` is JSON-only for this PR.
+5. Central live A/B is not a merge gate until central worker stability and
+   native acceleration work are addressed separately.
