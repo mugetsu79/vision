@@ -41,7 +41,7 @@
 - Create: `backend/tests/scripts/fixtures/tracker_continuity_people_001/frames/000001.jpg` through `000090.jpg`
 - Create: `backend/tests/scripts/fixtures/tracking_replay_baseline.json`
 
-- [ ] **Step 1: Add failing schema and evaluator tests**
+- [x] **Step 1: Add failing schema and evaluator tests**
 
 Append these tests to `backend/tests/scripts/test_tracking_replay_benchmark.py`:
 
@@ -128,7 +128,7 @@ import json
 import pytest
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run:
 
@@ -138,7 +138,7 @@ Run:
 
 Expected: FAIL because `load_replay_fixture`, `ReplayFrame`, `GroundTruthObject`, `ReplayTrack`, and `evaluate_tracks` are not defined.
 
-- [ ] **Step 3: Implement fixture dataclasses and loader**
+- [x] **Step 3: Implement fixture dataclasses and loader**
 
 In `scripts/tracking_replay_benchmark.py`, add dataclasses after constants:
 
@@ -244,7 +244,7 @@ def _bbox_tuple(value: object) -> BoundingBox:
     return (float(values[0]), float(values[1]), float(values[2]), float(values[3]))
 ```
 
-- [ ] **Step 4: Implement evaluator metrics**
+- [x] **Step 4: Implement evaluator metrics**
 
 Add:
 
@@ -324,7 +324,7 @@ def _median(values: list[int]) -> float:
     return (values[midpoint - 1] + values[midpoint]) / 2.0
 ```
 
-- [ ] **Step 5: Run evaluator tests**
+- [x] **Step 5: Run evaluator tests**
 
 Run:
 
@@ -334,7 +334,7 @@ Run:
 
 Expected: PASS for the new schema/evaluator tests and existing script tests.
 
-- [ ] **Step 6: Generate deterministic replay fixture**
+- [x] **Step 6: Generate deterministic replay fixture**
 
 Add a small fixture-generation helper inside the test module, or run this one-off Python command and commit the generated files:
 
@@ -406,7 +406,7 @@ PY
 
 Expected: fixture files exist and contain 90 frame rows with two ground-truth IDs.
 
-- [ ] **Step 7: Add baseline comparison logic**
+- [x] **Step 7: Add baseline comparison logic**
 
 In `scripts/tracking_replay_benchmark.py`, add:
 
@@ -443,7 +443,7 @@ def compare_to_baseline(current: dict[str, object], baseline: dict[str, object])
     return failures
 ```
 
-- [ ] **Step 8: Add benchmark gate test**
+- [x] **Step 8: Add benchmark gate test**
 
 Add a test that loads `tracking_replay_baseline.json`, runs the fixture, and asserts `compare_to_baseline(...) == []`. Mark this gate with `pytest.mark.xfail(reason="A3 continuity implementation not applied yet", strict=True)` until Task 8 removes the marker after the implementation improves the replay metrics.
 
@@ -493,7 +493,7 @@ Expected at this step: PASS for schema tests; the gate can be marked `xfail` onl
 - Modify: `backend/tests/inference/test_engine.py`
 - Modify: `backend/tests/vision/test_track_lifecycle.py`
 
-- [ ] **Step 1: Write failing tracker frame-rate tests**
+- [x] **Step 1: Write failing tracker frame-rate tests**
 
 In `backend/tests/inference/test_engine.py`, add construction and rebuild tests
 near existing runtime-engine FPS tests:
@@ -582,7 +582,7 @@ async def test_tracker_rebuild_uses_effective_processing_fps_after_cpu_fallback_
         await engine.close()
 ```
 
-- [ ] **Step 2: Run the test to verify failure**
+- [x] **Step 2: Run the test to verify failure**
 
 Run:
 
@@ -595,7 +595,7 @@ Run:
 
 Expected: FAIL because tracker config still uses `config.tracker.frame_rate`.
 
-- [ ] **Step 3: Add lifecycle config cadence field**
+- [x] **Step 3: Add lifecycle config cadence field**
 
 In `backend/src/argus/vision/track_lifecycle.py`, update `TrackLifecycleConfig`:
 
@@ -615,7 +615,7 @@ class TrackLifecycleConfig:
     confidence_ema_alpha: float = 0.4
 ```
 
-- [ ] **Step 4: Thread effective FPS into tracker and lifecycle config**
+- [x] **Step 4: Thread effective FPS into tracker and lifecycle config**
 
 In `backend/src/argus/inference/engine.py`, change signatures:
 
@@ -668,7 +668,7 @@ def _build_track_lifecycle(self) -> TrackLifecycleManager:
     return TrackLifecycleManager(lifecycle_config)
 ```
 
-- [ ] **Step 5: Run focused FPS tests**
+- [x] **Step 5: Run focused FPS tests**
 
 Run:
 
@@ -696,7 +696,7 @@ Expected: PASS.
 - Modify: `backend/tests/vision/test_tracker.py`
 - Modify: `backend/tests/inference/test_engine.py`
 
-- [ ] **Step 1: Write failing profile tests**
+- [x] **Step 1: Write failing profile tests**
 
 Add to `backend/tests/vision/test_profiles.py`:
 
@@ -728,7 +728,7 @@ from pydantic import ValidationError
 from argus.api.contracts import SceneVisionProfile
 ```
 
-- [ ] **Step 2: Implement contract and profile fields**
+- [x] **Step 2: Implement contract and profile fields**
 
 In `backend/src/argus/api/contracts.py`, define this model next to
 `MotionMetricsSettings`:
@@ -766,7 +766,7 @@ gmc_method = tracker_overrides["gmc_method"]
 
 Set `gmc_method=gmc_method` in `ResolvedTrackerProfile(...)`.
 
-- [ ] **Step 3: Write failing ReID runtime-gate tests**
+- [x] **Step 3: Write failing ReID runtime-gate tests**
 
 In `backend/tests/inference/test_engine.py`, add:
 
@@ -799,7 +799,7 @@ def test_tracker_config_disables_reid_for_cpu_fallback_runtime() -> None:
     assert tracker_config.with_reid is False
 ```
 
-- [ ] **Step 4: Implement ReID runtime gate**
+- [x] **Step 4: Implement ReID runtime gate**
 
 In `backend/src/argus/inference/engine.py`, add helper:
 
@@ -837,7 +837,7 @@ return tracker_config
 If assignment fails because `TrackerConfig` is made frozen in the same branch,
 use `dataclasses.replace(...)` instead of mutating the object.
 
-- [ ] **Step 5: Run profile and ReID tests**
+- [x] **Step 5: Run profile and ReID tests**
 
 Run:
 
@@ -859,7 +859,7 @@ Expected: PASS.
 - Modify: `backend/src/argus/vision/candidate_quality.py`
 - Modify: `backend/tests/vision/test_candidate_quality.py`
 
-- [ ] **Step 1: Write failing test for no new low-confidence track**
+- [x] **Step 1: Write failing test for no new low-confidence track**
 
 Update `test_person_can_be_association_eligible_without_display_eligibility` in
 `backend/tests/vision/test_candidate_quality.py` so it expects rejection without
@@ -899,7 +899,7 @@ def test_association_eligible_person_extends_nearby_existing_track() -> None:
     ]
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 Run:
 
@@ -909,7 +909,7 @@ Run:
 
 Expected: FAIL because the gate currently accepts association-threshold detections as `new_track_high_confidence`.
 
-- [ ] **Step 3: Implement semantics**
+- [x] **Step 3: Implement semantics**
 
 In `_decide(...)`, replace the `if detection.confidence >= association_threshold` branch with:
 
@@ -936,7 +936,7 @@ if display_eligible:
 
 Keep the continuation and duplicate-fragment logic before this branch.
 
-- [ ] **Step 4: Run candidate quality tests**
+- [x] **Step 4: Run candidate quality tests**
 
 Run:
 
@@ -955,7 +955,7 @@ Expected: PASS.
 - Modify: `backend/src/argus/vision/types.py`
 - Modify: `backend/tests/vision/test_track_lifecycle.py`
 
-- [ ] **Step 1: Write failing lifecycle tests**
+- [x] **Step 1: Write failing lifecycle tests**
 
 Add tests to `backend/tests/vision/test_track_lifecycle.py`:
 
@@ -1023,7 +1023,7 @@ Add imports if missing:
 from datetime import UTC, datetime, timedelta
 ```
 
-- [ ] **Step 2: Run lifecycle tests to verify failure**
+- [x] **Step 2: Run lifecycle tests to verify failure**
 
 Run:
 
@@ -1033,7 +1033,7 @@ Run:
 
 Expected: FAIL on bbox-size preservation, EMA, class voting, and immutable attributes.
 
-- [ ] **Step 3: Freeze detection attributes**
+- [x] **Step 3: Freeze detection attributes**
 
 In `backend/src/argus/vision/types.py`, update `Detection`:
 
@@ -1076,7 +1076,7 @@ def _copy_detection(detection: Detection) -> Detection:
     return detection.with_updates()
 ```
 
-- [ ] **Step 4: Add motion filter and output smoothing**
+- [x] **Step 4: Add motion filter and output smoothing**
 
 In `track_lifecycle.py`, add:
 
@@ -1195,7 +1195,7 @@ memory.detection = _copy_detection(
 memory.updated_ts = ts
 ```
 
-- [ ] **Step 5: Run lifecycle tests**
+- [x] **Step 5: Run lifecycle tests**
 
 Run:
 
@@ -1213,7 +1213,7 @@ Expected: PASS.
 - Modify: `backend/src/argus/vision/tracker.py`
 - Modify: `backend/tests/vision/test_tracker.py`
 
-- [ ] **Step 1: Write failing dtype and namespace tests**
+- [x] **Step 1: Write failing dtype and namespace tests**
 
 Add to `backend/tests/vision/test_tracker.py`:
 
@@ -1241,7 +1241,7 @@ def test_tracker_config_namespace_carries_reid_and_gmc() -> None:
     assert namespace.gmc_method == "sparseOptFlow"
 ```
 
-- [ ] **Step 2: Run tests to verify dtype failure**
+- [x] **Step 2: Run tests to verify dtype failure**
 
 Run:
 
@@ -1251,7 +1251,7 @@ Run:
 
 Expected: FAIL on dtype until implementation changes.
 
-- [ ] **Step 3: Change dtype**
+- [x] **Step 3: Change dtype**
 
 In `_TrackerResults.__init__`, change:
 
@@ -1265,7 +1265,7 @@ self.cls = np.asarray(
 )
 ```
 
-- [ ] **Step 4: Run tracker tests**
+- [x] **Step 4: Run tracker tests**
 
 Run:
 
@@ -1283,7 +1283,7 @@ Expected: PASS.
 - Modify: `scripts/tracking_replay_benchmark.py`
 - Modify: `backend/tests/scripts/test_tracking_replay_benchmark.py`
 
-- [ ] **Step 1: Add replay runner test with fake tracker stack**
+- [x] **Step 1: Add replay runner test with fake tracker stack**
 
 Add a test that passes detections through a simple runner and compares metrics:
 
@@ -1309,7 +1309,7 @@ def test_run_fixture_benchmark_uses_ground_truth_metrics(tmp_path: Path) -> None
 
 Define `_write_two_frame_fixture(...)` in the test file using the same schema from Task 1.
 
-- [ ] **Step 2: Implement `run_fixture_benchmark`**
+- [x] **Step 2: Implement `run_fixture_benchmark`**
 
 In `scripts/tracking_replay_benchmark.py`, add:
 
@@ -1392,7 +1392,7 @@ def _default_track_runner(
     return run
 ```
 
-- [ ] **Step 3: Update CLI args**
+- [x] **Step 3: Update CLI args**
 
 Add:
 
@@ -1403,7 +1403,7 @@ parser.add_argument("--baseline", type=Path, help="Optional baseline JSON to com
 
 In `main()`, if `args.fixture` is set, call `run_fixture_benchmark(...)`, compare baseline if supplied, print JSON if requested, and return `1` on comparison failures.
 
-- [ ] **Step 4: Run replay tests**
+- [x] **Step 4: Run replay tests**
 
 Run:
 
@@ -1422,7 +1422,7 @@ Expected: PASS, except the intentionally marked xfail benchmark gate until Task 
 - Modify: `backend/tests/scripts/fixtures/tracking_replay_baseline.json`
 - Modify: `docs/superpowers/status/2026-06-13-tracker-continuity-implementation-evidence.md`
 
-- [ ] **Step 1: Generate baseline JSON from base commit**
+- [x] **Step 1: Generate baseline JSON from base commit**
 
 Use a temporary worktree at base commit `75e95b8f`:
 
@@ -1443,7 +1443,7 @@ before running the benchmark. Copy only files under
 Do not regenerate fixture JSONL or images between the baseline and current
 runs; both comparisons must use byte-identical fixture contents.
 
-- [ ] **Step 2: Write committed baseline file**
+- [x] **Step 2: Write committed baseline file**
 
 Create `backend/tests/scripts/fixtures/tracking_replay_baseline.json`:
 
@@ -1466,11 +1466,11 @@ Create `backend/tests/scripts/fixtures/tracking_replay_baseline.json`:
 
 Replace the numeric metric values with the values from `/tmp/tracking_replay_baseline_metrics.json`.
 
-- [ ] **Step 3: Remove xfail from replay gate**
+- [x] **Step 3: Remove xfail from replay gate**
 
 In `backend/tests/scripts/test_tracking_replay_benchmark.py`, remove the xfail marker from the committed fixture gate test.
 
-- [ ] **Step 4: Run full targeted verification**
+- [x] **Step 4: Run full targeted verification**
 
 Run:
 
@@ -1502,7 +1502,7 @@ Run:
 
 Expected: `All checks passed!`
 
-- [ ] **Step 5: Write implementation evidence**
+- [x] **Step 5: Write implementation evidence**
 
 Generate the evidence file from the two benchmark JSON files:
 

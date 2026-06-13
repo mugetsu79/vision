@@ -1,0 +1,16 @@
+{
+  "base_commit": "75e95b8f",
+  "effective_processing_fps": 15,
+  "fixture_id": "tracker_continuity_people_001",
+  "fixture_sha256": "7be2bf7df92fd71422fa28bcd4b4c9d36072a995cc1427e9b94a481ffc67f4db",
+  "metrics": {
+    "coverage_ratio": 0.9727272727272728,
+    "duplicate_active_track_frames": 0,
+    "id_switches": 4,
+    "median_fragments_per_gt": 2.0,
+    "median_track_lifetime_frames": 82.0,
+    "median_tracker_lifecycle_ms": 0.4219164839014411,
+    "track_fragmentation_sum": 4
+  },
+  "tracker_scene_profile": "difficult"
+}

@@ -2584,6 +2584,101 @@ def test_engine_initializes_tracker_and_lifecycle_from_max_accuracy_jetson_profi
     assert engine._track_lifecycle.config.coast_ttl_ms >= 2_000
 
 
+def test_tracker_config_disables_reid_for_cpu_fallback_runtime() -> None:
+    config = _engine_config(uuid4()).model_copy(
+        update={
+            "vision_profile": SceneVisionProfile(
+                accuracy_mode="maximum_accuracy",
+                compute_tier="central_gpu",
+            ).model_dump(mode="python")
+        }
+    )
+    resolved = engine_module.resolve_scene_vision_profile(
+        config.vision_profile,
+        has_homography=False,
+    )
+
+    tracker_config = engine_module._tracker_config_from_resolved_profile(
+        config,
+        TrackerType.BOTSORT,
+        resolved,
+        effective_processing_fps=15,
+        runtime_policy=RuntimeExecutionPolicy(
+            host=HostClassification(
+                system="linux",
+                machine="x86_64",
+                cpu_vendor=CpuVendor.INTEL,
+                available_providers=(ExecutionProvider.CPU.value,),
+                profile=ExecutionProfile.CPU_FALLBACK,
+            ),
+            provider=ExecutionProvider.CPU.value,
+            available_providers=(ExecutionProvider.CPU.value,),
+            provider_overridden=False,
+        ),
+    )
+
+    assert tracker_config.with_reid is False
+
+
+def test_tracker_config_keeps_reid_disabled_for_auto_model_on_gpu_runtime() -> None:
+    config = _engine_config(uuid4()).model_copy(
+        update={
+            "vision_profile": SceneVisionProfile(
+                accuracy_mode="maximum_accuracy",
+                compute_tier="central_gpu",
+            ).model_dump(mode="python")
+        }
+    )
+    resolved = engine_module.resolve_scene_vision_profile(
+        config.vision_profile,
+        has_homography=False,
+    )
+
+    tracker_config = engine_module._tracker_config_from_resolved_profile(
+        config,
+        TrackerType.BOTSORT,
+        resolved,
+        effective_processing_fps=15,
+        runtime_policy=RuntimeExecutionPolicy(
+            host=HostClassification(
+                system="linux",
+                machine="x86_64",
+                cpu_vendor=CpuVendor.INTEL,
+                available_providers=(
+                    ExecutionProvider.CUDA.value,
+                    ExecutionProvider.CPU.value,
+                ),
+                profile=ExecutionProfile.NVIDIA_LINUX_X86_64,
+            ),
+            provider=ExecutionProvider.CUDA.value,
+            available_providers=(ExecutionProvider.CUDA.value, ExecutionProvider.CPU.value),
+            provider_overridden=False,
+        ),
+    )
+
+    assert tracker_config.model == "auto"
+    assert tracker_config.with_reid is False
+
+
+def test_tracker_config_applies_resolved_gmc_method() -> None:
+    config = _engine_config(uuid4())
+    resolved = engine_module.resolve_scene_vision_profile(
+        SceneVisionProfile(
+            tracker_profile={"gmc_method": "sparseOptFlow"},
+        ).model_dump(mode="python"),
+        has_homography=False,
+    )
+
+    tracker_config = engine_module._tracker_config_from_resolved_profile(
+        config,
+        TrackerType.BOTSORT,
+        resolved,
+        effective_processing_fps=15,
+    )
+
+    assert tracker_config.gmc_method == "sparseOptFlow"
+
+
 def test_lifecycle_coast_ttl_uses_resolved_profile_seconds() -> None:
     profile = engine_module.resolve_scene_vision_profile(
         SceneVisionProfile(
@@ -2596,6 +2691,7 @@ def test_lifecycle_coast_ttl_uses_resolved_profile_seconds() -> None:
     config = engine_module._track_lifecycle_config_from_resolved_profile(
         _engine_config(uuid4()),
         profile,
+        effective_processing_fps=25,
     )
 
     assert config.coast_ttl_ms == 3000
@@ -2613,6 +2709,7 @@ def test_lifecycle_coast_ttl_honors_profile_max_seconds() -> None:
     config = engine_module._track_lifecycle_config_from_resolved_profile(
         _engine_config(uuid4()),
         profile,
+        effective_processing_fps=25,
     )
 
     assert config.coast_ttl_ms == 8000
@@ -4654,6 +4751,93 @@ async def test_build_runtime_engine_caps_cpu_fallback_processing_fps(
     try:
         assert captured["camera_config"].fps_cap == 12
         assert engine._effective_processing_fps_cap() == 12
+    finally:
+        await engine.close()
+
+
+@pytest.mark.asyncio
+async def test_tracker_uses_effective_processing_fps_after_cpu_fallback_clamp(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera_id = uuid4()
+    captured: dict[str, TrackerConfig] = {}
+    _patch_runtime_engine_build_dependencies(monkeypatch)
+
+    class _CpuRuntime:
+        @staticmethod
+        def get_available_providers() -> list[str]:
+            return ["CPUExecutionProvider"]
+
+    def fake_create_tracker(config: TrackerConfig) -> _FakeTracker:
+        captured["tracker_config"] = config
+        return _FakeTracker(tracker_type=config.tracker_type)
+
+    monkeypatch.setattr(engine_module, "import_onnxruntime", lambda: _CpuRuntime())
+    monkeypatch.setattr(engine_module, "create_tracker", fake_create_tracker)
+    base_config = _engine_config(camera_id)
+    config = base_config.model_copy(
+        update={"camera": base_config.camera.model_copy(update={"fps_cap": 25})}
+    )
+
+    engine = await engine_module.build_runtime_engine(
+        config,
+        settings=engine_module.Settings(
+            _env_file=None,
+            cpu_fallback_processing_fps_cap=12,
+        ),
+        events_client=_FakeEventClient(),
+    )
+
+    try:
+        assert captured["tracker_config"].frame_rate == 12
+        assert engine._track_lifecycle.config.nominal_frame_interval_ms == pytest.approx(
+            1000.0 / 12.0
+        )
+    finally:
+        await engine.close()
+
+
+@pytest.mark.asyncio
+async def test_tracker_rebuild_uses_effective_processing_fps_after_cpu_fallback_clamp(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera_id = uuid4()
+    captured: list[TrackerConfig] = []
+    _patch_runtime_engine_build_dependencies(monkeypatch)
+
+    class _CpuRuntime:
+        @staticmethod
+        def get_available_providers() -> list[str]:
+            return ["CPUExecutionProvider"]
+
+    def fake_create_tracker(config: TrackerConfig) -> _FakeTracker:
+        captured.append(config)
+        return _FakeTracker(tracker_type=config.tracker_type)
+
+    monkeypatch.setattr(engine_module, "import_onnxruntime", lambda: _CpuRuntime())
+    monkeypatch.setattr(engine_module, "create_tracker", fake_create_tracker)
+    base_config = _engine_config(camera_id)
+    config = base_config.model_copy(
+        update={"camera": base_config.camera.model_copy(update={"fps_cap": 25})}
+    )
+
+    engine = await engine_module.build_runtime_engine(
+        config,
+        settings=engine_module.Settings(
+            _env_file=None,
+            cpu_fallback_processing_fps_cap=12,
+        ),
+        events_client=_FakeEventClient(),
+    )
+
+    try:
+        await engine.apply_command(engine_module.CameraCommand(tracker_type=TrackerType.BYTETRACK))
+
+        assert captured[-1].tracker_type is TrackerType.BYTETRACK
+        assert captured[-1].frame_rate == 12
+        assert engine._track_lifecycle.config.nominal_frame_interval_ms == pytest.approx(
+            1000.0 / 12.0
+        )
     finally:
         await engine.close()
 

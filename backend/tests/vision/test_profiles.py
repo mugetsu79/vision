@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
+from argus.api.contracts import SceneVisionProfile
 from argus.models.enums import TrackerType
 from argus.vision.profiles import resolve_scene_vision_profile
 
@@ -107,23 +109,38 @@ def test_edge_mixed_profile_preserves_class_specific_vehicle_confidence() -> Non
     assert resolved.candidate_quality.display_min_confidence["forklift"] == 0.4
 
 
-def test_tracker_profile_resolves_bounded_coast_seconds() -> None:
-    low = resolve_scene_vision_profile(
-        {"tracker_profile": {"coast_seconds": 0.2}},
-        has_homography=False,
-    )
+def test_tracker_profile_resolves_explicit_coast_seconds() -> None:
     explicit = resolve_scene_vision_profile(
         {"tracker_profile": {"coast_seconds": 3.25}},
         has_homography=False,
     )
-    high = resolve_scene_vision_profile(
-        {"tracker_profile": {"coast_seconds": 20.0}},
+
+    assert explicit.tracker.coast_seconds == 3.25
+
+
+def test_tracker_profile_rejects_out_of_range_coast_seconds() -> None:
+    with pytest.raises(ValidationError):
+        SceneVisionProfile.model_validate({"tracker_profile": {"coast_seconds": 0.2}})
+    with pytest.raises(ValidationError):
+        SceneVisionProfile.model_validate({"tracker_profile": {"coast_seconds": 20.0}})
+
+
+def test_tracker_profile_resolves_gmc_method_override() -> None:
+    resolved = resolve_scene_vision_profile(
+        {
+            "accuracy_mode": "balanced",
+            "compute_tier": "edge_standard",
+            "tracker_profile": {"gmc_method": "sparseOptFlow"},
+        },
         has_homography=False,
     )
 
-    assert low.tracker.coast_seconds == 0.5
-    assert explicit.tracker.coast_seconds == 3.25
-    assert high.tracker.coast_seconds == 8.0
+    assert resolved.tracker.gmc_method == "sparseOptFlow"
+
+
+def test_tracker_profile_rejects_unknown_gmc_method() -> None:
+    with pytest.raises(ValidationError):
+        SceneVisionProfile.model_validate({"tracker_profile": {"gmc_method": "ecc"}})
 
 
 def test_speed_enabled_requires_homography() -> None:

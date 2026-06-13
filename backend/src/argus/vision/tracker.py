@@ -105,7 +105,7 @@ class _TrackerResults:
                 detection.class_id if detection.class_id is not None else -1
                 for detection in detections
             ],
-            dtype=np.float32,
+            dtype=np.int32,
         )
 
     @property

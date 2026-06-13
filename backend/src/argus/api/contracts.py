@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal
@@ -887,6 +888,38 @@ class MotionMetricsSettings(BaseModel):
     speed_enabled: bool = False
 
 
+TrackerGmcMethod = Literal["none", "sparseOptFlow"]
+
+
+class TrackerProfileSettings(BaseModel):
+    new_track_min_hits: int | None = Field(default=None, ge=1)
+    coast_seconds: float | None = Field(default=None, ge=0.5, le=8.0)
+    gmc_method: TrackerGmcMethod = "none"
+
+    model_config = ConfigDict(extra="allow")
+
+    def _legacy_dict(self) -> dict[str, Any]:
+        return self.model_dump(
+            mode="python",
+            exclude_none=True,
+            exclude_defaults=True,
+        )
+
+    def __iter__(self) -> Iterator[tuple[str, Any]]:
+        return iter(self._legacy_dict().items())
+
+    def __getitem__(self, key: str) -> Any:
+        return self._legacy_dict()[key]
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self._legacy_dict().get(key, default)
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, dict):
+            return self._legacy_dict() == other
+        return super().__eq__(other)
+
+
 class SceneVisionProfile(BaseModel):
     compute_tier: Literal[
         "cpu_low",
@@ -911,7 +944,7 @@ class SceneVisionProfile(BaseModel):
     object_domain: Literal["people", "vehicles", "mixed", "open_vocab"] = "mixed"
     motion_metrics: MotionMetricsSettings = Field(default_factory=MotionMetricsSettings)
     candidate_quality: dict[str, Any] = Field(default_factory=dict)
-    tracker_profile: dict[str, Any] = Field(default_factory=dict)
+    tracker_profile: TrackerProfileSettings = Field(default_factory=TrackerProfileSettings)
     verifier_profile: dict[str, Any] = Field(default_factory=dict)
 
 

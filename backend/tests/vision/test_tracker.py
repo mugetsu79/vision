@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from argus.models.enums import TrackerType
+from argus.vision import tracker as tracker_module
 from argus.vision.tracker import TrackerConfig, _build_ultralytics_backend, create_tracker
 from argus.vision.types import Detection
 
@@ -45,6 +46,39 @@ class _FrameRateConstructorTracker:
 
     def update(self, results, img=None, feats=None):  # noqa: ANN001
         return []
+
+
+def test_tracker_results_class_ids_are_int32() -> None:
+    results = tracker_module._TrackerResults(
+        [
+            Detection(
+                class_name="person",
+                class_id=0,
+                confidence=0.9,
+                bbox=(0.0, 0.0, 10.0, 10.0),
+            ),
+            Detection(
+                class_name="unknown",
+                class_id=None,
+                confidence=0.3,
+                bbox=(10.0, 10.0, 20.0, 20.0),
+            ),
+        ]
+    )
+
+    assert results.cls.dtype == np.int32
+    assert results.cls.tolist() == [0, -1]
+
+
+def test_tracker_config_namespace_carries_reid_and_gmc() -> None:
+    namespace = TrackerConfig(
+        tracker_type=TrackerType.BOTSORT,
+        with_reid=True,
+        gmc_method="sparseOptFlow",
+    ).to_namespace()
+
+    assert namespace.with_reid is True
+    assert namespace.gmc_method == "sparseOptFlow"
 
 
 def test_tracker_backend_constructor_supports_legacy_ultralytics_signature() -> None:

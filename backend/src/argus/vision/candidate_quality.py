@@ -157,12 +157,24 @@ class CandidateQualityGate:
                 display_eligible=False,
             )
 
-        if detection.confidence >= association_threshold:
+        if (
+            not display_eligible
+            and detection.confidence >= association_threshold
+            and self._is_near_existing_track(detection, same_class_tracks, frame_shape)
+        ):
+            return CandidateDecision(
+                detection,
+                accepted=True,
+                reason="existing_track_association",
+                display_eligible=display_eligible,
+            )
+
+        if display_eligible:
             return CandidateDecision(
                 detection,
                 accepted=True,
                 reason="new_track_high_confidence",
-                display_eligible=display_eligible,
+                display_eligible=True,
             )
 
         return CandidateDecision(

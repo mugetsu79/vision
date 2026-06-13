@@ -31,6 +31,7 @@ class ResolvedTrackerProfile:
     appearance_ready: bool = False
     new_track_min_hits: int = 2
     coast_seconds: float = 2.5
+    gmc_method: Literal["none", "sparseOptFlow"] = "none"
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,7 +131,8 @@ def resolve_scene_vision_profile(
     if isinstance(quality_overrides.get("memory_frames"), int):
         memory_frames = max(1, int(quality_overrides["memory_frames"]))
 
-    tracker_overrides = requested.tracker_profile
+    tracker_overrides = requested.tracker_profile.model_dump(mode="python")
+    gmc_method = tracker_overrides["gmc_method"]
     if isinstance(tracker_overrides.get("new_track_min_hits"), int):
         new_track_min_hits = max(1, int(tracker_overrides["new_track_min_hits"]))
     if isinstance(tracker_overrides.get("coast_seconds"), int | float):
@@ -171,6 +173,7 @@ def resolve_scene_vision_profile(
             appearance_ready=appearance_ready,
             new_track_min_hits=new_track_min_hits,
             coast_seconds=coast_seconds,
+            gmc_method=gmc_method,
         ),
         verifier=ResolvedVerifierProfile(mode=verifier_mode),
     )

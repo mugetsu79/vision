@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from argus.vision.track_lifecycle import TrackLifecycleConfig, TrackLifecycleManager
+import pytest
+
+from argus.vision.track_lifecycle import (
+    TrackLifecycleConfig,
+    TrackLifecycleManager,
+    _copy_detection,
+)
 from argus.vision.types import Detection
 
 BASE_TS = datetime(2026, 5, 9, 12, 0, tzinfo=UTC)
@@ -13,14 +19,20 @@ def _ts(milliseconds: int) -> datetime:
     return BASE_TS + timedelta(milliseconds=milliseconds)
 
 
+def _bbox_center_x(bbox: tuple[float, float, float, float]) -> float:
+    x1, _, x2, _ = bbox
+    return (x1 + x2) / 2.0
+
+
 def _person(
     *,
     track_id: int,
+    class_name: str = "person",
     bbox: tuple[float, float, float, float] = (10.0, 10.0, 60.0, 120.0),
     confidence: float = 0.91,
 ) -> Detection:
     return Detection(
-        class_name="person",
+        class_name=class_name,
         class_id=0,
         confidence=confidence,
         bbox=bbox,
@@ -273,7 +285,7 @@ def test_last_diagnostics_reports_duplicate_replacement() -> None:
     assert visible[0].lifecycle_reason == "duplicate_replaced"
 
 
-def test_lifecycle_diagnostics_snapshot_defensively_copies_detection_attributes() -> None:
+def test_lifecycle_diagnostics_snapshot_exposes_immutable_detection_attributes() -> None:
     manager = TrackLifecycleManager()
 
     manager.update(
@@ -282,12 +294,14 @@ def test_lifecycle_diagnostics_snapshot_defensively_copies_detection_attributes(
         frame_shape=FRAME_SHAPE,
     )
     diagnostics = manager.last_diagnostics()
-    diagnostics[0].detection.attributes["color"] = "red"
 
-    assert manager.last_diagnostics()[0].detection.attributes == {"color": "blue"}
+    with pytest.raises(TypeError):
+        diagnostics[0].detection.attributes["color"] = "red"
+
+    assert dict(manager.last_diagnostics()[0].detection.attributes) == {"color": "blue"}
 
 
-def test_lifecycle_diagnostics_snapshot_defensively_copies_nested_attributes() -> None:
+def test_lifecycle_diagnostics_snapshot_attributes_can_serialize_to_dict() -> None:
     manager = TrackLifecycleManager()
 
     manager.update(
@@ -300,14 +314,13 @@ def test_lifecycle_diagnostics_snapshot_defensively_copies_nested_attributes() -
         frame_shape=FRAME_SHAPE,
     )
     diagnostics = manager.last_diagnostics()
-    diagnostics[0].detection.attributes["uniform"]["colors"].append("red")
 
-    assert manager.last_diagnostics()[0].detection.attributes == {
+    assert dict(diagnostics[0].detection.attributes) == {
         "uniform": {"colors": ["blue"]}
     }
 
 
-def test_visible_tracks_snapshot_defensively_copies_detection_attributes() -> None:
+def test_visible_tracks_snapshot_exposes_immutable_detection_attributes() -> None:
     manager = TrackLifecycleManager()
     attributes = {"color": "blue"}
 
@@ -321,15 +334,17 @@ def test_visible_tracks_snapshot_defensively_copies_detection_attributes() -> No
         ts=_ts(0),
         frame_shape=FRAME_SHAPE,
     )
-    visible[0].detection.attributes["color"] = "red"
     attributes["color"] = "green"
+
+    with pytest.raises(TypeError):
+        visible[0].detection.attributes["color"] = "red"
 
     snapshot = manager.visible_tracks()
 
-    assert snapshot[0].detection.attributes == {"color": "blue"}
+    assert dict(snapshot[0].detection.attributes) == {"color": "blue"}
 
 
-def test_visible_tracks_snapshot_defensively_copies_nested_attributes() -> None:
+def test_visible_tracks_snapshot_nested_attributes_are_serializable() -> None:
     manager = TrackLifecycleManager()
     attributes = {"uniform": {"colors": ["blue"]}}
 
@@ -343,11 +358,11 @@ def test_visible_tracks_snapshot_defensively_copies_nested_attributes() -> None:
         ts=_ts(0),
         frame_shape=FRAME_SHAPE,
     )
-    visible[0].detection.attributes["uniform"]["colors"].append("red")
-    manager.visible_tracks()[0].detection.attributes["uniform"]["colors"].append("green")
-    attributes["uniform"]["colors"].append("black")
 
-    assert manager.visible_tracks()[0].detection.attributes == {
+    with pytest.raises(TypeError):
+        visible[0].detection.attributes["uniform"] = {"colors": ["red"]}
+
+    assert dict(manager.visible_tracks()[0].detection.attributes) == {
         "uniform": {"colors": ["blue"]}
     }
 
@@ -369,7 +384,7 @@ def test_candidate_context_tracks_include_tentative_tracks() -> None:
     ] == [(1, "tentative")]
 
 
-def test_candidate_context_tracks_snapshot_defensively_copies_nested_attributes() -> None:
+def test_candidate_context_tracks_snapshot_exposes_immutable_detection_attributes() -> None:
     manager = TrackLifecycleManager(TrackLifecycleConfig(tentative_hits=2))
 
     manager.update(
@@ -382,9 +397,11 @@ def test_candidate_context_tracks_snapshot_defensively_copies_nested_attributes(
         frame_shape=FRAME_SHAPE,
     )
     context_tracks = manager.candidate_context_tracks()
-    context_tracks[0].detection.attributes["uniform"]["colors"].append("red")
 
-    assert manager.candidate_context_tracks()[0].detection.attributes == {
+    with pytest.raises(TypeError):
+        context_tracks[0].detection.attributes["uniform"] = {"colors": ["red"]}
+
+    assert dict(manager.candidate_context_tracks()[0].detection.attributes) == {
         "uniform": {"colors": ["blue"]}
     }
 
@@ -591,6 +608,190 @@ def test_clearly_better_duplicate_refreshes_stable_track() -> None:
     assert visible[0].stable_track_id == 1
     assert visible[0].source_track_id == 5
     assert visible[0].detection.confidence == 0.92
+
+
+def test_duplicate_replacement_coasts_with_duplicate_velocity() -> None:
+    manager = TrackLifecycleManager(
+        TrackLifecycleConfig(
+            duplicate_iou_threshold=0.50,
+            duplicate_replacement_confidence_delta=0.25,
+            tentative_hits=10,
+            nominal_frame_interval_ms=100.0,
+            velocity_damping=1.0,
+        )
+    )
+    ts0 = datetime(2026, 1, 1, tzinfo=UTC)
+    ts1 = ts0 + timedelta(milliseconds=100)
+    ts2 = ts1 + timedelta(milliseconds=100)
+    ts3 = ts2 + timedelta(milliseconds=100)
+    manager.update(
+        detections=[
+            _person(track_id=1, bbox=(10.0, 0.0, 30.0, 20.0), confidence=0.90),
+        ],
+        ts=ts0,
+        frame_shape=(100, 100, 3),
+    )
+    manager.update(
+        detections=[
+            _person(track_id=1, bbox=(10.0, 0.0, 30.0, 20.0), confidence=0.90),
+            _person(track_id=2, bbox=(40.0, 0.0, 60.0, 20.0), confidence=0.99),
+        ],
+        ts=ts1,
+        frame_shape=(100, 100, 3),
+    )
+    replaced = manager.update(
+        detections=[
+            _person(track_id=1, bbox=(40.0, 0.0, 60.0, 20.0), confidence=0.40),
+            Detection(
+                class_name="person",
+                class_id=0,
+                confidence=0.99,
+                bbox=(45.0, 0.0, 65.0, 20.0),
+            ),
+        ],
+        ts=ts2,
+        frame_shape=(100, 100, 3),
+    )
+
+    coasted = manager.update(detections=[], ts=ts3, frame_shape=(100, 100, 3))
+
+    assert len(replaced) == 1
+    assert replaced[0].stable_track_id == 1
+    assert replaced[0].lifecycle_reason == "duplicate_replaced"
+    assert _bbox_center_x(replaced[0].detection.bbox) == pytest.approx(55.0)
+    x1, y1, x2, y2 = coasted[0].detection.bbox
+    assert (x2 - x1, y2 - y1) == pytest.approx((20.0, 20.0))
+    assert _bbox_center_x((x1, y1, x2, y2)) == pytest.approx(60.0)
+
+
+def test_coasting_preserves_bbox_size_and_moves_center_by_velocity() -> None:
+    manager = TrackLifecycleManager(
+        TrackLifecycleConfig(
+            coast_ttl_ms=2_500,
+            nominal_frame_interval_ms=100.0,
+            velocity_damping=1.0,
+        )
+    )
+    ts0 = datetime(2026, 1, 1, tzinfo=UTC)
+    ts1 = ts0 + timedelta(milliseconds=100)
+    ts2 = ts1 + timedelta(milliseconds=100)
+    manager.update(
+        detections=[_person(track_id=1, bbox=(100.0, 100.0, 140.0, 200.0))],
+        ts=ts0,
+        frame_shape=(300, 300, 3),
+    )
+    manager.update(
+        detections=[_person(track_id=1, bbox=(110.0, 100.0, 160.0, 200.0))],
+        ts=ts1,
+        frame_shape=(300, 300, 3),
+    )
+
+    tracks = manager.update(detections=[], ts=ts2, frame_shape=(300, 300, 3))
+
+    assert len(tracks) == 1
+    x1, y1, x2, y2 = tracks[0].detection.bbox
+    assert (x2 - x1, y2 - y1) == pytest.approx((50.0, 100.0))
+    assert ((x1 + x2) / 2.0) > 135.0
+
+
+def test_reobserved_coasting_track_uses_previous_observed_center_for_velocity() -> None:
+    manager = TrackLifecycleManager(
+        TrackLifecycleConfig(
+            coast_ttl_ms=2_500,
+            nominal_frame_interval_ms=100.0,
+            velocity_damping=1.0,
+        )
+    )
+    ts0 = datetime(2026, 1, 1, tzinfo=UTC)
+    ts1 = ts0 + timedelta(milliseconds=100)
+    ts2 = ts1 + timedelta(milliseconds=100)
+    ts3 = ts2 + timedelta(milliseconds=100)
+    ts4 = ts3 + timedelta(milliseconds=100)
+    manager.update(
+        detections=[_person(track_id=1, bbox=(5.0, 0.0, 15.0, 10.0))],
+        ts=ts0,
+        frame_shape=(100, 100, 3),
+    )
+    manager.update(
+        detections=[_person(track_id=1, bbox=(15.0, 0.0, 25.0, 10.0))],
+        ts=ts1,
+        frame_shape=(100, 100, 3),
+    )
+
+    coasted_once = manager.update(detections=[], ts=ts2, frame_shape=(100, 100, 3))
+    reobserved = manager.update(
+        detections=[_person(track_id=1, bbox=(35.0, 0.0, 45.0, 10.0))],
+        ts=ts3,
+        frame_shape=(100, 100, 3),
+    )
+    coasted_after_reobserve = manager.update(
+        detections=[],
+        ts=ts4,
+        frame_shape=(100, 100, 3),
+    )
+
+    assert _bbox_center_x(coasted_once[0].detection.bbox) == pytest.approx(30.0)
+    assert _bbox_center_x(reobserved[0].detection.bbox) == pytest.approx(40.0)
+    x1, y1, x2, y2 = coasted_after_reobserve[0].detection.bbox
+    assert (x2 - x1, y2 - y1) == pytest.approx((10.0, 10.0))
+    assert _bbox_center_x((x1, y1, x2, y2)) == pytest.approx(50.0)
+
+
+def test_confidence_ema_smooths_published_detection_confidence() -> None:
+    manager = TrackLifecycleManager(
+        TrackLifecycleConfig(confidence_ema_alpha=0.5, tentative_hits=1)
+    )
+    ts0 = datetime(2026, 1, 1, tzinfo=UTC)
+    manager.update(
+        detections=[_person(track_id=1, confidence=0.9)],
+        ts=ts0,
+        frame_shape=(300, 300, 3),
+    )
+    tracks = manager.update(
+        detections=[_person(track_id=1, confidence=0.5)],
+        ts=ts0 + timedelta(milliseconds=100),
+        frame_shape=(300, 300, 3),
+    )
+
+    assert tracks[0].detection.confidence == pytest.approx(0.7)
+
+
+def test_class_votes_stabilize_detector_flicker() -> None:
+    manager = TrackLifecycleManager(TrackLifecycleConfig(tentative_hits=1))
+    ts0 = datetime(2026, 1, 1, tzinfo=UTC)
+    manager.update(
+        detections=[_person(track_id=1, class_name="person")],
+        ts=ts0,
+        frame_shape=(300, 300, 3),
+    )
+    manager.update(
+        detections=[_person(track_id=1, class_name="person")],
+        ts=ts0 + timedelta(milliseconds=100),
+        frame_shape=(300, 300, 3),
+    )
+    tracks = manager.update(
+        detections=[_person(track_id=1, class_name="pedestrian")],
+        ts=ts0 + timedelta(milliseconds=200),
+        frame_shape=(300, 300, 3),
+    )
+
+    assert len(tracks) == 1
+    assert tracks[0].detection.class_name == "person"
+
+
+def test_detection_attributes_are_immutable_and_shared() -> None:
+    detection = Detection(
+        class_name="person",
+        confidence=0.9,
+        bbox=(0.0, 0.0, 1.0, 1.0),
+        attributes={"k": "v"},
+    )
+
+    with pytest.raises(TypeError):
+        detection.attributes["k"] = "changed"
+
+    copied = _copy_detection(detection)
+    assert copied.attributes is detection.attributes
 
 
 def test_overlapping_crossing_tracks_keep_one_stable_identity_for_one_object() -> None:

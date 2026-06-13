@@ -1,0 +1,12 @@
+{
+  "fixture_id": "tracker_continuity_people_001",
+  "description": "Redacted two-person continuity scene with class flicker and stable source motion.",
+  "fps": 15,
+  "frame_count": 220,
+  "classes": [
+    "person"
+  ],
+  "tracker_scene_profile": "difficult",
+  "iou_match_threshold": 0.5,
+  "redacted": true
+}

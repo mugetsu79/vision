@@ -10,6 +10,7 @@ from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Protocol, cast
 from uuid import UUID, uuid4
 
@@ -906,12 +907,33 @@ def _runtime_policy_uses_cpu_fallback(runtime_policy: RuntimeExecutionPolicy) ->
     )
 
 
+def _runtime_supports_reid(runtime_policy: RuntimeExecutionPolicy | None) -> bool:
+    if runtime_policy is None:
+        return False
+    if _runtime_policy_uses_cpu_fallback(runtime_policy):
+        return False
+    return runtime_policy.provider in {
+        "CUDAExecutionProvider",
+        "TensorrtExecutionProvider",
+    }
+
+
+def _tracker_config_has_local_safe_reid_model(tracker_config: TrackerConfig) -> bool:
+    model = str(tracker_config.model).strip()
+    if not model or model == "auto" or "://" in model:
+        return False
+    return Path(model).expanduser().is_file()
+
+
 def _tracker_config_from_resolved_profile(
     config: EngineConfig,
     tracker_type: TrackerType,
     resolved_profile: ResolvedSceneVisionProfile,
+    *,
+    effective_processing_fps: int,
+    runtime_policy: RuntimeExecutionPolicy | None = None,
 ) -> TrackerConfig:
-    frame_rate = max(1, int(config.tracker.frame_rate))
+    frame_rate = max(1, int(effective_processing_fps))
     memory_frames = resolved_profile.candidate_quality.memory_frames
     use_difficult_profile = (
         tracker_type is TrackerType.BOTSORT
@@ -922,18 +944,29 @@ def _tracker_config_from_resolved_profile(
         )
     )
     scene_profile = "difficult" if use_difficult_profile else "efficient"
-    return TrackerConfig.for_scene_profile(
+    tracker_config = TrackerConfig.for_scene_profile(
         scene_profile,
         tracker_type=tracker_type,
         frame_rate=frame_rate,
     )
+    tracker_config.with_reid = (
+        tracker_type is TrackerType.BOTSORT
+        and resolved_profile.tracker.appearance_ready
+        and _runtime_supports_reid(runtime_policy)
+        and _tracker_config_has_local_safe_reid_model(tracker_config)
+    )
+    tracker_config.gmc_method = resolved_profile.tracker.gmc_method
+    return tracker_config
 
 
 def _track_lifecycle_config_from_resolved_profile(
     config: EngineConfig,
     resolved_profile: ResolvedSceneVisionProfile,
+    *,
+    effective_processing_fps: int,
 ) -> TrackLifecycleConfig:
     del config
+    nominal_frame_interval_ms = 1000.0 / max(1, int(effective_processing_fps))
     coast_ttl_ms = round(float(resolved_profile.tracker.coast_seconds) * 1000)
     coast_ttl_ms = min(
         max(coast_ttl_ms, _TRACK_LIFECYCLE_MIN_COAST_TTL_MS),
@@ -942,6 +975,7 @@ def _track_lifecycle_config_from_resolved_profile(
     return TrackLifecycleConfig(
         coast_ttl_ms=coast_ttl_ms,
         tentative_hits=max(1, int(resolved_profile.tracker.new_track_min_hits)),
+        nominal_frame_interval_ms=nominal_frame_interval_ms,
     )
 
 
@@ -1156,6 +1190,8 @@ class InferenceEngine:
             self.config,
             tracker_type,
             self._resolved_vision_profile,
+            effective_processing_fps=self._effective_processing_fps_cap(),
+            runtime_policy=self._runtime_policy,
         )
         return _call_tracker_factory(self._tracker_factory, tracker_type, tracker_config)
 
@@ -1163,6 +1199,7 @@ class InferenceEngine:
         lifecycle_config = _track_lifecycle_config_from_resolved_profile(
             self.config,
             self._resolved_vision_profile,
+            effective_processing_fps=self._effective_processing_fps_cap(),
         )
         return TrackLifecycleManager(lifecycle_config)
 
@@ -2977,7 +3014,7 @@ def _telemetry_track_from_lifecycle_track(track: LifecycleTrack) -> TelemetryTra
         speed_kph=detection.speed_kph,
         direction_deg=detection.direction_deg,
         zone_id=detection.zone_id,
-        attributes=detection.attributes,
+        attributes=dict(detection.attributes),
     )
 
 

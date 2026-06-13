@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from math import hypot
 from typing import Literal, cast
@@ -34,6 +33,8 @@ class TrackLifecycleConfig:
     reassociate_iou_threshold: float = 0.35
     reassociate_center_distance_ratio: float = 0.45
     velocity_damping: float = 0.70
+    nominal_frame_interval_ms: float = 1000.0 / 25.0
+    confidence_ema_alpha: float = 0.4
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +64,43 @@ class _LifecycleMatch:
 
 
 @dataclass(slots=True)
+class _MotionFilter:
+    center_x: float
+    center_y: float
+    velocity_x_per_ms: float = 0.0
+    velocity_y_per_ms: float = 0.0
+    predicted_center_x: float | None = None
+    predicted_center_y: float | None = None
+
+    def update(self, bbox: BoundingBox, dt_ms: float) -> None:
+        new_center_x, new_center_y, _, _ = _bbox_center_size(bbox)
+        safe_dt = max(1.0, dt_ms)
+        self.velocity_x_per_ms = (new_center_x - self.center_x) / safe_dt
+        self.velocity_y_per_ms = (new_center_y - self.center_y) / safe_dt
+        self.center_x = new_center_x
+        self.center_y = new_center_y
+        self.predicted_center_x = new_center_x
+        self.predicted_center_y = new_center_y
+
+    def predict(self, dt_ms: float, damping: float) -> tuple[float, float]:
+        self.velocity_x_per_ms *= damping
+        self.velocity_y_per_ms *= damping
+        base_center_x = (
+            self.predicted_center_x
+            if self.predicted_center_x is not None
+            else self.center_x
+        )
+        base_center_y = (
+            self.predicted_center_y
+            if self.predicted_center_y is not None
+            else self.center_y
+        )
+        self.predicted_center_x = base_center_x + self.velocity_x_per_ms * dt_ms
+        self.predicted_center_y = base_center_y + self.velocity_y_per_ms * dt_ms
+        return self.predicted_center_x, self.predicted_center_y
+
+
+@dataclass(slots=True)
 class _TrackMemory:
     stable_track_id: int
     class_name: str
@@ -74,7 +112,11 @@ class _TrackMemory:
     updated_ts: datetime
     hits: int = 0
     missing_updates: int = 0
-    velocity: BoundingBox = (0.0, 0.0, 0.0, 0.0)
+    motion_filter: _MotionFilter | None = None
+    last_width: float = 0.0
+    last_height: float = 0.0
+    confidence_ema: float | None = None
+    class_votes: dict[str, int] = field(default_factory=dict)
     lifecycle_reason: TrackLifecycleReason | None = None
 
 
@@ -199,7 +241,6 @@ class TrackLifecycleManager:
         has_source_match = (
             source_stable_id is not None
             and source_stable_id in self._tracks
-            and self._tracks[source_stable_id].class_name == detection.class_name
         )
         return (0 if has_source_match else 1, -detection.confidence)
 
@@ -216,7 +257,6 @@ class TrackLifecycleManager:
             memory = self._tracks.get(stable_id) if stable_id is not None else None
             if (
                 memory is not None
-                and memory.class_name == detection.class_name
                 and stable_id not in matched_stable_ids
                 and self._source_match_is_plausible(memory, bbox)
             ):
@@ -303,15 +343,31 @@ class TrackLifecycleManager:
         if source_track_id is not None:
             self._stable_id_by_source[source_track_id] = stable_id
 
-        previous_bbox = memory.detection.bbox
         bbox = _clamp_bbox(detection.bbox, frame_shape)
-        memory.velocity = cast(BoundingBox, tuple(
-            bbox[index] - previous_bbox[index]
-            for index in range(4)
-        ))
+        dt_ms = max(1, _elapsed_ms(memory.last_seen_ts, ts))
+        center_x, center_y, width, height = _bbox_center_size(bbox)
+        if memory.motion_filter is None:
+            memory.motion_filter = _MotionFilter(center_x=center_x, center_y=center_y)
+        else:
+            memory.motion_filter.update(bbox, float(dt_ms))
+        memory.last_width = width
+        memory.last_height = height
+        memory.confidence_ema = (
+            detection.confidence
+            if memory.confidence_ema is None
+            else self.config.confidence_ema_alpha * detection.confidence
+            + (1.0 - self.config.confidence_ema_alpha) * memory.confidence_ema
+        )
+        memory.class_votes[detection.class_name] = (
+            memory.class_votes.get(detection.class_name, 0) + 1
+        )
+        published_class_name = _voted_class_name(
+            memory.class_votes,
+            detection.class_name,
+        )
         memory.hits += 1
         memory.source_track_id = source_track_id
-        memory.class_name = detection.class_name
+        memory.class_name = published_class_name
         memory.state = (
             "active"
             if memory.state in {"active", "coasting"}
@@ -320,7 +376,12 @@ class TrackLifecycleManager:
             else "tentative"
         )
         memory.detection = _copy_detection(
-            detection.with_updates(track_id=stable_id, bbox=bbox)
+            detection.with_updates(
+                track_id=stable_id,
+                bbox=bbox,
+                confidence=memory.confidence_ema,
+                class_name=published_class_name,
+            )
         )
         memory.lifecycle_reason = lifecycle_reason
         memory.last_seen_ts = ts
@@ -432,12 +493,32 @@ class TrackLifecycleManager:
         selected.source_track_id = duplicate.source_track_id
         if duplicate.source_track_id is not None:
             self._stable_id_by_source[duplicate.source_track_id] = selected.stable_track_id
+        for class_name, count in duplicate.class_votes.items():
+            selected.class_votes[class_name] = selected.class_votes.get(class_name, 0) + count
+        selected.class_name = _voted_class_name(
+            selected.class_votes,
+            duplicate.detection.class_name,
+        )
+        if duplicate.confidence_ema is not None:
+            selected.confidence_ema = (
+                duplicate.confidence_ema
+                if selected.confidence_ema is None
+                else max(selected.confidence_ema, duplicate.confidence_ema)
+            )
+        selected.motion_filter = _copy_motion_filter(duplicate.motion_filter)
+        selected.last_width = duplicate.last_width
+        selected.last_height = duplicate.last_height
         selected.detection = _copy_detection(
             duplicate.detection.with_updates(
                 track_id=selected.stable_track_id,
+                class_name=selected.class_name,
+                confidence=(
+                    selected.confidence_ema
+                    if selected.confidence_ema is not None
+                    else duplicate.detection.confidence
+                ),
             )
         )
-        selected.velocity = duplicate.velocity
         selected.last_seen_ts = duplicate.last_seen_ts
         selected.updated_ts = duplicate.updated_ts
         selected.missing_updates = 0
@@ -451,19 +532,35 @@ class TrackLifecycleManager:
     ) -> None:
         memory.state = "coasting"
         memory.lifecycle_reason = "coasting"
-        memory.updated_ts = ts
         memory.missing_updates += 1
-        damping = self.config.velocity_damping ** memory.missing_updates
-        predicted_bbox = cast(BoundingBox, tuple(
-            memory.detection.bbox[index] + memory.velocity[index] * damping
-            for index in range(4)
-        ))
+        dt_ms = max(1, _elapsed_ms(memory.updated_ts, ts))
+        damping = self.config.velocity_damping ** (
+            dt_ms / max(1.0, self.config.nominal_frame_interval_ms)
+        )
+        if memory.motion_filter is None:
+            center_x, center_y, width, height = _bbox_center_size(memory.detection.bbox)
+            memory.motion_filter = _MotionFilter(center_x=center_x, center_y=center_y)
+            memory.last_width = width
+            memory.last_height = height
+        predicted_center_x, predicted_center_y = memory.motion_filter.predict(
+            float(dt_ms),
+            damping,
+        )
+        width = memory.last_width
+        height = memory.last_height
+        predicted_bbox = (
+            predicted_center_x - width / 2.0,
+            predicted_center_y - height / 2.0,
+            predicted_center_x + width / 2.0,
+            predicted_center_y + height / 2.0,
+        )
         memory.detection = _copy_detection(
             memory.detection.with_updates(
                 track_id=memory.stable_track_id,
                 bbox=_clamp_bbox(predicted_bbox, frame_shape),
             )
         )
+        memory.updated_ts = ts
 
     def _to_lifecycle_track(
         self,
@@ -578,6 +675,38 @@ def _center_distance_ratio(left: BoundingBox, right: BoundingBox) -> float:
     return distance / reference
 
 
+def _bbox_center_size(bbox: BoundingBox) -> tuple[float, float, float, float]:
+    x1, y1, x2, y2 = bbox
+    width = max(0.0, x2 - x1)
+    height = max(0.0, y2 - y1)
+    return (x1 + width / 2.0, y1 + height / 2.0, width, height)
+
+
+def _voted_class_name(votes: dict[str, int], current_class_name: str) -> str:
+    best_count = max(votes.values(), default=0)
+    tied = [
+        class_name
+        for class_name, count in votes.items()
+        if count == best_count
+    ]
+    if current_class_name in tied:
+        return current_class_name
+    return sorted(tied)[0] if tied else current_class_name
+
+
+def _copy_motion_filter(motion_filter: _MotionFilter | None) -> _MotionFilter | None:
+    if motion_filter is None:
+        return None
+    return _MotionFilter(
+        center_x=motion_filter.center_x,
+        center_y=motion_filter.center_y,
+        velocity_x_per_ms=motion_filter.velocity_x_per_ms,
+        velocity_y_per_ms=motion_filter.velocity_y_per_ms,
+        predicted_center_x=motion_filter.predicted_center_x,
+        predicted_center_y=motion_filter.predicted_center_y,
+    )
+
+
 def _clamp_bbox(
     bbox: BoundingBox,
     frame_shape: tuple[int, ...] | None,
@@ -599,7 +728,7 @@ def _clamp_bbox(
 
 
 def _copy_detection(detection: Detection) -> Detection:
-    return detection.with_updates(attributes=deepcopy(detection.attributes))
+    return detection.with_updates()
 
 
 def _copy_lifecycle_track(track: LifecycleTrack) -> LifecycleTrack:

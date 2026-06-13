@@ -108,7 +108,7 @@ class RuleEngine:
                         "bbox": detection.bbox,
                         "track_id": detection.track_id,
                         "zone_id": detection.zone_id,
-                        "attributes": detection.attributes,
+                        "attributes": dict(detection.attributes),
                     },
                 )
                 await self.publisher.publish(f"evt.rule.{camera_id}", event)

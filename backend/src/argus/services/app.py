@@ -6337,8 +6337,9 @@ def _effective_worker_vision_profile(camera: Camera) -> SceneVisionProfile:
     if active_classes != {"person"} or profile.object_domain != "mixed":
         return profile
 
-    tracker_profile = dict(profile.tracker_profile)
-    tracker_profile.setdefault("coast_seconds", 5.0)
+    tracker_profile = profile.tracker_profile
+    if tracker_profile.coast_seconds is None:
+        tracker_profile = tracker_profile.model_copy(update={"coast_seconds": 5.0})
     return profile.model_copy(
         update={
             "object_domain": "people",

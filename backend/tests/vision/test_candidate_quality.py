@@ -96,12 +96,36 @@ def test_person_can_be_association_eligible_without_display_eligibility() -> Non
         frame_shape=FRAME_SHAPE,
     )
 
+    assert filtered == []
+    assert [
+        (decision.accepted, decision.display_eligible, decision.reason)
+        for decision in decisions
+    ] == [
+        (False, False, "new_track_low_confidence")
+    ]
+
+
+def test_association_eligible_person_extends_nearby_existing_track() -> None:
+    gate = CandidateQualityGate(
+        CandidateQualityConfig(
+            association_min_confidence={"person": 0.25, "default": 0.40},
+            display_min_confidence={"person": 0.45, "default": 0.40},
+        )
+    )
+    detection = _person(confidence=0.30, bbox=(112.0, 106.0, 272.0, 526.0))
+
+    filtered, decisions = gate.filter_detections(
+        [detection],
+        existing_tracks=[_stable_person_track()],
+        frame_shape=FRAME_SHAPE,
+    )
+
     assert filtered == [detection]
     assert [
         (decision.accepted, decision.display_eligible, decision.reason)
         for decision in decisions
     ] == [
-        (True, False, "new_track_high_confidence")
+        (True, False, "existing_track_association")
     ]
 
 

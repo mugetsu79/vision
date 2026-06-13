@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from argus.api.contracts import (
     BrowserDeliverySettings,
     SourceCapability,
+    TrackerProfileSettings,
     WorkerEvidenceStorageSettings,
     WorkerPrivacyPolicySettings,
     WorkerRuntimeSelectionSettings,
@@ -1346,6 +1347,7 @@ def test_camera_worker_config_uses_people_domain_for_person_only_mixed_default()
     )
 
     assert config.vision_profile.object_domain == "people"
+    assert isinstance(config.vision_profile.tracker_profile, TrackerProfileSettings)
     assert config.vision_profile.tracker_profile["coast_seconds"] == 5.0
 
 
