@@ -250,8 +250,9 @@ introduce new states, new fields, or new lifecycle reasons.
 
 1. **Replay benchmark gate.** Extend
    `backend/tests/scripts/test_tracking_replay_benchmark.py` to load a
-   committed person-only fixture clip (NATS replay or detection-stream
-   replay; format defined by the existing harness) and assert:
+   committed representative-scene fixture (mixed-class is fine; format
+   defined by the existing harness — NATS replay or detection-stream
+   replay) and assert:
    - **≥ 30% fewer ID switches** vs. the pre-A3 baseline run on the same
      fixture
    - **≥ 20% lower track fragmentation** (median count of distinct
@@ -379,12 +380,22 @@ No frontend changes. No API contract changes other than the additive
 
 ## Open Questions
 
-1. **Replay fixture provenance.** Where does the committed person-only
-   fixture come from? The harness format exists, but no committed clip
-   does. Proposed: capture a 30-second fixture from the live Jetson rig
-   the first time A3 is exercised, redact PII via the privacy pipeline
-   before committing, and store the redacted payload under
-   `backend/tests/scripts/fixtures/`. Approval needed before merge.
+1. **Replay fixture provenance.** Where does the committed
+   representative-scene fixture come from? The harness format exists,
+   but no committed fixture does.
+
+   Proposed: capture a ≥30-second segment from the live Jetson rig the
+   first time A3 is exercised — using the existing tracker
+   configuration the operator is already running, with whatever scene
+   composition is currently in front of the camera (mixed person +
+   vehicle, person-only if no vehicles are in view, etc. — the fixture
+   only needs ≥2 distinct ground-truth tracks to be useful for
+   measuring ID switches and fragmentation). Run the captured payload
+   through the existing privacy pipeline before committing if it
+   contains identifiable faces or plates, and store the redacted
+   payload under `backend/tests/scripts/fixtures/`.
+
+   Approval needed before merge.
 2. **`gmc_method` UI surfacing.** The `tracker_profile.gmc_method`
    override is reachable via JSON for now. Does it need a UI control in
    `CameraWizard.tsx` in this spec, or in a follow-up? Default proposal:
