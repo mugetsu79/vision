@@ -1,594 +1,630 @@
-# EVE-OS Edge App Packaging Design
+# EVE-OS And Bare-Metal Edge Image Matrix Packaging Design
 
 Date: 2026-06-13
 Branch: `codex/sceneops-pack-registry`
 Sequencing: **Last of three specs.** Depends on
 `2026-06-13-tracker-continuity-improvements-design.md` and
 `2026-06-13-dev-stack-stability-fixes-design.md` being merged first so
-the artifacts ship with the improved tracker and the stable dev stack.
+the artifact ships with the improved tracker and stable dev stack.
 
 ## Goal
 
-Make the Vezor edge worker easily deployable onto devices running
-[EVE-OS](https://lfedge.org/projects/eve/) (the LF Edge KVM-based edge
-hypervisor) as an EVE-OS App Instance. Two artifact shapes are shipped:
+Make the Vezor edge worker deployable on `linux/amd64` edge gateways
+through both Linux bare-metal installs and EVE-OS VM App Instances,
+with a small image matrix that keeps hardware support honest.
 
-1. A **VM app** (`vezor-edge-amd64.qcow2`) with optional accelerator
-   passthrough (NVIDIA GPU via VFIO PCIe, Intel iGPU via VFIO-mediated
-   passthrough, or no passthrough at all).
-2. An **OCI container app** (`ghcr.io/<org>/vezor-edge:VERSION-amd64`)
-   for hosts where container-app deployment is preferred.
+The shipped artifact is:
 
-Both target `linux/amd64` only and ship a **multi-vendor inference
-runtime** that auto-selects the best available acceleration at startup:
-NVIDIA CUDA, Intel via OpenVINO, or CPU fallback. The provider
-selection is built as a **pluggable registry** so future acceleration
-families (AMD ROCm, Coral, Hailo) can be added by dropping a wheel in,
-without re-architecting the EVE-OS artifacts. ARM64 and a dedicated
-no-cloud-init pairing endpoint remain explicit follow-up work.
+1. A **bare-metal Linux edge installer profile** selected with
+   `vezor install edge --runtime-profile <profile>` on amd64 gateways.
+2. A **VM app** (`vezor-edge-amd64.qcow2`) that runs that same Vezor
+   edge appliance model inside a Debian 12 guest for EVE-OS.
+3. A **selected edge worker image** from the amd64 image matrix that is
+   used by either the bare-metal Compose appliance or the EVE-OS VM
+   guest's Compose appliance.
+
+There is **no EVE-OS OCI app artifact** in this spec. The earlier
+container-app idea is intentionally removed because the current
+installer is host/VM-oriented: it writes `/etc/vezor`, configures
+NATS leaf and MediaMTX, claims pairing credentials, installs systemd
+units, and starts a multi-container appliance. That model fits Linux
+bare metal and a Debian VM guest. Running it inside a single EVE-OS OCI
+app would require a separate container-native bootstrap design.
+
+The generic image must always work on CPU. NVIDIA and Intel
+acceleration live in explicit vendor images with their own packaging,
+runtime checks, tests, and live evidence gates. There is no "magical
+generic GPU" image.
 
 ## Why Now
 
 The existing edge artifact (`backend/Dockerfile.edge`) is locked to
-NVIDIA L4T Jetson and Python 3.10. EVE-OS hosts are typically x86_64
-industrial gateways (Advantech, Lenovo ThinkEdge, Supermicro IoT,
-generic Intel NUCs) sometimes equipped with a discrete NVIDIA GPU. None
-of these can run the Jetson image as-is. A generic amd64 edge image
-plus EVE-OS App Instance packaging is the smallest path to "drop the
-Vezor edge onto an EVE-OS device and pair it from the master UI".
+NVIDIA L4T Jetson and Python 3.10. EVE-OS hosts are usually x86_64
+industrial gateways such as Advantech, Lenovo ThinkEdge, Supermicro
+IoT, Intel NUC-class devices, or compact servers. Some have NVIDIA
+dGPUs, some have Intel iGPUs, and many are CPU-only.
 
-This spec also unblocks the documented gap in
-`docs/deployment-modes-and-matrix.md` that "there is not currently a
-separate generic non-Jetson edge image that preserves Python 3.12".
+The current deployment matrix already documents the gap: there is no
+generic non-Jetson Python 3.12 edge image in the Compose stack. This
+spec closes that gap for amd64 bare metal first, then packages the same
+path as an EVE-OS VM artifact while preserving the hardened Jetson path
+and avoiding a single oversized image that mixes incompatible
+acceleration runtime stacks.
 
 ## Architecture Decision
 
-EVE-OS supports App Instance Configs in two flavours: VM (qcow2) and
-container (OCI). Both expose a *user-data* / environment-variable
-channel from the controller into the guest. Vezor reuses its existing
-`bin/vezor install edge --api-url … --session-id … --pairing-code …`
-flow inside the guest, driven by that channel. No new pairing protocol
-is designed.
+The amd64 edge path has two deployment targets that share the same
+installer profile and worker image matrix:
 
 ```text
-EVE-OS controller UI
-  -> App Instance Config
-       image ref         (qcow2 or OCI)
-       user-data / env   (VEZOR_API_URL, VEZOR_SESSION_ID,
-                          VEZOR_PAIRING_CODE)
-       device passthrough (optional: NVIDIA GPU via VFIO,
-                           USB Coral, etc.)
-       network attach     (LAN with camera reach)
+Linux bare-metal gateway
+  -> /usr/local/bin/vezor install edge --runtime-profile <profile> ...
+  -> systemd: vezor-edge.service
+  -> Docker Compose edge appliance
+       nats-leaf
+       mediamtx
+       vezor-supervisor
 
-EVE-OS host (qemu/KVM under EVE-OS runtime)
-  -> VM guest  (Debian 12 minimal)
+EVE-OS controller UI
+  -> VM App Instance Config
+       qcow2 image ref
+       NoCloud user-data:
+         VEZOR_API_URL
+         VEZOR_SESSION_ID
+         VEZOR_PAIRING_CODE
+       optional device passthrough:
+         NVIDIA dGPU via VFIO PCIe
+         Intel iGPU/render node when supported by the host
+
+EVE-OS host
+  -> qemu/KVM VM guest
+       cloud-init writes /etc/vezor/pairing.env
        systemd: vezor-eve-bootstrap.service
-       -> reads /var/lib/cloud/instance/user-data
-       -> execs `bin/vezor install edge ...`
-       -> systemd: vezor-edge.service takes over
-  OR
-  -> container guest (vezor-edge image)
-       entrypoint /usr/local/bin/eve-firstboot.sh
-       -> reads VEZOR_* env vars
-       -> execs `bin/vezor install edge ...`
-       -> exec /usr/local/bin/vezor-edge-supervisor
+       -> /usr/local/sbin/vezor-eve-firstboot
+       -> /usr/local/bin/vezor install edge --runtime-profile <profile> ...
+       -> systemd: vezor-edge.service
+       -> Docker Compose edge appliance
+            nats-leaf
+            mediamtx
+            vezor-supervisor
 ```
 
-The pairing flow ends in the existing supervisor lifecycle (systemd
-unit on the VM, PID-1 supervisor in the container). After pairing,
-control-plane operations are identical to a Linux master pairing a
-Jetson edge today.
+The pairing flow ends in the same supervisor lifecycle used by the
+current Linux/Jetson edge path. After pairing, control-plane behavior
+is identical: Operations changes desired state or sends lifecycle
+requests, and the edge supervisor owns worker processes and reports
+runtime truth.
 
-## Artifacts
+## Current Installer Status
 
-### Artifact 1 — `vezor-edge-amd64.qcow2`
+The current installer already provides the pieces the bare-metal and
+VM paths need:
+
+- `bin/vezor install edge` delegates to `installer/linux/install-edge.sh`.
+- Paired installs require `--api-url`, `--session-id`, and
+  `--pairing-code`.
+- The installer claims the pairing session before the long local image
+  build, writes the supervisor credential, and fixes credential
+  permissions for the non-root supervisor container user.
+- It writes `/etc/vezor/edge.json`, `/etc/vezor/supervisor.json`,
+  `/etc/vezor/edge.env`, NATS leaf config, and MediaMTX config.
+- It installs systemd services and starts the edge appliance.
+- The product appliance is a Compose stack with `nats-leaf`,
+  `mediamtx`, and `vezor-supervisor`.
+
+What is missing:
+
+- an amd64 edge image matrix with generic CPU, NVIDIA, and Intel
+  OpenVINO variants;
+- amd64 installer profiles that skip Jetson-only preflight and select
+  the correct image/runtime defaults;
+- a generic Compose base that does not require NVIDIA runtime by
+  default, plus vendor-specific override/profile hooks;
+- bare-metal amd64 operator documentation and tests that prove the
+  amd64 installer profile does not depend on EVE-OS;
+- VM packaging assets for EVE-OS.
+
+## Artifact: Bare-Metal amd64 Edge Profile
+
+| Property | Value |
+|---|---|
+| Entry point | `vezor install edge --runtime-profile <profile>` |
+| Architecture | `linux/amd64` |
+| Runtime owner | systemd-managed Vezor edge appliance on the host |
+| Worker image | one selected amd64 edge worker image from the release manifest or local build |
+| Compose base | `infra/install/compose/compose.edge-amd64.yml` |
+| Vendor overrides | NVIDIA and Intel OpenVINO Compose overrides selected only by explicit profile |
+
+The bare-metal profile is the shared product path. It runs directly on
+industrial PCs, NUC-class boxes, compact servers, and other Linux amd64
+gateways with camera network reach. It is also the path that the
+EVE-OS Debian VM calls from first boot.
+
+## Artifact: EVE-OS `vezor-edge-amd64.qcow2`
 
 | Property | Value |
 |---|---|
 | Base image | Debian 12 (`bookworm`) minimal cloud variant |
 | Architecture | `linux/amd64` |
-| Format | qcow2, ~3–5 GB compressed |
-| Pairing | Cloud-init NoCloud datasource (EVE-OS user-data) |
-| Acceleration | Multi-vendor runtime (see "Inference runtime" section): NVIDIA CUDA, Intel OpenVINO, or CPU fallback — auto-detected |
-| Build tool | Packer with the `qemu` builder |
-| Bakes in | Docker engine, `vezor-edge:VERSION-amd64` OCI image preloaded, `bin/vezor`, `vezor-eve-bootstrap.service` systemd unit, Intel GPU userspace drivers |
-| Runtime | The OCI image runs under Docker on the VM; pairing/supervisor lifecycle is owned by systemd; the OCI image carries the actual edge worker payload |
-| Distribution | GitHub Releases attachment per tag (placeholder; see Open Questions) |
+| Format | qcow2, compressed for release distribution |
+| Pairing | cloud-init NoCloud user-data writes `/etc/vezor/pairing.env` |
+| Runtime | systemd-managed Vezor edge appliance inside the VM |
+| Worker image | one selected amd64 edge worker image, preloaded into the guest Docker daemon |
+| Build tool | Packer `qemu` builder |
+| Distribution | Release attachment or internal artifact store, final endpoint to confirm |
 
-The VM exists primarily to be a *known-good Linux host* that EVE-OS can
-manage as a single app, with accelerator passthrough configured at the
-EVE-OS App Config level (VFIO for NVIDIA, VFIO-mediated devices for
-Intel iGPU). The qcow2 bakes in:
+The VM is the product boundary for EVE-OS. It gives us a normal Linux
+host with systemd, Docker, persistent `/etc/vezor`, persistent
+`/var/lib/vezor`, and predictable Compose behavior. That matches the
+current product installer and avoids creating a second pairing model.
 
-- Intel GPU userspace drivers: `intel-opencl-icd`,
-  `intel-media-va-driver-non-free`, `libze1`, `libze-intel-gpu1` —
-  these are small and cover both iGPU and discrete Intel Arc.
-- A first-boot NVIDIA driver fetch script that runs only if a VFIO
-  NVIDIA device is detected. This keeps the qcow2 generic across
-  NVIDIA generations (T4, L4, A2, RTX A2000, etc.) instead of locking
-  one driver version into the image.
+The qcow2 includes:
 
-If no accelerator is passed through, the same image runs CPU-only
-inference, with capacity limits documented (2–4 cameras at 480p/5 FPS
-on an 8-core gateway).
+- Docker Engine and Docker Compose v2;
+- cloud-init NoCloud support;
+- `/usr/local/bin/vezor` and installer support files;
+- the selected amd64 edge worker image loaded into Docker;
+- `vezor-eve-bootstrap.service`;
+- `vezor-eve-firstboot`;
+- optional host userspace packages needed for GPU detection, kept
+  modest and documented.
 
-### Artifact 2 — `ghcr.io/<org>/vezor-edge:VERSION-amd64`
+## Edge Worker Image Matrix
 
-| Property | Value |
-|---|---|
-| Architecture | `linux/amd64` |
-| Base image | `python:3.12-slim-bookworm` |
-| Inference runtime | Multi-vendor: `onnxruntime-gpu` (CUDA EPs) + `openvino` (Intel) + CPU; auto-selected at startup (see "Inference runtime" section) |
-| Pairing | Environment variables `VEZOR_API_URL`, `VEZOR_SESSION_ID`, `VEZOR_PAIRING_CODE` |
-| Accelerator access | NVIDIA: EVE-OS host runtime exposes the GPU via `--gpus`-style hooks (more constrained on EVE-OS than stock Docker; tested via the VM path as the recommended deployment shape for NVIDIA). Intel iGPU: host must expose `/dev/dri/renderD*` to the container. CPU works unconditionally. |
-| Build | New `backend/Dockerfile.edge.amd64` |
-| Distribution | GitHub Container Registry (placeholder; see Open Questions) |
+Create an explicit image matrix instead of one generic image that tries
+to carry every accelerator stack.
 
-The container artifact is the lighter-weight option, suitable for
-EVE-OS deployments where the host runtime is configured for containers.
-It uses standard PyPI PyTorch and ONNX Runtime wheels (not
-Jetson-pinned), so the build is hermetic against the L4T base image
-used by `Dockerfile.edge`. The Intel-acceleration path is via the
-`openvino` Python toolkit; the NVIDIA path is via ONNX Runtime GPU's
-CUDA execution provider.
+| Image | Purpose | Runtime promise |
+|---|---|---|
+| `vezor/edge-worker:VERSION-generic-amd64` | default x86_64 EVE-OS and Linux edge image | CPU inference works on a plain amd64 host or VM |
+| `vezor/edge-worker:VERSION-nvidia-amd64` | x86_64 gateways with NVIDIA dGPU passthrough | CUDA is used only when the device stack is exposed and `CUDAExecutionProvider` initializes |
+| `vezor/edge-worker:VERSION-intel-openvino-amd64` | Intel gateways with validated iGPU/NPU/render-device exposure | OpenVINO is used only when the selected OpenVINO device compiles and runs the model |
+| existing Jetson image | Jetson/L4T edge path | Jetson-specific runtime remains separate |
 
-## Inference Runtime: Pluggable Multi-Vendor Provider Registry
+All amd64 images share the same application code and supervisor entry
+points. They differ only in base runtime dependencies, installed
+inference packages, and default runtime profile.
 
-### Motivation
+### Generic amd64 image
 
-The existing edge image (`Dockerfile.edge`) is Jetson-only and binds
-the inference path to TensorRT + ONNX Runtime GPU. EVE-OS hosts span
-NVIDIA dGPU, Intel iGPU/Arc, plain Intel CPU, and (later) AMD or
-USB/M.2 NPU accelerators. The edge worker needs a runtime layer that:
+Create `backend/Dockerfile.edge.generic-amd64` or keep
+`backend/Dockerfile.edge.amd64` as the generic image if that name is
+already in use by the implementation plan.
 
-- detects available acceleration at startup
-- picks the highest-priority working provider
-- falls back cleanly to CPU
-- is extensible to new accelerators without re-baking the image
+Required behavior:
 
-### Built-in providers (first release)
+- CPU inference works on a plain amd64 host or VM.
+- No NVIDIA, Intel GPU, AMD, Coral, Hailo, or NPU acceleration claims.
+- Runtime telemetry reports CPU fallback truthfully.
+- This is the default image for EVE-OS until an operator deliberately
+  selects a vendor-specific image/profile.
 
-| Provider | Package | Detected by | Priority |
+Image contents:
+
+- Python 3.12 runtime;
+- `ffmpeg` and the existing capture dependencies used by the edge
+  worker;
+- ONNX Runtime CPU path;
+- Ultralytics dependencies already needed by the current worker stack;
+- no Jetson-only TensorRT wheel bootstrap;
+- no CUDA/OpenVINO packages unless needed for CPU-only runtime
+  compatibility;
+- `YOLO_CONFIG_DIR=/tmp` or another non-home writable path to prevent
+  runtime writes into read-only image locations.
+
+### NVIDIA amd64 image
+
+Create `backend/Dockerfile.edge.nvidia-amd64`.
+
+Required behavior:
+
+- CUDA inference is attempted only when the VM/container exposes a
+  working NVIDIA device stack and ONNX Runtime can initialize
+  `CUDAExecutionProvider`.
+- If CUDA provider initialization or detector session construction
+  fails, the worker falls back to CPU and reports the fallback reason.
+- No DeepStream implementation or claim is part of this image.
+- This image is not used as the default generic edge image.
+
+The NVIDIA image should keep the existing ONNX Runtime provider model
+and use the `linux-x86_64-nvidia` runtime profile. It must not imply
+central Dockerized GPU or Apple M-series acceleration.
+
+### Intel OpenVINO amd64 image
+
+Create `backend/Dockerfile.edge.intel-openvino-amd64` after hardware
+availability and validation criteria are agreed.
+
+Required behavior:
+
+- OpenVINO inference is attempted only when the VM/container exposes a
+  validated Intel target device and the selected OpenVINO backend can
+  compile and run the deployed model.
+- If OpenVINO provider or model compilation fails, the worker falls
+  back to CPU and reports the fallback reason.
+- The implementation may use ONNX Runtime OpenVINO Execution Provider
+  in this image because the image is Intel-specific. If live testing
+  shows that direct OpenVINO runtime is more reliable for the deployed
+  detector, document that choice and keep it isolated to this image.
+- `/dev/dri` or EVE-OS device passthrough requirements must be tested
+  before claiming Intel GPU acceleration.
+
+Intel/OpenVINO becomes a supported lane only after the image builds,
+the actual Vezor detector model runs, telemetry reports the selected
+OpenVINO target, CPU fallback works, and live evidence is captured on
+real Intel hardware.
+
+Do not reuse Jetson tags or publish a multi-arch manifest until each
+architecture and vendor image has independent live evidence.
+
+## Runtime Selection
+
+Do not introduce a parallel provider framework in
+`argus.inference.providers` for this phase. The repo already has the
+right abstraction seam in `argus.vision.runtime`:
+
+- `ExecutionProvider`;
+- `ExecutionProfile`;
+- host classification;
+- provider priority by profile;
+- provider override through existing settings;
+- detector construction fallback in the inference engine.
+
+This spec extends that existing runtime policy rather than replacing
+it.
+
+Required changes:
+
+- Add or refine a generic `linux-x86_64-generic` or
+  `linux-x86_64-edge` execution profile if the current profiles are too
+  vendor-specific.
+- Keep `linux-x86_64-nvidia` for the NVIDIA amd64 image and hosts
+  where CUDA providers are actually available.
+- Keep or refine `linux-x86_64-intel` for the Intel OpenVINO image only
+  when the runtime can really use the selected provider/device.
+- Keep CPU fallback as the guaranteed baseline.
+- Log selected image/runtime profile, selected provider/backend,
+  selected accelerator device when applicable, available providers, and
+  fallback reason once per worker start.
+- Continue reporting runtime selection through existing supervisor
+  runtime reports.
+
+Operator override should use existing settings names, not a new
+parallel environment variable. Today that means:
+
+```text
+ARGUS_INFERENCE_EXECUTION_PROVIDER_OVERRIDE=CPUExecutionProvider
+ARGUS_INFERENCE_EXECUTION_PROFILE_OVERRIDE=cpu-fallback
+```
+
+If we add friendlier aliases later, they must map into these existing
+settings.
+
+### What "Basic GPU If Present" Means
+
+This does make sense if defined narrowly:
+
+- CPU is the only universal guarantee and belongs to the generic image.
+- NVIDIA dGPU acceleration is first-class in the NVIDIA image after the
+  device is passed through and the CUDA provider initializes.
+- Intel iGPU/NPU acceleration is first-class in the Intel OpenVINO
+  image after the selected OpenVINO device compiles and runs the model
+  on real hardware.
+- AMD ROCm, Coral, Hailo, and other accelerators are out of scope.
+
+The UI and docs must say "accelerator detected/selected" only from
+runtime evidence, not from host inventory alone.
+
+## Installer Changes
+
+Add amd64 runtime profiles to the existing installer instead of
+creating a new installer:
+
+```bash
+sudo /usr/local/bin/vezor install edge \
+  --runtime-profile generic-amd64 \
+  --api-url "$VEZOR_API_URL" \
+  --session-id "$VEZOR_SESSION_ID" \
+  --pairing-code "$VEZOR_PAIRING_CODE" \
+  --edge-name "$(hostname)"
+```
+
+Supported amd64 profiles:
+
+| Runtime profile | Worker image key | Dockerfile | Default acceleration behavior |
 |---|---|---|---|
-| `cuda` | `onnxruntime-gpu` (`CUDAExecutionProvider`) | `nvidia-smi` exits 0 and `CUDAExecutionProvider` loads | 100 |
-| `openvino` | `openvino` (Python toolkit, used directly — not via an ORT EP) | `/dev/dri/renderD*` exists and `openvino.Core().available_devices` includes `GPU` or `CPU` with vector extensions | 80 |
-| `cpu` | `onnxruntime` (`CPUExecutionProvider`) | always | 10 |
+| `generic-amd64` | `edge-worker-generic-amd64` | `backend/Dockerfile.edge.generic-amd64` or `backend/Dockerfile.edge.amd64` | CPU only |
+| `nvidia-amd64` | `edge-worker-nvidia-amd64` | `backend/Dockerfile.edge.nvidia-amd64` | CUDA if runtime evidence proves it, CPU fallback |
+| `intel-openvino-amd64` | `edge-worker-intel-openvino-amd64` | `backend/Dockerfile.edge.intel-openvino-amd64` | OpenVINO target if runtime evidence proves it, CPU fallback |
 
-The Jetson edge image (`Dockerfile.edge`) keeps its own dedicated
-provider (`tensorrt`) registered with priority 150 and remains
-unaffected by this work.
+All amd64 profiles do the following:
 
-### Registry interface
+- skip `scripts/jetson-preflight.sh`;
+- select the profile-specific Dockerfile for dev/local builds;
+- select the profile-specific manifest image key for release builds;
+- write an edge env file with the selected amd64 worker image;
+- use the generic Compose base plus profile-specific overrides;
+- keep NATS leaf, MediaMTX, credentials, model directory, edge-agent,
+  and supervisor config behavior unchanged;
+- set amd64 publish/runtime defaults rather than Jetson-specific
+  defaults.
 
-A new module `backend/src/argus/inference/providers/` exposes:
+The existing Jetson path stays unchanged. If no runtime profile is
+provided on an actual Jetson, current behavior remains the default. On
+`linux/amd64`, the installer may default to `generic-amd64` after tests
+prove that path. The installer must not auto-select NVIDIA or Intel
+images from inventory alone; vendor image selection is an explicit
+profile choice until fleet policy is designed.
 
-```python
-class InferenceProvider(Protocol):
-    name: str
-    priority: int
+## Compose Shape
 
-    def is_available(self) -> bool: ...
-    def build_detector(self, model_path: Path,
-                       *, config: DetectorConfig) -> Detector: ...
-```
+The generic amd64 edge appliance remains a multi-container Compose
+stack:
 
-Built-in providers register themselves on import:
+- `nats-leaf`;
+- `mediamtx`;
+- `vezor-supervisor`.
 
-```
-backend/src/argus/inference/providers/
-├── __init__.py        # registry + selection logic
-├── cuda.py            # CUDAExecutionProvider via ORT
-├── openvino.py        # openvino toolkit direct
-├── cpu.py             # CPUExecutionProvider via ORT
-└── tensorrt.py        # Jetson-only (already exists, moved here)
-```
+Create:
 
-Third-party providers can register via the Python entry-point group
-`argus.inference.providers`:
+- `infra/install/compose/compose.edge-amd64.yml` as the generic base;
+- optional vendor override/profile files only when their image evidence
+  gates are ready.
 
-```toml
-# in a third-party package's pyproject.toml
-[project.entry-points."argus.inference.providers"]
-coral = "vezor_provider_coral:CoralEdgeTPUProvider"
-hailo = "vezor_provider_hailo:HailoProvider"
-```
+Recommendation: create `compose.edge-amd64.yml` first. It avoids
+changing Jetson defaults while the generic path is still new.
 
-At startup, `backend/src/argus/inference/engine.py` calls
-`select_provider()`, which:
+Differences from the Jetson compose:
 
-1. Imports the providers module (built-ins register).
-2. Loads any entry-point providers from the `argus.inference.providers`
-   group.
-3. Filters by `is_available()`.
-4. Sorts by `priority` descending.
-5. Returns the highest-priority available provider.
+- no default `runtime: nvidia`;
+- no Jetson RTSP tuning env vars by default;
+- selected amd64 publish profile;
+- CPU thread caps still present;
+- optional NVIDIA runtime/device settings enabled only through env or a
+  documented `nvidia-amd64` override/profile;
+- optional `/dev/dri` mapping only in the `intel-openvino-amd64`
+  override/profile after OpenVINO evidence exists.
 
-The selection is logged once at startup with the chosen provider name,
-detected device, and any providers that failed `is_available()` with
-their reason. An operator override is available via the
-`ARGUS_INFERENCE_PROVIDER` env var (e.g.
-`ARGUS_INFERENCE_PROVIDER=cpu` to force CPU even when a GPU is
-present).
+## EVE-OS First Boot
 
-### What this replaces
+The VM first-boot service is idempotent:
 
-The existing `backend/src/argus/vision/detector_factory.py` already
-picks between detector implementations based on the model file type
-(`.onnx` vs `.pt` vs `.engine`). It keeps that responsibility. The
-new provider registry sits *underneath* it, choosing which ONNX
-Runtime execution provider (or OpenVINO toolkit invocation) the
-ONNX-based detectors use.
+1. Refuses to run if `/var/lib/vezor/paired.marker` exists.
+2. Sources `/etc/vezor/pairing.env`.
+3. Verifies `VEZOR_API_URL`, `VEZOR_SESSION_ID`, and
+   `VEZOR_PAIRING_CODE` are present.
+4. Defaults `VEZOR_RUNTIME_PROFILE` to `generic-amd64` when unset.
+5. Runs `vezor install edge --runtime-profile "$VEZOR_RUNTIME_PROFILE" ...`.
+6. On success, writes `/var/lib/vezor/paired.marker`.
+7. Disables `vezor-eve-bootstrap.service`.
+8. Leaves `vezor-edge.service` as the long-running appliance owner.
 
-The macOS host-worker CoreML preference noted in commit `c763230` is
-folded into a new `coreml` provider for the macOS dev path only — same
-registry pattern, registered when `sys.platform == "darwin"`. This is
-a small extension of existing logic, not a rewrite.
-
-### Failure handling
-
-If `is_available()` returns `True` but `build_detector()` raises at
-session-construction time, the engine catches the exception, logs it,
-falls back to the next provider in the sorted list, and continues.
-This means a misconfigured Intel GPU driver does not crash the worker
-— it degrades to CPU and surfaces the failure in logs and the
-operations dashboard.
+Missing env vars produce a clear non-zero exit with no secret values
+printed.
 
 ## New Files And Directories
 
-```
-infra/install/eve-os/
-├── README.md                          operator deployment walkthrough
-├── vm/
-│   ├── packer.pkr.hcl                 Packer build descriptor
-│   ├── debian-preseed.cfg             unattended Debian install seed
-│   ├── firstboot.sh                   reads cloud-init user-data, execs pairing
-│   ├── vezor-eve-bootstrap.service    systemd unit invoking firstboot.sh once
-│   ├── vezor-edge.service.template    systemd unit template installed by
-│   │                                   `bin/vezor install edge`
-│   ├── nvidia-firstboot.sh            optional NVIDIA driver fetch (skipped
-│   │                                   if no VFIO NVIDIA device detected)
-│   └── eve-app-manifest.json          sample EVE-OS App Instance Config
-└── container/
-    ├── Dockerfile                      thin wrapper over Dockerfile.edge.amd64
-    ├── eve-firstboot.sh                env-var reader, execs pairing
-    └── eve-app-manifest.json           sample EVE-OS App Instance Config
-
+```text
 backend/
-├── Dockerfile.edge.amd64               generic amd64 edge image (Python 3.12,
-│                                        onnxruntime-gpu + openvino + cpu)
-└── src/argus/inference/providers/      pluggable provider registry
-    ├── __init__.py                     registry + select_provider()
-    ├── cuda.py
-    ├── openvino.py
-    ├── cpu.py
-    └── tensorrt.py                     existing TensorRT path moved here
+├── Dockerfile.edge.generic-amd64
+├── Dockerfile.edge.nvidia-amd64
+└── Dockerfile.edge.intel-openvino-amd64
+
+infra/install/compose/
+├── compose.edge-amd64.yml
+├── compose.edge.nvidia-amd64.override.yml
+└── compose.edge.intel-openvino-amd64.override.yml
+
+infra/install/bare-metal/
+└── edge-amd64.md
+
+infra/install/eve-os/
+├── README.md
+└── vm/
+    ├── packer.pkr.hcl
+    ├── debian-preseed.cfg
+    ├── firstboot.sh
+    ├── vezor-eve-bootstrap.service
+    └── eve-app-manifest.json
 ```
 
-The `infra/install/eve-os/` layout mirrors the existing
-`infra/install/compose/` and installer scripts, keeping packaging
-assets discoverable under one tree.
+Optional if we validate NVIDIA passthrough in the VM:
 
-## Pairing Flow Detail
-
-### VM (cloud-init NoCloud)
-
-EVE-OS exposes App Instance user-data to the guest as a NoCloud
-datasource. The Debian image's cloud-init reads it from
-`/var/lib/cloud/instance/user-data` on first boot. Operators supply
-user-data as YAML in the EVE-OS controller UI:
-
-```yaml
-#cloud-config
-write_files:
-  - path: /etc/vezor/pairing.env
-    permissions: '0600'
-    content: |
-      VEZOR_API_URL=https://master.example.com
-      VEZOR_SESSION_ID=...
-      VEZOR_PAIRING_CODE=...
-runcmd:
-  - systemctl enable --now vezor-eve-bootstrap.service
+```text
+infra/install/eve-os/vm/nvidia-firstboot.sh
 ```
 
-`vezor-eve-bootstrap.service` runs `firstboot.sh`, which:
-
-1. Refuses to run if `/var/lib/vezor/paired.marker` exists (idempotent
-   across reboots).
-2. Sources `/etc/vezor/pairing.env`.
-3. Execs `/usr/local/bin/vezor install edge --api-url
-   "$VEZOR_API_URL" --session-id "$VEZOR_SESSION_ID" --pairing-code
-   "$VEZOR_PAIRING_CODE" --edge-name "$(hostname)"`.
-4. On success, writes `/var/lib/vezor/paired.marker` and
-   `systemctl disable vezor-eve-bootstrap.service`. The
-   installer-managed `vezor-edge.service` takes over.
-
-### Container (env vars)
-
-The OCI image's entrypoint is `/usr/local/bin/eve-firstboot.sh`:
-
-1. Refuses to run if `/var/lib/vezor/paired.marker` exists (the marker
-   lives on a persistent volume EVE-OS mounts at
-   `/var/lib/vezor/`).
-2. Reads `VEZOR_API_URL`, `VEZOR_SESSION_ID`, `VEZOR_PAIRING_CODE` from
-   the container environment.
-3. Execs `/usr/local/bin/vezor install edge --api-url … --session-id …
-   --pairing-code …`.
-4. On success, writes the marker and `exec`s the long-running
-   `/usr/local/bin/vezor-edge-supervisor`.
-
-If the env vars are missing on first start, the container exits
-non-zero with a clear log message instructing the operator to populate
-them in the App Instance Config.
-
-### What `bin/vezor install edge` already does
-
-The existing pairing CLI handles: token exchange, credential storage
-under `/etc/vezor/edge-credentials.json`, NATS leaf config seeding,
-MediaMTX config, and registering the supervisor systemd unit. None of
-this needs to change for EVE-OS. The EVE-OS spec only adds the
-*invocation surface* on the guest side.
+Do not create `infra/install/eve-os/container/` in this spec.
 
 ## Build Pipeline
 
-### `backend/Dockerfile.edge.amd64`
-
-Multi-stage, mirrors `Dockerfile` (the central image) more closely than
-`Dockerfile.edge`. Key differences from `Dockerfile`:
-
-- Adds `ffmpeg`, `gstreamer1.0-tools`, `gstreamer1.0-plugins-{base,good,bad}`,
-  `gstreamer1.0-libav`, `gstreamer1.0-rtsp`, `python3-gst-1.0` to the
-  runtime layer (for camera capture).
-- Adds Intel GPU userspace drivers: `intel-opencl-icd`,
-  `intel-media-va-driver-non-free`, `libze1`, `libze-intel-gpu1` (all
-  small; enables OpenVINO `GPU` device when the host exposes
-  `/dev/dri/renderD*`).
-- Installs `onnxruntime-gpu==1.20.*` from PyPI (CUDA + CPU EPs in one
-  package).
-- Installs `openvino==2025.*` from PyPI (Intel toolkit; used directly,
-  not via an ORT EP).
-- Installs standard `torch==2.5.*` and `torchvision==0.20.*` from PyPI
-  (CUDA 12.4 build; used by Ultralytics for the detector graph
-  pre-conversion to ONNX).
-- Installs `ultralytics>=8.3` from PyPI.
-- Entrypoint is the supervisor, not uvicorn.
-- Image size budget: ≤ 3.5 GB compressed. `onnxruntime-gpu` and
-  `openvino` together account for ~1.6 GB of that; the Intel userspace
-  drivers are ~150 MB.
-
-Build command (added to `Makefile`):
+Add Makefile targets:
 
 ```make
-edge-amd64-build:
+edge-generic-amd64-build:
 	docker buildx build \
 	  --platform linux/amd64 \
-	  -f backend/Dockerfile.edge.amd64 \
-	  -t vezor-edge:dev-amd64 \
+	  -f backend/Dockerfile.edge.generic-amd64 \
+	  -t vezor/edge-worker:dev-generic-amd64 \
 	  --load \
-	  backend
-```
+	  .
 
-### VM build (`infra/install/eve-os/vm/packer.pkr.hcl`)
+edge-nvidia-amd64-build:
+	docker buildx build \
+	  --platform linux/amd64 \
+	  -f backend/Dockerfile.edge.nvidia-amd64 \
+	  -t vezor/edge-worker:dev-nvidia-amd64 \
+	  --load \
+	  .
 
-Packer plan:
+edge-intel-openvino-amd64-build:
+	docker buildx build \
+	  --platform linux/amd64 \
+	  -f backend/Dockerfile.edge.intel-openvino-amd64 \
+	  -t vezor/edge-worker:dev-intel-openvino-amd64 \
+	  --load \
+	  .
 
-1. Boot Debian 12 minimal netinst ISO with the preseed file.
-2. Install Docker engine, cloud-init NoCloud datasource, and the
-   `bin/vezor` CLI.
-3. `docker pull vezor-edge:VERSION-amd64` (the OCI image built in the
-   previous step), tag it locally, and save it to
-   `/var/lib/vezor/images/vezor-edge.tar` for offline starts.
-4. Drop `vezor-eve-bootstrap.service` and `firstboot.sh` into
-   `/etc/systemd/system/` and `/usr/local/sbin/`.
-5. Trim apt cache, zero free space, shut down.
-6. Output: `vezor-edge-amd64.qcow2`.
-
-Build command (added to `Makefile`):
-
-```make
-eve-vm-build: edge-amd64-build
+eve-vm-build-generic-amd64: edge-generic-amd64-build
 	cd infra/install/eve-os/vm && packer build \
-	  -var vezor_edge_image=vezor-edge:VERSION-amd64 \
+	  -var vezor_runtime_profile=generic-amd64 \
+	  -var vezor_edge_image=vezor/edge-worker:dev-generic-amd64 \
 	  packer.pkr.hcl
 ```
 
-The `edge-amd64-build` prerequisite is intentional: the Packer plan
-loads the OCI image from the local Docker daemon, so the OCI build
-must complete before the VM build starts. Same applies to
-`eve-container-build`, which `FROM`s the same base.
+The NVIDIA and Intel VM build targets follow the same pattern after
+their image evidence gates pass.
 
-### Container build (`infra/install/eve-os/container/Dockerfile`)
-
-```dockerfile
-FROM vezor-edge:VERSION-amd64
-COPY eve-firstboot.sh /usr/local/bin/eve-firstboot.sh
-RUN chmod +x /usr/local/bin/eve-firstboot.sh
-ENTRYPOINT ["/usr/local/bin/eve-firstboot.sh"]
-```
-
-Build command (added to `Makefile`):
-
-```make
-eve-container-build: edge-amd64-build
-	docker buildx build \
-	  --platform linux/amd64 \
-	  -f infra/install/eve-os/container/Dockerfile \
-	  -t vezor-edge-eve:VERSION-amd64 \
-	  --build-arg BASE=vezor-edge:VERSION-amd64 \
-	  --load \
-	  infra/install/eve-os/container
-```
+The Docker build context should include the same paths the current
+central image needs, including `backend/` and `packs/`, so runtime pack
+behavior remains available.
 
 ## Acceptance Criteria
 
-### Required (merge gate)
+### Required merge gate
 
-1. **`make edge-amd64-build` succeeds in CI.** The image runs on a
-   stock amd64 Linux host with no GPU and `python -m
-   argus.inference.engine --help` exits 0 inside the container.
-2. **Provider selection unit tests.** New tests in
-   `backend/tests/inference/test_providers.py` cover: priority order,
-   `is_available()` failure handling, entry-point loading,
-   `ARGUS_INFERENCE_PROVIDER` override, and graceful fallback when
-   `build_detector()` raises. CPU provider always returns available.
-3. **CPU-path integration test.** `python -m argus.inference.engine`
-   inside the container with no accelerators reachable selects the
-   `cpu` provider, logs the selection, and processes one synthetic
-   frame end-to-end.
-4. **NVIDIA-path live evidence (recommended, see below).**
-5. **Intel-path live evidence (recommended, see below).**
-6. **`make eve-container-build` succeeds in CI.** Running
-   `docker run --rm --env VEZOR_API_URL=http://host.docker.internal:8000
-   --env VEZOR_SESSION_ID=<test> --env VEZOR_PAIRING_CODE=<test>
-   vezor-edge-eve:dev-amd64` against a local `make dev-up` master
-   reaches the "edge agent paired" state within 60 seconds.
-7. **`make eve-vm-build` succeeds in CI** (or in a documented
-   manual-run step if CI cannot run Packer + KVM; capture as
-   build-evidence under
-   `docs/superpowers/status/YYYY-MM-DD-eve-os-vm-build-evidence.md`).
-8. **VM boot smoke.** Booting the produced qcow2 under local KVM with
-   a NoCloud seed CD-ROM carrying the three pairing env vars reaches
-   "edge agent paired" against a `make dev-up` master within 5
-   minutes (initial boot includes apt updates and image load).
-9. **Idempotent pairing.** Rebooting the VM or restarting the
-   container after successful pairing does not re-trigger the pairing
-   flow; `vezor-edge.service` (or the supervisor PID-1) takes over.
-10. **No regressions in existing Jetson edge build.**
-    `backend/Dockerfile.edge` and `infra/docker-compose.edge.yml`
-    continue to build and run on the Jetson rig. The `tensorrt`
-    provider continues to be selected on Jetson with priority 150.
-11. **Documentation.** `infra/install/eve-os/README.md` is the
-    operator-facing walkthrough including the multi-vendor matrix;
-    `docs/full-installation-guide.md` gains a short section linking
-    to it.
+1. **Generic image builds.** `make edge-generic-amd64-build` succeeds
+   on an amd64 builder or documented amd64-capable buildx builder.
+2. **CPU smoke passes.** Running the generic image on a CPU-only amd64
+   host starts `python -m argus.inference.engine --help` and a
+   synthetic one-frame CPU inference smoke.
+3. **Runtime policy tests pass.** Tests cover generic amd64 host
+   classification, CPU fallback, provider override, and fallback after
+   provider initialization failure.
+4. **Installer profile tests pass.** Tests prove amd64 runtime
+   profiles skip Jetson preflight, select the correct Dockerfile/image
+   key, write the correct Compose base/override paths, and preserve
+   pairing/credential behavior.
+5. **Generic Compose test passes.** The generic Compose file includes
+   NATS leaf, MediaMTX, and supervisor, does not default to NVIDIA
+   runtime, and keeps secret/credential mounts compatible with the
+   current supervisor.
+6. **Bare-metal installer evidence exists.** Installer artifact tests
+   prove `--runtime-profile generic-amd64` resolves the generic worker
+   image, generic Compose base, and no EVE-OS-only first-boot assets.
+7. **Bare-metal docs updated.** `infra/install/bare-metal/edge-amd64.md`
+   documents generic, NVIDIA, and Intel profile selection, CPU baseline
+   behavior, and explicit non-claims for unvalidated acceleration.
+8. **VM build evidence exists.** `make eve-vm-build-generic-amd64`
+   either succeeds in CI/self-hosted CI, or a manual evidence file is
+   captured under
+   `docs/superpowers/status/YYYY-MM-DD-eve-os-vm-build-evidence.md`.
+9. **VM boot smoke passes.** Booting the qcow2 under local KVM with a
+   NoCloud seed reaches paired edge supervisor state against a local
+   or lab master.
+10. **Idempotent first boot.** Rebooting the VM after pairing does not
+   re-run the pairing claim.
+11. **Jetson regression gate passes.** Existing `backend/Dockerfile.edge`
+   and Jetson compose/install behavior remain unchanged and still run
+   on the Jetson rig.
+12. **EVE-OS docs updated.** `infra/install/eve-os/README.md` documents
+    EVE-OS deployment, the image matrix, CPU baseline, optional vendor
+    images, and the explicit non-claims for unvalidated acceleration.
 
-### Recommended evidence (not merge gate)
+### Recommended evidence
 
-12. **NVIDIA-path live evidence.** On a Linux host with an NVIDIA GPU
-    (Codex's existing access), run the container artifact and confirm
-    the `cuda` provider is selected, one synthetic-frame inference
-    succeeds, and the provider falls back to `cpu` when
-    `ARGUS_INFERENCE_PROVIDER=cpu` is set. Capture to
-    `docs/superpowers/status/YYYY-MM-DD-eve-os-nvidia-evidence.md`.
-13. **Intel-path live evidence.** If an Intel-iGPU host is available
-    (any modern Intel desktop or NUC), exercise the same flow with
-    `openvino` provider selected. If unavailable at merge time, this
-    is a follow-up.
-14. **Live EVE-OS deploy.** Once an EVE-OS test device is available,
-    the operator-facing walkthrough is exercised end-to-end against a
-    real RTSP source on at least one accelerator vendor, with results
-    captured to
-    `docs/superpowers/status/YYYY-MM-DD-eve-os-live-deploy-evidence.md`.
+13. **NVIDIA image evidence.** On an amd64 Linux host or EVE-OS VM with
+    NVIDIA passthrough, confirm the NVIDIA image builds, selects CUDA,
+    runs one synthetic inference, and supports CPU override fallback.
+14. **Intel OpenVINO image evidence.** On an Intel iGPU/NPU host or
+    EVE-OS VM with render-device exposure, confirm the Intel image
+    builds, selects the intended OpenVINO target, runs the actual
+    detector model, and supports CPU fallback.
+15. **Live EVE-OS deploy.** Once an EVE-OS test device is available,
+    exercise the operator walkthrough against a real RTSP source and
+    capture results.
 
 ## Test Plan
 
-- Unit tests: `infra/install/eve-os/vm/firstboot.sh` and
-  `infra/install/eve-os/container/eve-firstboot.sh` are shell scripts.
-  Add a `tests/installer/test_eve_firstboot.py` (or shell-based
-  `bats` test if the project standardises on that) that:
-  - asserts marker-file refusal works
-  - asserts missing-env-var path exits non-zero with the expected
-    message
-  - asserts the `bin/vezor install edge` invocation receives the
-    expected arguments (mocked)
-- Existing installer tests
-  (`installer/tests/test_edge_installer_artifacts.py`,
-  `installer/tests/test_linux_master_artifacts.py`) extended to assert
-  the EVE-OS asset directory exists, the sample manifests are
-  syntactically valid JSON, and the firstboot scripts are executable.
-- CI: a `lint-eve-os` target validates `eve-app-manifest.json` files
-  against the JSON Schema EVE-OS publishes.
+- Add runtime tests near `backend/tests/vision/test_runtime.py` for:
+  - generic amd64 CPU-only classification;
+  - NVIDIA amd64 profile/provider selection;
+  - Intel OpenVINO profile/provider selection;
+  - provider override to CPU;
+  - provider initialization fallback.
+- Add installer artifact tests to
+  `installer/tests/test_edge_installer_artifacts.py` for:
+  - `--runtime-profile generic-amd64`;
+  - `--runtime-profile nvidia-amd64`;
+  - `--runtime-profile intel-openvino-amd64`;
+  - profile-specific image keys;
+  - Jetson preflight not required on amd64 profiles;
+  - base and override Compose file paths in `/etc/vezor/edge.json`;
+  - no bearer tokens or raw secrets in generated assets.
+- Add first-boot script tests under installer tests:
+  - marker-file refusal;
+  - missing env var exits non-zero;
+  - generated `vezor install edge` args include
+    `--runtime-profile generic-amd64`;
+  - logs do not print pairing code values.
+- Add Compose tests for `compose.edge-amd64.yml`.
+- Add vendor Compose override tests when the NVIDIA and Intel images
+  are promoted.
+- Add documentation checks that the EVE-OS README does not claim OCI app
+  support or unvalidated vendor acceleration.
+- Add documentation checks that the bare-metal amd64 walkthrough does
+  not require EVE-OS, DeepStream, central Dockerized GPU, or Apple
+  M-series acceleration.
 
 ## Files Touched
 
 | File | Change |
 |---|---|
-| `backend/Dockerfile.edge.amd64` | new |
-| `backend/src/argus/inference/providers/__init__.py` | new — registry + `select_provider()` |
-| `backend/src/argus/inference/providers/cuda.py` | new |
-| `backend/src/argus/inference/providers/openvino.py` | new |
-| `backend/src/argus/inference/providers/cpu.py` | new |
-| `backend/src/argus/inference/providers/tensorrt.py` | move existing TensorRT detector path here, register at priority 150 |
-| `backend/src/argus/inference/providers/coreml.py` | new — folds the existing macOS CoreML preference (`c763230`) into the registry, registered only on `sys.platform == "darwin"` |
-| `backend/src/argus/inference/engine.py` | call `select_provider()` at detector-build time; honour `ARGUS_INFERENCE_PROVIDER` override |
-| `backend/src/argus/vision/detector_factory.py` | route ONNX detectors through the selected provider |
-| `backend/src/argus/core/config.py` | new `ARGUS_INFERENCE_PROVIDER` setting (optional override) |
-| `backend/pyproject.toml` | declare `argus.inference.providers` entry-point group; pin `openvino` and `onnxruntime-gpu` for the edge.amd64 extra |
-| `backend/tests/inference/test_providers.py` | new |
-| `infra/install/eve-os/README.md` | new |
-| `infra/install/eve-os/vm/packer.pkr.hcl` | new |
-| `infra/install/eve-os/vm/debian-preseed.cfg` | new |
-| `infra/install/eve-os/vm/firstboot.sh` | new |
-| `infra/install/eve-os/vm/nvidia-firstboot.sh` | new |
-| `infra/install/eve-os/vm/vezor-eve-bootstrap.service` | new |
-| `infra/install/eve-os/vm/eve-app-manifest.json` | new |
-| `infra/install/eve-os/container/Dockerfile` | new |
-| `infra/install/eve-os/container/eve-firstboot.sh` | new |
-| `infra/install/eve-os/container/eve-app-manifest.json` | new |
-| `Makefile` | `edge-amd64-build`, `eve-vm-build`, `eve-container-build`, `lint-eve-os` |
-| `docs/full-installation-guide.md` | new "EVE-OS edge app" subsection linking to the new README |
-| `installer/tests/test_edge_installer_artifacts.py` | extended assertions |
-| `tests/installer/test_eve_firstboot.py` (or bats equivalent) | new |
+| `backend/Dockerfile.edge.generic-amd64` | new generic amd64 CPU baseline edge worker image |
+| `backend/Dockerfile.edge.nvidia-amd64` | new NVIDIA amd64 edge worker image after evidence gate |
+| `backend/Dockerfile.edge.intel-openvino-amd64` | new Intel OpenVINO amd64 edge worker image after evidence gate |
+| `backend/src/argus/vision/runtime.py` | refine generic, NVIDIA, and Intel profile/provider selection if needed |
+| `backend/src/argus/inference/engine.py` | keep existing provider fallback/reporting compatible; no parallel provider registry |
+| `installer/linux/install-edge.sh` | add amd64 runtime profile paths |
+| `installer/manifests/dev-example.json` | add profile-specific amd64 image keys if manifest-driven builds need them |
+| `infra/install/compose/compose.edge-amd64.yml` | new generic edge appliance compose |
+| `infra/install/compose/compose.edge.nvidia-amd64.override.yml` | new NVIDIA override/profile after evidence gate |
+| `infra/install/compose/compose.edge.intel-openvino-amd64.override.yml` | new Intel OpenVINO override/profile after evidence gate |
+| `infra/install/bare-metal/edge-amd64.md` | new bare-metal amd64 edge operator walkthrough |
+| `infra/install/eve-os/README.md` | new operator walkthrough |
+| `infra/install/eve-os/vm/packer.pkr.hcl` | new VM build descriptor |
+| `infra/install/eve-os/vm/debian-preseed.cfg` | new unattended install seed |
+| `infra/install/eve-os/vm/firstboot.sh` | new first boot pairing script |
+| `infra/install/eve-os/vm/vezor-eve-bootstrap.service` | new first boot service |
+| `infra/install/eve-os/vm/eve-app-manifest.json` | new sample EVE-OS app config |
+| `Makefile` | add image-matrix build targets and VM build targets |
+| `docs/full-installation-guide.md` | link to bare-metal amd64 and EVE-OS VM edge README |
+| `installer/tests/test_edge_installer_artifacts.py` | extend installer asset assertions |
+| `installer/tests/test_eve_firstboot.py` | new firstboot tests |
+| `backend/tests/vision/test_runtime.py` | extend runtime policy tests |
 
 No changes to:
 
-- `backend/Dockerfile.edge` (Jetson path stays as-is)
-- `infra/docker-compose.edge.yml`
-- `bin/vezor` CLI
-- backend Python code
+- `backend/Dockerfile.edge` Jetson path;
+- `infra/docker-compose.edge.yml` development Jetson compose;
+- `bin/vezor` front-door CLI behavior, except it naturally passes amd64
+  runtime profile args through to `install-edge.sh`.
 
 ## Out Of Scope
 
-- **ARM64 build matrix.** Adding `linux/arm64` to either artifact. The
-  team does not currently have an ARM64 EVE-OS device to validate
-  against; deferred until one is available.
-- **AMD ROCm provider.** Architecturally enabled by the pluggable
-  registry, but no `rocm.py` provider implementation ships in this
-  spec. ROCm consumer-GPU support on Linux is still patchy; add when
-  a target AMD device is in hand.
-- **Coral / Hailo / other USB+M.2 NPU providers.** Same as above:
-  the entry-point hook is in place, no built-in provider ships. These
-  accelerators also need different model-artifact pipelines
-  (edgetpu-compiled `.tflite` for Coral, Hailo HEF for Hailo) which
-  is a separate concern.
-- **Dedicated no-cloud-init pairing endpoint.** A first-boot HTTP
-  listener on the guest that the EVE-OS controller POSTs to. Cleaner
-  fleet ergonomics; deferred until fleet orchestration (auto-update,
-  version pinning) is on the roadmap.
-- **Signed artifact distribution.** Cosign / sigstore signing of the
-  qcow2 and OCI artifacts. Will land with the broader "signed package
-  upgrades" production-hardening item already on the roadmap, not in
-  this spec.
-- **EVE-OS controller automation.** Programmatic pushing of App
-  Instance Configs to an EVE-OS controller via its REST API. The spec
-  ships sample manifests; operators apply them manually for now.
-- **Persistent-volume schema for `/var/lib/vezor/`.** The container
-  artifact assumes EVE-OS mounts a persistent volume at this path; the
-  schema for what lives there (model cache, credentials, clip buffer)
-  is inherited from the existing edge supervisor and not redesigned
-  here.
-- **Fleet update mechanism.** Replacing the qcow2 or OCI image across a
-  fleet of EVE-OS devices is the EVE-OS controller's job today
-  (manual). Vezor-side fleet update is the documented 180–365 day
-  roadmap item.
+- EVE-OS OCI/container app artifact.
+- ARM64 EVE-OS artifacts.
+- DeepStream.
+- Central Dockerized GPU/M4 acceleration claims.
+- NVIDIA or Intel production acceleration claims without hardware
+  evidence.
+- AMD ROCm provider.
+- Coral, Hailo, or other NPU providers.
+- EVE-OS controller API automation.
+- Signed artifact distribution.
+- Vezor-managed fleet update/replacement of qcow2 images.
 
 ## Open Questions
 
-1. **Distribution endpoints.** Where do the built artifacts land?
-   Default proposal: OCI image on GHCR
-   (`ghcr.io/<org>/vezor-edge:VERSION-amd64`), qcow2 attached to the
-   GitHub Release for the matching tag. Confirm the `<org>` namespace
-   and whether internal MinIO is preferred for the qcow2 due to size.
-2. **Vendor-neutral edge naming.** Should the OCI image keep the
-   `vezor-edge` tag suffix (current Jetson image is `vezor-edge` with
-   `-aarch64` implied), gain explicit `-amd64` / `-arm64` suffixes, or
-   move to a registry-level multi-arch manifest? The spec assumes
-   explicit `-amd64` suffix to avoid collision with the existing
-   Jetson tag; confirm before tagging.
-3. **CI runner for VM build.** GitHub-hosted runners do not allow
-   nested KVM. The qcow2 build will likely need either a self-hosted
-   runner with KVM access or a manual-run path with evidence file
-   capture. Confirm which is acceptable.
-4. **Intel iGPU test vector.** Codex's known accessible hardware is
-   the Jetson rig and the macOS control plane. Is an Intel-iGPU host
-   available for the recommended Intel-path evidence, or does that
-   evidence wait for an EVE-OS test device?
+1. **Distribution endpoint.** Should the qcow2 land as a GitHub
+   Release attachment, internal MinIO object, or both?
+2. **Image namespace.** Use `vezor/edge-worker:VERSION-<profile>` locally
+   and later `ghcr.io/<org>/vezor-edge-worker:VERSION-<profile>`, or
+   keep the current `edge-worker` naming from manifests?
+3. **CI runner.** Is a self-hosted KVM-capable runner available for
+   qcow2 build/boot smoke, or should VM build remain a manual evidence
+   step?
+4. **NVIDIA test host.** Which amd64 NVIDIA host should provide the
+   first live CUDA evidence?
+5. **Intel test host.** Is there an Intel iGPU gateway/NUC available,
+   or should Intel acceleration stay explicitly exploratory?
