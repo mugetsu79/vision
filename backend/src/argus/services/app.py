@@ -6238,7 +6238,7 @@ def _camera_to_worker_config(
         browser_delivery=browser_delivery,
         fps_cap=camera.fps_cap,
     )
-    vision_profile = SceneVisionProfile.model_validate(camera.vision_profile or {})
+    vision_profile = _effective_worker_vision_profile(camera)
     if vision_profile.motion_metrics.speed_enabled and camera.homography is None:
         raise HTTPException(
             status_code=HTTP_422_UNPROCESSABLE,
@@ -6328,6 +6328,22 @@ def _camera_to_worker_config(
         vision_profile=vision_profile,
         detection_regions=detection_regions,
         homography=_homography_to_worker_payload(camera.homography),
+    )
+
+
+def _effective_worker_vision_profile(camera: Camera) -> SceneVisionProfile:
+    profile = SceneVisionProfile.model_validate(camera.vision_profile or {})
+    active_classes = {class_name.strip().lower() for class_name in camera.active_classes}
+    if active_classes != {"person"} or profile.object_domain != "mixed":
+        return profile
+
+    tracker_profile = dict(profile.tracker_profile)
+    tracker_profile.setdefault("coast_seconds", 5.0)
+    return profile.model_copy(
+        update={
+            "object_domain": "people",
+            "tracker_profile": tracker_profile,
+        }
     )
 
 

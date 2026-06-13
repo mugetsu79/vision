@@ -107,6 +107,76 @@ async def test_mediamtx_client_registers_passthrough_for_privacy_off_jetson() ->
 
 
 @pytest.mark.asyncio
+async def test_mediamtx_client_revalidates_identical_existing_path_without_replace() -> None:
+    now = 100.0
+    requests: list[tuple[str, str, dict[str, object] | None]] = []
+    camera_id = uuid4()
+    path_name = f"cameras/{camera_id}/passthrough"
+    desired_path = {
+        "name": path_name,
+        "source": "rtsp://camera.internal/live",
+        "sourceOnDemand": True,
+        "rtspTransport": "tcp",
+    }
+
+    async def handler(request: Request) -> Response:
+        requests.append(
+            (
+                request.method,
+                str(request.url),
+                json.loads(request.content.decode("utf-8")) if request.content else None,
+            )
+        )
+        if request.method == "GET":
+            return Response(
+                200,
+                json={
+                    **desired_path,
+                    "sourceOnDemandStartTimeout": "10s",
+                    "sourceOnDemandCloseAfter": "10s",
+                    "rtspAnyPort": False,
+                },
+            )
+        return Response(200, json={"ok": True})
+
+    client = MediaMTXClient(
+        api_base_url="http://mediamtx.internal:9997",
+        rtsp_base_url="rtsp://mediamtx.internal:8554",
+        whip_base_url="http://mediamtx.internal:8889",
+        http_client=AsyncClient(transport=_transport(handler)),
+        path_config_revalidate_seconds=10.0,
+        clock=lambda: now,
+    )
+
+    await client.register_stream(
+        camera_id=camera_id,
+        rtsp_url="rtsp://camera.internal/live",
+        profile=PublishProfile.JETSON_NANO,
+        stream_kind="passthrough",
+        privacy=PrivacyPolicy(blur_faces=False, blur_plates=False),
+    )
+    now = 111.0
+    await client.register_stream(
+        camera_id=camera_id,
+        rtsp_url="rtsp://camera.internal/live",
+        profile=PublishProfile.JETSON_NANO,
+        stream_kind="passthrough",
+        privacy=PrivacyPolicy(blur_faces=False, blur_plates=False),
+    )
+
+    replace_url = (
+        f"http://mediamtx.internal:9997/v3/config/paths/replace/"
+        f"cameras/{camera_id}/passthrough"
+    )
+    assert [request[0] for request in requests] == ["POST", "GET"]
+    assert [request for request in requests if request[1] == replace_url] == [
+        ("POST", replace_url, desired_path)
+    ]
+
+    await client.close()
+
+
+@pytest.mark.asyncio
 async def test_mediamtx_client_registers_annotated_for_jetson_transcode_profile() -> None:
     requests: list[tuple[str, str, dict[str, object] | None]] = []
 
@@ -712,7 +782,12 @@ async def test_mediamtx_client_revalidates_edge_passthrough_path_after_cache_exp
             "rtspTransport": "tcp",
         },
     )
-    assert requests == [passthrough_replace, passthrough_replace]
+    passthrough_get = (
+        "GET",
+        f"http://mediamtx.internal:9997/v3/config/paths/get/cameras/{camera_id}/passthrough",
+        None,
+    )
+    assert requests == [passthrough_replace, passthrough_get, passthrough_replace]
 
     await client.close()
 
@@ -849,6 +924,11 @@ async def test_mediamtx_client_revalidates_central_paths_after_cache_expiry() ->
             },
         ),
         (
+            "GET",
+            f"http://mediamtx.internal:9997/v3/config/paths/get/cameras/{camera_id}/passthrough",
+            None,
+        ),
+        (
             "POST",
             f"http://mediamtx.internal:9997/v3/config/paths/replace/cameras/{camera_id}/passthrough",
             {
@@ -857,6 +937,11 @@ async def test_mediamtx_client_revalidates_central_paths_after_cache_expiry() ->
                 "sourceOnDemand": True,
                 "rtspTransport": "tcp",
             },
+        ),
+        (
+            "GET",
+            f"http://mediamtx.internal:9997/v3/config/paths/get/cameras/{camera_id}/annotated",
+            None,
         ),
         (
             "POST",

@@ -106,6 +106,7 @@ from argus.vision.privacy import PrivacyConfig, PrivacyFilter
 from argus.vision.profiles import ResolvedSceneVisionProfile, resolve_scene_vision_profile
 from argus.vision.rules import RuleDefinition, RuleEngine, RuleEventRecord, RuleStore
 from argus.vision.runtime import (
+    ExecutionProfile,
     RuntimeExecutionPolicy,
     import_onnxruntime,
     resolve_execution_policy,
@@ -156,7 +157,7 @@ _DASHED_BOX_SEGMENT_PX = 8
 _COASTING_VISUAL_GRACE_MS = 1_000
 _TRACK_LIFECYCLE_BASE_MEMORY_FRAMES = 24
 _TRACK_LIFECYCLE_MIN_COAST_TTL_MS = 500
-_TRACK_LIFECYCLE_MAX_COAST_TTL_MS = 5_000
+_TRACK_LIFECYCLE_MAX_COAST_TTL_MS = 8_000
 _TIMEOUT_ERRORS: tuple[type[BaseException], ...] = (TimeoutError,)
 _asyncio_timeout_error = getattr(asyncio, "TimeoutError", None)
 if (
@@ -882,8 +883,27 @@ def _canonical_model_backend(model: ModelSettings) -> str:
     return "onnxruntime"
 
 
-def _processing_fps_cap(camera_fps_cap: int) -> int:
-    return max(1, int(camera_fps_cap))
+def _processing_fps_cap(
+    camera_fps_cap: int,
+    *,
+    runtime_policy: RuntimeExecutionPolicy | None = None,
+    cpu_fallback_cap: int | None = None,
+) -> int:
+    requested_cap = max(1, int(camera_fps_cap))
+    if (
+        runtime_policy is not None
+        and _runtime_policy_uses_cpu_fallback(runtime_policy)
+        and cpu_fallback_cap is not None
+    ):
+        return min(requested_cap, max(1, int(cpu_fallback_cap)))
+    return requested_cap
+
+
+def _runtime_policy_uses_cpu_fallback(runtime_policy: RuntimeExecutionPolicy) -> bool:
+    return (
+        runtime_policy.provider == "CPUExecutionProvider"
+        or runtime_policy.profile is ExecutionProfile.CPU_FALLBACK
+    )
 
 
 def _tracker_config_from_resolved_profile(
@@ -981,6 +1001,7 @@ class InferenceEngine:
         runtime_reporter: RuntimeReporter | None = None,
         edge_node_id: UUID | None = None,
         runtime_report_interval_seconds: float = 10.0,
+        cpu_fallback_processing_fps_cap: int | None = None,
         diagnostics_enabled: bool = False,
         timing_summary_interval_frames: int = 120,
     ) -> None:
@@ -1002,6 +1023,7 @@ class InferenceEngine:
         self.preprocessor = preprocessor or _identity_preprocessor
         self._runtime = runtime
         self._runtime_policy = runtime_policy
+        self._cpu_fallback_processing_fps_cap = cpu_fallback_processing_fps_cap
         self._runtime_reporter = runtime_reporter
         self._edge_node_id = edge_node_id
         self._runtime_report_interval_seconds = max(0.0, runtime_report_interval_seconds)
@@ -1059,6 +1081,7 @@ class InferenceEngine:
         self._frame_sequence = 0
         self._last_stage_timings: dict[str, float] = {}
         self._timing_summary = _TimingSummaryWindow()
+        self._tracking_report_window: dict[str, int] = defaultdict(int)
         self.runtime_selection = RuntimeSelection(
             selected_backend=_canonical_model_backend(config.model),
             artifact=None,
@@ -1080,6 +1103,13 @@ class InferenceEngine:
     def _next_frame_sequence(self) -> int:
         self._frame_sequence += 1
         return self._frame_sequence
+
+    def _effective_processing_fps_cap(self) -> int:
+        return _processing_fps_cap(
+            self.config.camera.fps_cap,
+            runtime_policy=self._runtime_policy,
+            cpu_fallback_cap=self._cpu_fallback_processing_fps_cap,
+        )
 
     async def start(self) -> None:
         if self._started:
@@ -1143,6 +1173,12 @@ class InferenceEngine:
     def _tracking_diagnostics(self) -> dict[str, int]:
         visible_tracks = self._track_lifecycle.visible_tracks()
         diagnostics = dict(self._track_lifecycle.last_diagnostic_summary())
+        lifecycle_window = self._track_lifecycle.drain_diagnostic_summary()
+        for key, value in lifecycle_window.items():
+            diagnostics[f"lifecycle_{key}"] = value
+            if key == "source_id_switches":
+                diagnostics[key] = value
+        diagnostics.update(self._drain_tracking_report_window())
         diagnostics["active_tracks"] = sum(
             1 for track in visible_tracks if track.state == "active"
         )
@@ -1151,6 +1187,48 @@ class InferenceEngine:
         )
         diagnostics["visible_tracks"] = len(visible_tracks)
         return diagnostics
+
+    def _record_tracking_report_frame(
+        self,
+        *,
+        raw_detections: list[Detection],
+        visible_detections: list[Detection],
+        candidate_decisions: list[CandidateDecision],
+        tracker_outputs: list[Detection],
+        stable_tracks: list[LifecycleTrack],
+    ) -> None:
+        if self._runtime_reporter is None:
+            return
+        self._tracking_report_window["report_frames"] += 1
+        self._tracking_report_window["empty_frames"] += 0
+        self._tracking_report_window["quality_accepted"] += 0
+        self._tracking_report_window["quality_rejected"] += 0
+        self._tracking_report_window["raw_detections"] += len(raw_detections)
+        self._tracking_report_window["visible_detections"] += len(visible_detections)
+        self._tracking_report_window["quality_candidates"] += len(candidate_decisions)
+        self._tracking_report_window["tracker_outputs"] += len(tracker_outputs)
+        self._tracking_report_window["published_tracks"] += len(stable_tracks)
+        if not stable_tracks:
+            self._tracking_report_window["empty_frames"] += 1
+        for decision in candidate_decisions:
+            if decision.accepted:
+                self._tracking_report_window["quality_accepted"] += 1
+                self._tracking_report_window[
+                    f"quality_passed_{decision.reason}"
+                ] += 1
+            else:
+                self._tracking_report_window["quality_rejected"] += 1
+                self._tracking_report_window[
+                    f"quality_rejected_{decision.reason}"
+                ] += 1
+
+    def _drain_tracking_report_window(self) -> dict[str, int]:
+        window = dict(self._tracking_report_window)
+        self._tracking_report_window.clear()
+        return window
+
+    def _reset_tracking_report_window(self) -> None:
+        self._tracking_report_window.clear()
 
     async def _maybe_record_runtime_report(
         self,
@@ -1185,7 +1263,7 @@ class InferenceEngine:
             media_pipeline_mode=self._media_pipeline_mode(),
             media_capture_backend=self._media_capture_backend(),
             encoder_mode=self._encoder_mode(),
-            processing_fps_cap=float(_processing_fps_cap(self.config.camera.fps_cap)),
+            processing_fps_cap=float(self._effective_processing_fps_cap()),
             output_fps=float(self.config.stream.fps),
             stream_profile_id=self.config.stream.profile_id,
             tracking_diagnostics=self._tracking_diagnostics(),
@@ -1538,6 +1616,13 @@ class InferenceEngine:
             stage_timer.record_stage("publish_stream", ended_at=loop.time())
         else:
             stage_timer.record_skipped_stage("publish_stream")
+        self._record_tracking_report_frame(
+            raw_detections=detections,
+            visible_detections=filtered,
+            candidate_decisions=candidate_decisions,
+            tracker_outputs=tracked,
+            stable_tracks=stable_tracks,
+        )
         await self._maybe_record_runtime_report(
             heartbeat_at=current_ts,
             loop_time=loop.time(),
@@ -1698,10 +1783,12 @@ class InferenceEngine:
             self._state.tracker_type = command.tracker_type
             self._tracker = self._build_tracker(command.tracker_type)
             self._track_lifecycle = self._build_track_lifecycle()
+            self._reset_tracking_report_window()
             self._track_history.clear()
             self._count_event_processor = self._build_count_event_processor()
         elif visible_classes_before != self._visible_class_key():
             self._track_lifecycle.reset()
+            self._reset_tracking_report_window()
         if command.stream is not None and command.stream != self.config.stream:
             self.config.stream = command.stream
             should_register_stream = True
@@ -1774,6 +1861,7 @@ class InferenceEngine:
             self.config.detection_regions = next_detection_regions
             self._detection_region_policy = DetectionRegionPolicy(self._state.detection_regions)
             self._track_lifecycle.reset()
+            self._reset_tracking_report_window()
         if "homography" in command.model_fields_set:
             next_homography = dict(command.homography) if command.homography is not None else None
             if next_homography != self.config.homography:
@@ -1795,6 +1883,7 @@ class InferenceEngine:
             )
             self._tracker = self._build_tracker(self._state.tracker_type)
             self._track_lifecycle = self._build_track_lifecycle()
+            self._reset_tracking_report_window()
             self._track_history.clear()
 
     @property
@@ -1857,7 +1946,7 @@ class InferenceEngine:
         reconfigure(
             target_width=target_width,
             target_height=target_height,
-            fps_cap=_processing_fps_cap(self.config.camera.fps_cap),
+            fps_cap=self._effective_processing_fps_cap(),
             source_uri=self.config.camera.resolved_source_uri,
             source_profile_hash=self.config.source_profile_hash,
         )
@@ -2442,6 +2531,19 @@ async def build_runtime_engine(
             config.camera_id,
         )
 
+    runtime = import_onnxruntime()
+    runtime_policy = resolve_execution_policy(
+        runtime,
+        execution_provider_override=settings.inference_execution_provider_override,
+        execution_profile_override=settings.inference_execution_profile_override,
+        inter_op_threads=settings.inference_session_inter_op_threads,
+        intra_op_threads=settings.inference_session_intra_op_threads,
+    )
+    processing_fps_cap = _processing_fps_cap(
+        config.camera.fps_cap,
+        runtime_policy=runtime_policy,
+        cpu_fallback_cap=settings.cpu_fallback_processing_fps_cap,
+    )
     frame_source = create_camera_source(
         CameraSourceConfig(
             source_uri=source_uri,
@@ -2450,16 +2552,8 @@ async def build_runtime_engine(
             target_width=registration.target_width,
             target_height=registration.target_height,
             frame_skip=config.camera.frame_skip,
-            fps_cap=_processing_fps_cap(config.camera.fps_cap),
+            fps_cap=processing_fps_cap,
         )
-    )
-    runtime = import_onnxruntime()
-    runtime_policy = resolve_execution_policy(
-        runtime,
-        execution_provider_override=settings.inference_execution_provider_override,
-        execution_profile_override=settings.inference_execution_profile_override,
-        inter_op_threads=settings.inference_session_inter_op_threads,
-        intra_op_threads=settings.inference_session_intra_op_threads,
     )
     logger.info(
         "Resolved inference runtime policy "
@@ -2621,6 +2715,7 @@ async def build_runtime_engine(
         runtime_reporter=_runtime_reporter_from_settings(settings),
         edge_node_id=settings.edge_node_id,
         runtime_report_interval_seconds=settings.worker_runtime_report_interval_seconds,
+        cpu_fallback_processing_fps_cap=settings.cpu_fallback_processing_fps_cap,
     )
     engine.runtime_selection = runtime_selection
     return engine

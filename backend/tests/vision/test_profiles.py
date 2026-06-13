@@ -75,6 +75,23 @@ def test_central_people_profile_lowers_person_association_confidence_below_displ
     assert resolved.candidate_quality.association_min_confidence["person"] < 0.45
 
 
+def test_central_people_balanced_profile_uses_tracking_memory_for_intermittent_detections() -> None:
+    resolved = resolve_scene_vision_profile(
+        {
+            "accuracy_mode": "balanced",
+            "compute_tier": "central_gpu",
+            "scene_difficulty": "cluttered",
+            "object_domain": "people",
+        },
+        has_homography=False,
+    )
+
+    assert resolved.candidate_quality.display_min_confidence["person"] == 0.4
+    assert resolved.candidate_quality.association_min_confidence["person"] < 0.4
+    assert resolved.candidate_quality.memory_frames >= 36
+    assert resolved.tracker.coast_seconds >= 3.5
+
+
 def test_edge_mixed_profile_preserves_class_specific_vehicle_confidence() -> None:
     resolved = resolve_scene_vision_profile(
         {

@@ -267,6 +267,27 @@ def test_supervisor_compose_profile_contains_edge_services_and_secret_mounts() -
     assert "      - nats-leaf" in compose
 
 
+def test_supervisor_compose_caps_edge_worker_thread_fanout() -> None:
+    compose = _read(SUPERVISOR_COMPOSE)
+
+    assert "OMP_NUM_THREADS: ${VEZOR_WORKER_OMP_NUM_THREADS:-1}" in compose
+    assert "OPENBLAS_NUM_THREADS: ${VEZOR_WORKER_OPENBLAS_NUM_THREADS:-1}" in compose
+    assert "MKL_NUM_THREADS: ${VEZOR_WORKER_MKL_NUM_THREADS:-1}" in compose
+    assert "NUMEXPR_NUM_THREADS: ${VEZOR_WORKER_NUMEXPR_NUM_THREADS:-1}" in compose
+    assert (
+        "ARGUS_INFERENCE_SESSION_INTER_OP_THREADS: "
+        "${VEZOR_WORKER_INFERENCE_SESSION_INTER_OP_THREADS:-1}"
+    ) in compose
+    assert (
+        "ARGUS_INFERENCE_SESSION_INTRA_OP_THREADS: "
+        "${VEZOR_WORKER_INFERENCE_SESSION_INTRA_OP_THREADS:-2}"
+    ) in compose
+    assert (
+        "ARGUS_CPU_FALLBACK_PROCESSING_FPS_CAP: "
+        "${VEZOR_CPU_FALLBACK_PROCESSING_FPS_CAP:-}"
+    ) in compose
+
+
 def test_edge_nats_leaf_scopes_local_worker_permissions() -> None:
     config = _read(NATS_LEAF_CONFIG)
 

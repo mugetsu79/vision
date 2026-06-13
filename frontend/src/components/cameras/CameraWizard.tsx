@@ -2405,9 +2405,9 @@ export function CameraWizard({
                   />
                 </label>
                 <label className="grid gap-2 text-sm text-[#d8e2f2]">
-                  <span>FPS cap</span>
+                  <span>Processing FPS cap</span>
                   <Input
-                    aria-label="FPS cap"
+                    aria-label="Processing FPS cap"
                     min={1}
                     type="number"
                     value={data.fpsCap}

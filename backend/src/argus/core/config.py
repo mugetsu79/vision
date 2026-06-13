@@ -103,6 +103,7 @@ class Settings(BaseSettings):
     inference_execution_profile_override: ExecutionProfile | None = None
     inference_session_inter_op_threads: int | None = Field(default=None, ge=1)
     inference_session_intra_op_threads: int | None = Field(default=None, ge=1)
+    cpu_fallback_processing_fps_cap: int | None = Field(default=None, ge=1)
     tracking_persistence_queue_size: int = Field(default=256, ge=1)
     tracking_persistence_batch_size: int = Field(default=16, ge=1)
     tracking_persistence_batch_flush_interval_seconds: float = Field(default=0.1, gt=0)
@@ -189,6 +190,16 @@ class Settings(BaseSettings):
     @classmethod
     def _validate_link_reflector_allowed_source_cidrs(cls, value: str) -> str:
         _parse_link_reflector_allowed_source_cidrs(value)
+        return value
+
+    @field_validator("cpu_fallback_processing_fps_cap", mode="before")
+    @classmethod
+    def _empty_cpu_fallback_processing_fps_cap_is_unset(
+        cls,
+        value: object,
+    ) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
         return value
 
 

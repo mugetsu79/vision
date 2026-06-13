@@ -1322,6 +1322,60 @@ def test_camera_worker_config_speed_disabled_profile_can_return_no_homography() 
     assert config.homography is None
 
 
+def test_camera_worker_config_uses_people_domain_for_person_only_mixed_default() -> None:
+    camera = _camera(
+        active_classes=["person"],
+        vision_profile={
+            "accuracy_mode": "balanced",
+            "compute_tier": "central_gpu",
+            "object_domain": "mixed",
+            "scene_difficulty": "cluttered",
+            "motion_metrics": {"speed_enabled": False},
+            "tracker_profile": {},
+            "candidate_quality": {},
+        },
+    )
+    primary_model = _model(camera.primary_model_id)
+
+    config = _camera_to_worker_config(
+        camera=camera,
+        primary_model=primary_model,
+        secondary_model=None,
+        settings=_settings(),
+        rtsp_url="rtsp://lab-camera.local/live",
+    )
+
+    assert config.vision_profile.object_domain == "people"
+    assert config.vision_profile.tracker_profile["coast_seconds"] == 5.0
+
+
+def test_camera_worker_config_preserves_mixed_domain_for_multi_class_camera() -> None:
+    camera = _camera(
+        active_classes=["person", "car"],
+        vision_profile={
+            "accuracy_mode": "balanced",
+            "compute_tier": "central_gpu",
+            "object_domain": "mixed",
+            "scene_difficulty": "cluttered",
+            "motion_metrics": {"speed_enabled": False},
+            "tracker_profile": {},
+            "candidate_quality": {},
+        },
+    )
+    primary_model = _model(camera.primary_model_id)
+
+    config = _camera_to_worker_config(
+        camera=camera,
+        primary_model=primary_model,
+        secondary_model=None,
+        settings=_settings(),
+        rtsp_url="rtsp://lab-camera.local/live",
+    )
+
+    assert config.vision_profile.object_domain == "mixed"
+    assert config.vision_profile.tracker_profile == {}
+
+
 def test_camera_worker_config_rejects_speed_enabled_without_homography() -> None:
     camera = _camera(
         vision_profile={

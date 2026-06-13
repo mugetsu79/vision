@@ -109,6 +109,20 @@ def test_settings_accept_inference_runtime_overrides() -> None:
     assert settings.inference_session_intra_op_threads == 4
 
 
+def test_settings_treat_empty_cpu_fallback_processing_cap_as_unset(monkeypatch) -> None:
+    monkeypatch.setenv("ARGUS_CPU_FALLBACK_PROCESSING_FPS_CAP", "")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.cpu_fallback_processing_fps_cap is None
+
+
+def test_settings_accept_explicit_cpu_fallback_processing_cap() -> None:
+    settings = Settings(_env_file=None, cpu_fallback_processing_fps_cap=12)
+
+    assert settings.cpu_fallback_processing_fps_cap == 12
+
+
 def test_settings_accept_worker_diagnostics_flag() -> None:
     settings = Settings(
         _env_file=None,

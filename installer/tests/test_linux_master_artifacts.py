@@ -77,7 +77,10 @@ def test_linux_master_compose_profile_contains_required_product_services() -> No
     assert "ARGUS_INCIDENT_LOCAL_STORAGE_ROOT: /var/lib/vezor/evidence" in compose
     assert '"${VEZOR_MEDIAMTX_WEBRTC_UDP_BIND:-0.0.0.0}:8189:8189/udp"' in compose
     assert "${VEZOR_CONFIG_DIR:-/etc/vezor}/master.json:/etc/vezor/master.json:ro" in compose
-    assert "${VEZOR_CONFIG_DIR:-/etc/vezor}/supervisor.json:/etc/vezor/supervisor.json:ro" in compose
+    assert (
+        "${VEZOR_CONFIG_DIR:-/etc/vezor}/supervisor.json:"
+        "/etc/vezor/supervisor.json:ro"
+    ) in compose
     assert (
         "${VEZOR_CREDENTIALS_HOST_DIR:-/var/lib/vezor/credentials}"
         ":/run/vezor/credentials:ro"
@@ -155,6 +158,28 @@ def test_linux_master_supervisor_provides_runtime_worker_connectivity() -> None:
     assert "target: ARGUS_DB_URL" in supervisor
     assert "target: ARGUS_MINIO_ACCESS_KEY" in supervisor
     assert "target: ARGUS_MINIO_SECRET_KEY" in supervisor
+
+
+def test_linux_master_supervisor_caps_worker_thread_fanout() -> None:
+    compose = _read(MASTER_COMPOSE)
+    supervisor = _service_block(compose, "vezor-supervisor")
+
+    assert "OMP_NUM_THREADS: ${VEZOR_WORKER_OMP_NUM_THREADS:-1}" in supervisor
+    assert "OPENBLAS_NUM_THREADS: ${VEZOR_WORKER_OPENBLAS_NUM_THREADS:-1}" in supervisor
+    assert "MKL_NUM_THREADS: ${VEZOR_WORKER_MKL_NUM_THREADS:-1}" in supervisor
+    assert "NUMEXPR_NUM_THREADS: ${VEZOR_WORKER_NUMEXPR_NUM_THREADS:-1}" in supervisor
+    assert (
+        "ARGUS_INFERENCE_SESSION_INTER_OP_THREADS: "
+        "${VEZOR_WORKER_INFERENCE_SESSION_INTER_OP_THREADS:-1}"
+    ) in supervisor
+    assert (
+        "ARGUS_INFERENCE_SESSION_INTRA_OP_THREADS: "
+        "${VEZOR_WORKER_INFERENCE_SESSION_INTRA_OP_THREADS:-2}"
+    ) in supervisor
+    assert (
+        "ARGUS_CPU_FALLBACK_PROCESSING_FPS_CAP: "
+        "${VEZOR_CPU_FALLBACK_PROCESSING_FPS_CAP:-}"
+    ) in supervisor
 
 
 def test_linux_master_nats_healthcheck_uses_nats_server_binary() -> None:

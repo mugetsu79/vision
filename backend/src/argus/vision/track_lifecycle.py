@@ -87,6 +87,7 @@ class TrackLifecycleManager:
         self._last_visible_tracks: list[LifecycleTrack] = []
         self._last_candidate_context_tracks: list[LifecycleTrack] = []
         self._last_diagnostics: list[TrackLifecycleDecision] = []
+        self._diagnostic_summary_window: dict[str, int] = {}
 
     def reset(self) -> None:
         self._next_stable_track_id = 1
@@ -95,6 +96,7 @@ class TrackLifecycleManager:
         self._last_visible_tracks.clear()
         self._last_candidate_context_tracks.clear()
         self._last_diagnostics.clear()
+        self._diagnostic_summary_window.clear()
 
     def visible_tracks(self) -> list[LifecycleTrack]:
         return [_copy_lifecycle_track(track) for track in self._last_visible_tracks]
@@ -109,6 +111,11 @@ class TrackLifecycleManager:
         summary: dict[str, int] = {}
         for decision in self._last_diagnostics:
             summary[decision.reason] = summary.get(decision.reason, 0) + 1
+        return summary
+
+    def drain_diagnostic_summary(self) -> dict[str, int]:
+        summary = dict(self._diagnostic_summary_window)
+        self._diagnostic_summary_window.clear()
         return summary
 
     def update(
@@ -291,6 +298,8 @@ class TrackLifecycleManager:
         source_track_id = detection.track_id
         if old_source_track_id is not None and old_source_track_id != source_track_id:
             self._forget_source_mapping(old_source_track_id, stable_id)
+            if source_track_id is not None:
+                self._record_diagnostic_window_count("source_id_switches")
         if source_track_id is not None:
             self._stable_id_by_source[source_track_id] = stable_id
 
@@ -528,6 +537,12 @@ class TrackLifecycleManager:
                     memory.detection.with_updates(track_id=memory.stable_track_id)
                 ),
             )
+        )
+        self._record_diagnostic_window_count(reason)
+
+    def _record_diagnostic_window_count(self, key: str) -> None:
+        self._diagnostic_summary_window[key] = (
+            self._diagnostic_summary_window.get(key, 0) + 1
         )
 
 

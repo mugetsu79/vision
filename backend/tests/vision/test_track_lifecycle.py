@@ -100,6 +100,45 @@ def test_last_diagnostic_summary_counts_reasons_and_visible_states() -> None:
     assert manager.last_diagnostic_summary() == {"forgotten": 2}
 
 
+def test_drain_diagnostic_summary_accumulates_across_frames_and_resets() -> None:
+    manager = TrackLifecycleManager(TrackLifecycleConfig(coast_ttl_ms=2_500))
+
+    manager.update(
+        detections=[_person(track_id=4)],
+        ts=_ts(0),
+        frame_shape=FRAME_SHAPE,
+    )
+    manager.update(
+        detections=[],
+        ts=_ts(100),
+        frame_shape=FRAME_SHAPE,
+    )
+
+    assert manager.drain_diagnostic_summary() == {
+        "new_track": 1,
+        "coasting": 1,
+    }
+    assert manager.drain_diagnostic_summary() == {}
+    assert manager.last_diagnostic_summary() == {"coasting": 1}
+
+
+def test_drain_diagnostic_summary_counts_source_id_switches() -> None:
+    manager = TrackLifecycleManager()
+
+    manager.update(
+        detections=[_person(track_id=4, bbox=(10.0, 10.0, 60.0, 120.0))],
+        ts=_ts(0),
+        frame_shape=FRAME_SHAPE,
+    )
+    manager.update(
+        detections=[_person(track_id=99, bbox=(12.0, 12.0, 62.0, 122.0))],
+        ts=_ts(100),
+        frame_shape=FRAME_SHAPE,
+    )
+
+    assert manager.drain_diagnostic_summary()["source_id_switches"] == 1
+
+
 def test_last_diagnostics_reports_source_id_match() -> None:
     manager = TrackLifecycleManager()
 

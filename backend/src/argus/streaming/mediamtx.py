@@ -870,6 +870,19 @@ class MediaMTXClient:
                 extra={"path_name": path_name},
             )
             return
+        if path_name in self._path_configs:
+            existing_config = await self._fetch_path_config(path_name)
+            if existing_config is not None and _path_config_matches(
+                existing_config,
+                path_config,
+            ):
+                self._path_configs[path_name] = path_config
+                self._path_config_checked_at[path_name] = self._clock()
+                LOGGER.debug(
+                    "MediaMTX stream path revalidated without replace",
+                    extra={"path_name": path_name},
+                )
+                return
         await self._request(
             "POST",
             f"/v3/config/paths/replace/{path_name}",
@@ -877,6 +890,17 @@ class MediaMTXClient:
         )
         self._path_configs[path_name] = path_config
         self._path_config_checked_at[path_name] = self._clock()
+
+    async def _fetch_path_config(self, path_name: str) -> dict[str, Any] | None:
+        response = await self._http_client.request(
+            "GET",
+            f"{self.api_base_url}/v3/config/paths/get/{path_name}",
+        )
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        payload = response.json()
+        return payload if isinstance(payload, dict) else None
 
     def _path_config_cache_fresh(self, path_name: str) -> bool:
         checked_at = self._path_config_checked_at.get(path_name)
@@ -1056,6 +1080,13 @@ def _append_query_parameter(url: str, *, key: str, value: str) -> str:
     return urlunsplit(
         (split_url.scheme, split_url.netloc, split_url.path, combined, split_url.fragment)
     )
+
+
+def _path_config_matches(
+    existing_config: dict[str, Any],
+    desired_config: dict[str, Any],
+) -> bool:
+    return all(existing_config.get(key) == value for key, value in desired_config.items())
 
 
 def sanitize_stream_log_message(message: str) -> str:

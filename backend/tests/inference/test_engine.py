@@ -1850,6 +1850,13 @@ async def test_engine_reports_runtime_report_media_capture_backend_and_encoder_m
     assert report.output_fps == 20
     assert report.stream_profile_id == "720p20"
     assert report.tracking_diagnostics["new_track"] == 1
+    assert report.tracking_diagnostics["report_frames"] == 1
+    assert report.tracking_diagnostics["raw_detections"] == 2
+    assert report.tracking_diagnostics["visible_detections"] == 1
+    assert report.tracking_diagnostics["quality_accepted"] == 1
+    assert report.tracking_diagnostics["tracker_outputs"] == 1
+    assert report.tracking_diagnostics["published_tracks"] == 1
+    assert report.tracking_diagnostics["empty_frames"] == 0
     assert report.tracking_diagnostics["active_tracks"] == 1
     assert report.tracking_diagnostics["coasting_tracks"] == 0
 
@@ -2592,6 +2599,23 @@ def test_lifecycle_coast_ttl_uses_resolved_profile_seconds() -> None:
     )
 
     assert config.coast_ttl_ms == 3000
+
+
+def test_lifecycle_coast_ttl_honors_profile_max_seconds() -> None:
+    profile = engine_module.resolve_scene_vision_profile(
+        SceneVisionProfile(
+            accuracy_mode="maximum_accuracy",
+            tracker_profile={"coast_seconds": 8.0},
+        ).model_dump(mode="python"),
+        has_homography=False,
+    )
+
+    config = engine_module._track_lifecycle_config_from_resolved_profile(
+        _engine_config(uuid4()),
+        profile,
+    )
+
+    assert config.coast_ttl_ms == 8000
 
 
 @pytest.mark.asyncio
@@ -4581,6 +4605,55 @@ async def test_build_runtime_engine_uses_camera_fps_cap_for_capture_not_stream_p
 
     try:
         assert captured["camera_config"].fps_cap == 15
+    finally:
+        await engine.close()
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_engine_caps_cpu_fallback_processing_fps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    camera_id = uuid4()
+    captured: dict[str, CameraSourceConfig] = {}
+    _patch_runtime_engine_build_dependencies(monkeypatch)
+
+    class _CpuFallbackRuntime:
+        @staticmethod
+        def get_available_providers() -> list[str]:
+            return ["CPUExecutionProvider"]
+
+    def fake_create_camera_source(camera_config: CameraSourceConfig) -> _FakeFrameSource:
+        captured["camera_config"] = camera_config
+        return _FakeFrameSource([])
+
+    monkeypatch.setattr(engine_module, "import_onnxruntime", lambda: _CpuFallbackRuntime())
+    monkeypatch.setattr(engine_module, "create_camera_source", fake_create_camera_source)
+    base_config = _engine_config(camera_id)
+    config = base_config.model_copy(
+        update={
+            "camera": base_config.camera.model_copy(update={"fps_cap": 25}),
+            "stream": StreamSettings(
+                profile_id="360p5",
+                kind="transcode",
+                width=640,
+                height=360,
+                fps=5,
+            ),
+        }
+    )
+
+    engine = await engine_module.build_runtime_engine(
+        config,
+        settings=engine_module.Settings(
+            _env_file=None,
+            cpu_fallback_processing_fps_cap=12,
+        ),
+        events_client=_FakeEventClient(),
+    )
+
+    try:
+        assert captured["camera_config"].fps_cap == 12
+        assert engine._effective_processing_fps_cap() == 12
     finally:
         await engine.close()
 

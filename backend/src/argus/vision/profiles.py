@@ -80,6 +80,13 @@ def resolve_scene_vision_profile(
         new_track_min_hits = 1
         display_min_confidence.update(_vehicle_thresholds(0.35) | {"person": 0.35})
         association_min_confidence.update(_vehicle_thresholds(0.35) | {"person": 0.35})
+    elif (
+        accuracy_mode == "balanced"
+        and compute_tier == "central_gpu"
+        and requested.object_domain == "people"
+    ):
+        memory_frames = 36
+        association_min_confidence.update({"person": 0.30})
     elif accuracy_mode == "maximum_accuracy" and compute_tier == "edge_advanced_jetson":
         appearance_ready = True
         memory_frames = 36
